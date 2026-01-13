@@ -4,10 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Expense Tracker</title>
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/recharts@2.5.0/dist/Recharts.js"></script>
   <style>
     * {
       margin: 0;
@@ -110,7 +106,7 @@
     }
     
     .grid-2 {
-      grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
     }
     
     .stat-card {
@@ -264,6 +260,16 @@
       display: none;
     }
     
+    .chart-placeholder {
+      height: 300px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #f8fafc;
+      border-radius: 8px;
+      color: #64748b;
+    }
+    
     @media (max-width: 768px) {
       h1 {
         font-size: 28px;
@@ -286,9 +292,29 @@
 <body>
   <div id="root"></div>
   
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/recharts@2.10.3/dist/Recharts.js"></script>
+  
   <script type="text/babel">
     const { useState, useMemo, useEffect } = React;
-    const { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } = window.Recharts;
+    
+    // Wait for Recharts to load
+    const waitForRecharts = () => {
+      return new Promise((resolve) => {
+        if (window.Recharts) {
+          resolve(window.Recharts);
+        } else {
+          const interval = setInterval(() => {
+            if (window.Recharts) {
+              clearInterval(interval);
+              resolve(window.Recharts);
+            }
+          }, 100);
+        }
+      });
+    };
 
     const ExpenseTracker = () => {
       const [expenses, setExpenses] = useState(() => {
@@ -316,6 +342,11 @@
 
       const [saveStatus, setSaveStatus] = useState('');
       const [uploadStatus, setUploadStatus] = useState('');
+      const [chartsReady, setChartsReady] = useState(false);
+
+      useEffect(() => {
+        waitForRecharts().then(() => setChartsReady(true));
+      }, []);
 
       useEffect(() => {
         localStorage.setItem('expenses', JSON.stringify(expenses));
@@ -448,6 +479,104 @@
 
       const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
 
+      // Render charts only when Recharts is ready
+      const renderCharts = () => {
+        if (!chartsReady || !window.Recharts) {
+          return (
+            <>
+              <div className="card">
+                <h2>Monthly Spending Trend</h2>
+                <div className="chart-placeholder">Loading charts...</div>
+              </div>
+              <div className="card">
+                <h2>Spending by Category</h2>
+                <div className="chart-placeholder">Loading charts...</div>
+              </div>
+              <div className="card">
+                <h2>Category Evolution Over Time</h2>
+                <div className="chart-placeholder">Loading charts...</div>
+              </div>
+              <div className="card">
+                <h2>Spending by Account</h2>
+                <div className="chart-placeholder">Loading charts...</div>
+              </div>
+            </>
+          );
+        }
+
+        const { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } = window.Recharts;
+
+        return (
+          <>
+            <div className="card">
+              <h2>Monthly Spending Trend</h2>
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={monthlyData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" />
+                  <YAxis />
+                  <Tooltip formatter={(value) => `$${value.toFixed(2)}`} />
+                  <Legend />
+                  <Line type="monotone" dataKey="total" stroke="#3b82f6" strokeWidth={2} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="card">
+              <h2>Spending by Category</h2>
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={categoryData}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    outerRadius={100}
+                    fill="#8884d8"
+                    dataKey="value"
+                  >
+                    {categoryData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value) => `$${value.toFixed(2)}`} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="card">
+              <h2>Category Evolution Over Time</h2>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={monthlyData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" />
+                  <YAxis />
+                  <Tooltip formatter={(value) => `$${value?.toFixed(2) || '0.00'}`} />
+                  <Legend />
+                  {categories.map((cat, idx) => (
+                    <Bar key={cat} dataKey={cat} stackId="a" fill={COLORS[idx % COLORS.length]} />
+                  ))}
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="card">
+              <h2>Spending by Account</h2>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={accountData} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis type="number" />
+                  <YAxis dataKey="name" type="category" width={120} />
+                  <Tooltip formatter={(value) => `$${value.toFixed(2)}`} />
+                  <Bar dataKey="value" fill="#8b5cf6" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </>
+        );
+      };
+
       return (
         <div className="container">
           <div className="header">
@@ -558,71 +687,7 @@
           </div>
 
           <div className="grid grid-2">
-            <div className="card">
-              <h2>Monthly Spending Trend</h2>
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={monthlyData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" />
-                  <YAxis />
-                  <Tooltip formatter={(value) => `$${value.toFixed(2)}`} />
-                  <Legend />
-                  <Line type="monotone" dataKey="total" stroke="#3b82f6" strokeWidth={2} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-
-            <div className="card">
-              <h2>Spending by Category</h2>
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={categoryData}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                    outerRadius={100}
-                    fill="#8884d8"
-                    dataKey="value"
-                  >
-                    {categoryData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(value) => `$${value.toFixed(2)}`} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-
-            <div className="card">
-              <h2>Category Evolution Over Time</h2>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={monthlyData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" />
-                  <YAxis />
-                  <Tooltip formatter={(value) => `$${value?.toFixed(2) || '0.00'}`} />
-                  <Legend />
-                  {categories.map((cat, idx) => (
-                    <Bar key={cat} dataKey={cat} stackId="a" fill={COLORS[idx % COLORS.length]} />
-                  ))}
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-
-            <div className="card">
-              <h2>Spending by Account</h2>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={accountData} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" />
-                  <YAxis dataKey="name" type="category" width={120} />
-                  <Tooltip formatter={(value) => `$${value.toFixed(2)}`} />
-                  <Bar dataKey="value" fill="#8b5cf6" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+            {renderCharts()}
           </div>
 
           <div className="card">
