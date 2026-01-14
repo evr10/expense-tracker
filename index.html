@@ -197,32 +197,74 @@ const Heatmap = ({ expenses }) => {
     </tbody></table></div><div className="flex items-center justify-center gap-2 pt-2 border-t border-slate-100 mt-2"><span className="text-[10px] text-slate-400">Low</span><div className="flex h-3 rounded overflow-hidden">{[0,.25,.5,.75,1].map(r=><div key={r} className="w-6 h-full" style={{backgroundColor:getCol(min+r*(max-min))}}/>)}</div><span className="text-[10px] text-slate-400">High</span></div></div>);
 };
 
-// 5. Box Plot
-const BoxPlot = ({ expenses }) => {
-    const data = useMemo(() => {
+// Account Totals by Year
+const AccountTotalsChart = ({ expenses }) => {
+    const { data, years, maxVal } = useMemo(() => {
         const sp = expenses.filter(e => e.category !== 'Income' && e.category !== 'Transfer');
-        const yrs = [...new Set(sp.map(e => getY(e.date)))].sort();
-        return yrs.map(y => {
-            const am = sp.filter(e => getY(e.date) === y).map(e => safe(e.amount)).sort((a,b) => a - b);
-            if (!am.length) return null;
-            return { year:y, q1:am[Math.floor(am.length*.25)]||0, med:am[Math.floor(am.length*.5)]||0, q3:am[Math.floor(am.length*.75)]||0, min:am[0], max:am[am.length-1], n:am.length };
-        }).filter(Boolean);
+        
+        // Group by account and year
+        const byAccount = {};
+        sp.forEach(e => {
+            const acc = e.account || 'Unknown';
+            const year = getY(e.date);
+            if (!byAccount[acc]) byAccount[acc] = {};
+            byAccount[acc][year] = (byAccount[acc][year] || 0) + safe(e.amount);
+        });
+        
+        // Get all years
+        const yearsSet = new Set(sp.map(e => getY(e.date)));
+        const years = [...yearsSet].sort();
+        
+        // Convert to array sorted by total
+        const data = Object.entries(byAccount)
+            .map(([account, yearTotals]) => ({
+                account,
+                years: years.map(y => yearTotals[y] || 0),
+                total: Object.values(yearTotals).reduce((s, v) => s + v, 0)
+            }))
+            .sort((a, b) => b.total - a.total);
+        
+        const maxVal = Math.max(...data.flatMap(d => d.years));
+        
+        return { data, years, maxVal };
     }, [expenses]);
-    if (!data.length) return <Empty msg="Import data for box plot" />;
-    const mx = Math.max(...data.map(d => Math.min(d.q3*2, d.max)));
-    const sc = v => Math.max(0, Math.min(140, (1-v/mx)*140));
-    return (<div className="h-full flex flex-col"><div className="flex-1 flex items-end justify-around gap-4 px-4 pb-4">
-        {data.map(d => { const cMx = Math.min(d.q3*1.5,d.max), cMn = Math.max(d.q1-(d.q3-d.q1)*.5,d.min); return (<div key={d.year} className="flex flex-col items-center flex-1 max-w-16">
-            <div className="relative w-full h-36">
-                <div className="absolute left-1/2 w-0.5 bg-slate-300 -translate-x-1/2" style={{top:`${sc(cMx)}px`,height:`${sc(cMn)-sc(cMx)}px`}}/>
-                <div className="absolute left-1/2 w-4 h-0.5 bg-slate-400 -translate-x-1/2" style={{top:`${sc(cMx)}px`}}/>
-                <div className="absolute left-1/2 w-4 h-0.5 bg-slate-400 -translate-x-1/2" style={{top:`${sc(cMn)}px`}}/>
-                <div className="absolute left-1 right-1 rounded border-2" style={{top:`${sc(d.q3)}px`,height:`${Math.max(sc(d.q1)-sc(d.q3),4)}px`,backgroundColor:YEAR_COLORS[d.year]+'40',borderColor:YEAR_COLORS[d.year]}}/>
-                <div className="absolute left-1 right-1 h-1 rounded" style={{top:`${sc(d.med)}px`,backgroundColor:YEAR_COLORS[d.year]}}/>
-            </div>
-            <div className="text-center mt-2"><div className="text-xs font-black" style={{color:YEAR_COLORS[d.year]}}>{d.year}</div><div className="text-[9px] text-slate-500">Med: ${d.med.toFixed(0)}</div></div>
-        </div>); })}
-    </div><div className="text-[10px] text-slate-400 text-center pt-2 border-t border-slate-100">Box=Q1-Q3 | Line=Median</div></div>);
+    
+    if (!data.length) return <Empty msg="Import data to see account totals" />;
+    
+    return (<div className="h-full flex flex-col">
+        <div className="flex-1 overflow-auto space-y-2">
+            {data.map(item => (
+                <div key={item.account} className="space-y-1">
+                    <div className="text-[10px] font-bold text-slate-700 truncate">{item.account}</div>
+                    <div className="flex gap-1">
+                        {item.years.map((val, yi) => (
+                            <div key={yi} className="flex-1 flex items-center gap-1">
+                                <div className="flex-1 h-5 bg-slate-100 rounded overflow-hidden">
+                                    <div className="h-full rounded" 
+                                        style={{
+                                            width: `${maxVal > 0 ? (val / maxVal) * 100 : 0}%`,
+                                            backgroundColor: YEAR_COLORS[years[yi]] || '#6366f1'
+                                        }}
+                                    />
+                                </div>
+                                <span className="text-[9px] font-semibold text-slate-500 w-14 text-right">
+                                    {val > 0 ? `$${(val/1000).toFixed(1)}k` : '-'}
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            ))}
+        </div>
+        <div className="flex gap-4 justify-center pt-2 border-t border-slate-100 mt-2">
+            {years.map(year => (
+                <div key={year} className="flex items-center gap-1">
+                    <div className="w-3 h-3 rounded" style={{ backgroundColor: YEAR_COLORS[year] || '#6366f1' }} />
+                    <span className="text-[10px] font-bold text-slate-500">{year}</span>
+                </div>
+            ))}
+        </div>
+    </div>);
 };
 
 // Pareto Chart (2025 only)
@@ -576,7 +618,7 @@ const App = () => {
                 <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">📊 Inflation vs Habit (by Category)</h3><div className="h-72"><ClusteredChart expenses={expenses}/></div></div>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">🔥 Spending Heatmap</h3><div className="h-64"><Heatmap expenses={expenses}/></div></div>
-                    <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">📦 Transaction Distribution</h3><div className="h-64"><BoxPlot expenses={expenses}/></div></div>
+                    <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">💳 Account Totals by Year</h3><div className="h-64"><AccountTotalsChart expenses={expenses}/></div></div>
                 </div>
             </>)}
 
