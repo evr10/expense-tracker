@@ -16,15 +16,16 @@
     .btn-green { background: #10b981; color: white; }
     .btn-gray { background: #e5e7eb; color: #1f2937; }
     .btn-red { background: #ef4444; color: white; }
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; }
     .card { background: white; border-radius: 12px; padding: 24px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
     input[type="file"] { display: none; }
     table { width: 100%; border-collapse: collapse; }
     th, td { padding: 12px; text-align: left; border-bottom: 1px solid #f1f5f9; }
     th { font-weight: 500; color: #64748b; }
     select, input { padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; }
-    .modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; }
+    .modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; z-index: 100; }
     .modal.show { display: flex; }
-    .modal-box { background: white; padding: 30px; border-radius: 12px; max-width: 500px; width: 90%; }
+    .modal-box { background: white; padding: 30px; border-radius: 12px; max-width: 500px; width: 90%; max-height: 90vh; overflow-y: auto; }
     .error-banner { padding: 16px; background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; border-radius: 8px; margin-bottom: 20px; }
     .error-banner h3 { margin: 0 0 8px 0; font-size: 16px; }
     .error-banner p { margin: 0; font-size: 14px; }
@@ -35,6 +36,10 @@
     .input-group input, .input-group select { width: 100%; box-sizing: border-box; }
     .radio-group { display: flex; gap: 16px; margin-bottom: 8px; }
     .radio-group label { display: flex; align-items: center; gap: 6px; font-weight: normal; cursor: pointer; }
+    .ai-badge { display: inline-block; background: #ddd6fe; color: #5b21b6; font-size: 10px; padding: 2px 6px; border-radius: 4px; margin-left: 6px; }
+    .loading-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,0.9); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 200; }
+    .spinner { width: 40px; height: 40px; border: 4px solid #e5e7eb; border-top-color: #3b82f6; border-radius: 50%; animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
@@ -42,6 +47,8 @@
   
   <script type="text/babel">
     const { useState, useEffect, Component } = React;
+
+    const CATEGORIES = ['Groceries', 'Rent', 'Utilities', 'Transportation', 'Entertainment', 'Healthcare', 'Shopping', 'Dining', 'Travel', 'Subscriptions', 'Income', 'Transfer', 'Other'];
 
     // Error Boundary to catch rendering errors
     class ErrorBoundary extends Component {
@@ -121,11 +128,11 @@
         category: exp.category || 'Uncategorized',
         account: exp.account || 'Unknown',
         description: exp.description || '',
+        aiCategorized: exp.aiCategorized || false,
         hasError: false,
         errorMsg: null
       };
 
-      // Check for issues
       if (exp.amount === null || exp.amount === undefined || isNaN(exp.amount)) {
         errors.push('Invalid amount');
         cleaned.hasError = true;
@@ -176,6 +183,61 @@
         };
       }
     }
+
+    // AI Categorization function
+    async function categorizeWithAI(transactions) {
+      const uncategorized = transactions.filter(t => !t.category || t.category === 'Uncategorized');
+      
+      if (uncategorized.length === 0) return transactions;
+
+      const prompt = `Categorize these transactions into one of these categories: ${CATEGORIES.join(', ')}.
+
+Transactions to categorize:
+${uncategorized.map((t, i) => `${i + 1}. "${t.description}" - $${t.amount}`).join('\n')}
+
+Respond with ONLY a JSON array of category names in the same order, like: ["Groceries", "Dining", "Other"]
+No explanation, just the JSON array.`;
+
+      try {
+        const response = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "claude-sonnet-4-20250514",
+            max_tokens: 1000,
+            messages: [
+              { role: "user", content: prompt }
+            ],
+          })
+        });
+
+        const data = await response.json();
+        const text = data.content?.[0]?.text || '';
+        
+        // Parse the JSON response
+        const cleanText = text.replace(/```json|```/g, '').trim();
+        const categories = JSON.parse(cleanText);
+
+        // Map categories back to transactions
+        let catIndex = 0;
+        return transactions.map(t => {
+          if (!t.category || t.category === 'Uncategorized') {
+            const aiCategory = categories[catIndex] || 'Other';
+            catIndex++;
+            // Validate category is in our list
+            const validCategory = CATEGORIES.includes(aiCategory) ? aiCategory : 'Other';
+            return { ...t, category: validCategory, aiCategorized: true };
+          }
+          return t;
+        });
+      } catch (error) {
+        console.error('AI categorization failed:', error);
+        // Return transactions unchanged if AI fails
+        return transactions;
+      }
+    }
     
     function App() {
       const [expenses, setExpenses] = useState([]);
@@ -184,10 +246,13 @@
       const [showModal, setShowModal] = useState(false);
       const [csvHeaders, setCsvHeaders] = useState([]);
       const [csvData, setCsvData] = useState([]);
-      const [mapping, setMapping] = useState({ date: '', amount: '', description: '', account: '' });
-      const [accountMode, setAccountMode] = useState('manual'); // 'manual' or 'column'
+      const [mapping, setMapping] = useState({ date: '', amount: '', description: '', account: '', category: '' });
+      const [accountMode, setAccountMode] = useState('manual');
       const [manualAccountName, setManualAccountName] = useState('');
+      const [categoryMode, setCategoryMode] = useState('ai'); // 'ai', 'column', or 'manual'
       const [message, setMessage] = useState('');
+      const [isLoading, setIsLoading] = useState(false);
+      const [loadingMessage, setLoadingMessage] = useState('');
 
       // Load on mount
       useEffect(() => {
@@ -204,8 +269,6 @@
           console.error('Error saving to localStorage:', e);
         }
       }, [expenses]);
-
-      const categories = ['Groceries', 'Rent', 'Utilities', 'Transportation', 'Entertainment', 'Healthcare', 'Shopping', 'Dining', 'Other'];
 
       function handleFileUpload(e) {
         const file = e.target.files[0];
@@ -243,9 +306,9 @@
             
             setCsvHeaders(headers);
             setCsvData(data);
-            // Reset modal state
-            setMapping({ date: '', amount: '', description: '', account: '' });
+            setMapping({ date: '', amount: '', description: '', account: '', category: '' });
             setAccountMode('manual');
+            setCategoryMode('ai');
             setManualAccountName('');
             setShowModal(true);
           } catch (err) {
@@ -256,11 +319,15 @@
         e.target.value = '';
       }
 
-      function processImport() {
+      async function processImport() {
         if (!mapping.date || !mapping.amount) {
           alert('Please select Date and Amount columns');
           return;
         }
+
+        setShowModal(false);
+        setIsLoading(true);
+        setLoadingMessage('Processing CSV...');
 
         // Determine account name
         let accountName = 'Imported';
@@ -286,18 +353,35 @@
               return null;
             }
 
-            // Use column value if that mode is selected, otherwise use manual name
             const finalAccount = accountMode === 'column' && mapping.account 
               ? (row[mapping.account] || accountName)
               : accountName;
+
+            // Get category from CSV if column mode selected
+            let category = 'Uncategorized';
+            if (categoryMode === 'column' && mapping.category) {
+              const csvCategory = row[mapping.category]?.trim();
+              if (csvCategory && CATEGORIES.includes(csvCategory)) {
+                category = csvCategory;
+              } else if (csvCategory) {
+                // Try to match partial/similar category names
+                const match = CATEGORIES.find(c => 
+                  c.toLowerCase() === csvCategory.toLowerCase() ||
+                  csvCategory.toLowerCase().includes(c.toLowerCase()) ||
+                  c.toLowerCase().includes(csvCategory.toLowerCase())
+                );
+                category = match || 'Uncategorized';
+              }
+            }
             
             return {
               id: Date.now() + i,
               date,
               amount,
-              category: 'Uncategorized',
+              category,
               account: finalAccount,
               description: mapping.description ? row[mapping.description] : '',
+              aiCategorized: false,
               hasError: false,
               errorMsg: null
             };
@@ -311,23 +395,60 @@
           errors.push(`${skippedCount} row(s) skipped due to zero or invalid amounts`);
         }
 
-        setExpenses([...expenses, ...newExpenses]);
+        // AI categorization if enabled
+        let finalExpenses = newExpenses;
+        if (categoryMode === 'ai' || (categoryMode === 'column' && newExpenses.some(e => e.category === 'Uncategorized'))) {
+          const needsAI = newExpenses.filter(e => e.category === 'Uncategorized').length;
+          if (needsAI > 0) {
+            setLoadingMessage(`Categorizing ${needsAI} transactions with AI...`);
+            finalExpenses = await categorizeWithAI(newExpenses);
+          }
+        }
+
+        setExpenses([...expenses, ...finalExpenses]);
         
         if (errors.length > 0) {
           setImportErrors(errors);
         }
+
+        const aiCount = finalExpenses.filter(e => e.aiCategorized).length;
+        let msg = `Imported ${finalExpenses.length} transactions`;
+        if (aiCount > 0) {
+          msg += ` (${aiCount} categorized by AI)`;
+        }
         
-        setMessage(`Imported ${newExpenses.length} transactions`);
-        setTimeout(() => setMessage(''), 3000);
-        setShowModal(false);
+        setMessage(msg);
+        setIsLoading(false);
+        setTimeout(() => setMessage(''), 4000);
         setCsvHeaders([]);
         setCsvData([]);
-        setMapping({ date: '', amount: '', description: '', account: '' });
+        setMapping({ date: '', amount: '', description: '', account: '', category: '' });
         setManualAccountName('');
       }
 
+      async function recategorizeUncategorized() {
+        const uncategorized = expenses.filter(e => e.category === 'Uncategorized');
+        if (uncategorized.length === 0) {
+          setMessage('No uncategorized transactions to process');
+          setTimeout(() => setMessage(''), 3000);
+          return;
+        }
+
+        setIsLoading(true);
+        setLoadingMessage(`Categorizing ${uncategorized.length} transactions with AI...`);
+
+        const categorized = await categorizeWithAI(expenses);
+        setExpenses(categorized);
+
+        const newlyCategorized = categorized.filter(e => e.aiCategorized && expenses.find(o => o.id === e.id)?.category === 'Uncategorized').length;
+        
+        setIsLoading(false);
+        setMessage(`AI categorized ${newlyCategorized} transactions`);
+        setTimeout(() => setMessage(''), 3000);
+      }
+
       function updateCategory(id, cat) {
-        setExpenses(expenses.map(e => e.id === id ? {...e, category: cat} : e));
+        setExpenses(expenses.map(e => e.id === id ? {...e, category: cat, aiCategorized: false} : e));
       }
 
       function deleteExpense(id) {
@@ -369,10 +490,18 @@
       const errorExpenses = expenses.filter(e => e.hasError);
       const categorized = validExpenses.filter(e => e.category !== 'Uncategorized');
       const total = categorized.reduce((sum, e) => sum + safeAmount(e.amount), 0);
-      const uncategorized = validExpenses.length - categorized.length;
+      const uncategorizedCount = validExpenses.length - categorized.length;
 
       return (
         <div className="container">
+          {/* Loading Overlay */}
+          {isLoading && (
+            <div className="loading-overlay">
+              <div className="spinner"></div>
+              <p style={{marginTop: '16px', color: '#64748b'}}>{loadingMessage}</p>
+            </div>
+          )}
+
           <div style={{marginBottom: '30px'}}>
             <h1 style={{fontSize: '32px', fontWeight: 'bold', marginBottom: '8px'}}>Expense Tracker</h1>
             <p style={{color: '#64748b'}}>Import bank CSVs and categorize expenses</p>
@@ -424,6 +553,11 @@
               <input type="file" accept=".csv" onChange={handleFileUpload} />
             </label>
             <button className="btn btn-purple" onClick={exportCSV}>📥 Export</button>
+            {uncategorizedCount > 0 && (
+              <button className="btn btn-green" onClick={recategorizeUncategorized}>
+                🤖 AI Categorize ({uncategorizedCount})
+              </button>
+            )}
             <button className="btn btn-red" onClick={clearAllData}>🗑️ Clear All</button>
           </div>
 
@@ -433,9 +567,9 @@
             </div>
           )}
 
-          {uncategorized > 0 && (
+          {uncategorizedCount > 0 && (
             <div style={{padding: '12px', background: '#fef3c7', color: '#92400e', borderRadius: '8px', marginBottom: '20px'}}>
-              ⚠️ {uncategorized} transactions need categorization
+              ⚠️ {uncategorizedCount} transactions need categorization
             </div>
           )}
 
@@ -450,7 +584,7 @@
             </div>
             <div className="card">
               <div style={{fontSize: '14px', color: '#64748b', marginBottom: '4px'}}>To Review</div>
-              <div style={{fontSize: '28px', fontWeight: 'bold'}}>{uncategorized}</div>
+              <div style={{fontSize: '28px', fontWeight: 'bold'}}>{uncategorizedCount}</div>
             </div>
           </div>
 
@@ -477,7 +611,6 @@
                     </tr>
                   ) : (
                     [...expenses].sort((a, b) => {
-                      // Errors first, then uncategorized
                       if (a.hasError && !b.hasError) return -1;
                       if (!a.hasError && b.hasError) return 1;
                       if (a.category === 'Uncategorized' && b.category !== 'Uncategorized') return -1;
@@ -509,8 +642,9 @@
                             }}
                           >
                             <option value="Uncategorized">Uncategorized</option>
-                            {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                            {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                           </select>
+                          {exp.aiCategorized && <span className="ai-badge">AI</span>}
                         </td>
                         <td style={{textAlign: 'right', fontWeight: '600'}}>{formatAmount(exp.amount)}</td>
                         <td>
@@ -587,6 +721,42 @@
                   />
                 ) : (
                   <select value={mapping.account} onChange={(e) => setMapping({...mapping, account: e.target.value})}>
+                    <option value="">Select...</option>
+                    {csvHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                  </select>
+                )}
+              </div>
+
+              <div className="input-group">
+                <label>Category</label>
+                <div className="radio-group">
+                  <label>
+                    <input 
+                      type="radio" 
+                      name="categoryMode" 
+                      checked={categoryMode === 'ai'} 
+                      onChange={() => setCategoryMode('ai')}
+                    />
+                    🤖 Use AI
+                  </label>
+                  <label>
+                    <input 
+                      type="radio" 
+                      name="categoryMode" 
+                      checked={categoryMode === 'column'} 
+                      onChange={() => setCategoryMode('column')}
+                    />
+                    From CSV column
+                  </label>
+                </div>
+                <p style={{fontSize: '12px', color: '#64748b', marginBottom: '8px'}}>
+                  {categoryMode === 'ai' 
+                    ? 'AI will categorize based on transaction descriptions' 
+                    : 'Select a column, AI will fill in any missing categories'}
+                </p>
+                
+                {categoryMode === 'column' && (
+                  <select value={mapping.category} onChange={(e) => setMapping({...mapping, category: e.target.value})}>
                     <option value="">Select...</option>
                     {csvHeaders.map(h => <option key={h} value={h}>{h}</option>)}
                   </select>
