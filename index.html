@@ -387,6 +387,72 @@ const RecurringCosts = ({ expenses }) => {
     </div>);
 };
 
+// Small Purchase Merchants (avg < $20) - 2025
+const SmallPurchaseMerchants = ({ expenses }) => {
+    const { data, grandTotal } = useMemo(() => {
+        const sp2025 = expenses.filter(e => e.category !== 'Income' && e.category !== 'Transfer' && getY(e.date) === 2025);
+        
+        if (!sp2025.length) return { data: [], grandTotal: 0 };
+        
+        // Group by merchant
+        const byMerchant = {};
+        sp2025.forEach(e => {
+            let name = (e.description || 'Unknown').trim();
+            // Clean merchant name
+            name = name.split(/\s{2,}|\t|\*|#|\d{10,}/)[0].trim().substring(0, 30);
+            if (!name) name = 'Unknown';
+            
+            if (!byMerchant[name]) byMerchant[name] = { total: 0, count: 0 };
+            byMerchant[name].total += safe(e.amount);
+            byMerchant[name].count += 1;
+        });
+        
+        // Filter to avg < $20 and sort by total
+        const filtered = Object.entries(byMerchant)
+            .map(([name, d]) => ({
+                name,
+                total: d.total,
+                count: d.count,
+                avg: d.total / d.count
+            }))
+            .filter(m => m.avg < 20) // avg under $20
+            .sort((a, b) => b.total - a.total)
+            .slice(0, 10);
+        
+        const grandTotal = filtered.reduce((s, m) => s + m.total, 0);
+        
+        return { data: filtered, grandTotal };
+    }, [expenses]);
+    
+    if (!data.length) return <Empty msg="No purchases under $20 avg" />;
+    const mx = data[0]?.total || 1;
+    
+    return (<div className="h-full flex flex-col">
+        <div className="flex-1 space-y-1.5 overflow-auto">
+            {data.map((m, i) => (
+                <div key={m.name} className="flex items-center gap-2">
+                    <div className="w-5 text-[10px] font-black text-red-400">{i + 1}</div>
+                    <div className="w-24 text-[10px] font-semibold text-slate-600 truncate" title={m.name}>{m.name}</div>
+                    <div className="flex-1 h-5 bg-red-50 rounded overflow-hidden">
+                        <div className="h-full rounded bg-gradient-to-r from-red-400 to-orange-400" style={{width:`${m.total/mx*100}%`}}/>
+                    </div>
+                    <div className="w-10 text-[9px] text-slate-400 text-center">{m.count}x</div>
+                    <div className="w-12 text-[9px] text-slate-500 text-right">~${m.avg.toFixed(0)}</div>
+                    <div className="w-14 text-[10px] font-bold text-red-600 text-right">${m.total.toFixed(0)}</div>
+                </div>
+            ))}
+        </div>
+        <div className="pt-2 border-t border-slate-100 mt-2 flex justify-between items-center">
+            <div className="text-[10px] text-slate-400">
+                ☕ Avg &lt;$20/transaction
+            </div>
+            <div className="text-right">
+                <div className="text-[11px] font-black text-red-600">${grandTotal.toLocaleString(undefined,{maximumFractionDigits:0})} total</div>
+            </div>
+        </div>
+    </div>);
+};
+
 // Stats (2025 only)
 const Stats = ({ expenses }) => {
     const { tot, cnt, avg } = useMemo(() => {
@@ -481,7 +547,10 @@ const App = () => {
                 <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">📊 Where Does It All Go? (2025)</h3><div className="h-56"><Pareto expenses={expenses}/></div></div>
                 <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">🏪 Top 10 Merchants (2025)</h3><div className="h-56"><TopMerchants expenses={expenses}/></div></div>
                 <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">🔄 Recurring Costs (2025)</h3><div className="h-56"><RecurringCosts expenses={expenses}/></div></div>
-            </div><div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">💸 Death by 1000 Cuts (2025)</h3><div className="h-56"><Scatter expenses={expenses}/></div></div></>)}
+            </div><div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">☕ Small Purchase Leaks (2025)</h3><div className="h-56"><SmallPurchaseMerchants expenses={expenses}/></div></div>
+                <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">💸 Death by 1000 Cuts (2025)</h3><div className="h-56"><Scatter expenses={expenses}/></div></div>
+            </div></>)}
 
             {tab === 'evolution' && (<>
                 <div className="bg-gradient-to-r from-indigo-500 to-purple-600 text-white p-6 rounded-2xl"><h2 className="text-xl font-black">📈 Year-over-Year Evolution</h2><p className="text-indigo-100 text-sm mt-1">Compare spending across years</p></div>
