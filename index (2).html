@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Expense Tracker - Rule Based</title>
+    <!-- External CSS & Fonts -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Dependencies -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .chart-container .recharts-cartesian-grid-horizontal line { stroke: #f1f5f9; }
+    </style>
+
+    <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@18.3.1",
+        "react-dom": "https://esm.sh/react-dom@18.3.1",
+        "react-dom/client": "https://esm.sh/react-dom@18.3.1/client",
+        "recharts": "https://esm.sh/recharts@2.12.7?external=react,react-dom"
+      }
+    }
+    </script>
+</head>
+<body class="bg-slate-50">
+    <div id="root"></div>
+
+    <script type="text/babel" data-type="module">
+        import React, { useState, useEffect, useMemo } from 'react';
+        import ReactDOM from 'react-dom/client';
+        import { 
+            BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+            Cell 
+        } from 'recharts';
+
+        // --- CONFIGURATION & CONSTANTS ---
+        const CATEGORIES = [
+            'Groceries', 'Rent', 'Utilities', 'Transportation', 'Entertainment', 
+            'Healthcare', 'Shopping', 'Dining', 'Travel', 'Subscriptions', 
+            'Income', 'Transfer', 'Other'
+        ];
+
+        const CATEGORY_RULES = {
+            'Groceries': ['walmart', 'kroger', 'safeway', 'trader joe', 'whole foods', 'aldi', 'costco', 'target', 'publix', 'grocery', 'supermarket', 'tesco', 'lidl'],
+            'Dining': ['mcdonald', 'starbucks', 'chipotle', 'subway', 'burger king', 'wendy', 'taco bell', 'restaurant', 'cafe', 'coffee', 'doordash', 'uber eats', 'pizza', 'kfc'],
+            'Transportation': ['uber', 'lyft', 'taxi', 'shell', 'exxon', 'mobil', 'chevron', 'gas', 'fuel', 'parking', 'metro', 'transit', 'train', 'bus'],
+            'Shopping': ['amazon', 'ebay', 'etsy', 'best buy', 'apple store', 'home depot', 'lowes', 'ikea', 'nike', 'adidas', 'zara', 'h&m'],
+            'Entertainment': ['netflix', 'hulu', 'disney', 'hbo', 'spotify', 'movie', 'cinema', 'xbox', 'steam', 'playstation', 'nintendo'],
+            'Utilities': ['electric', 'power', 'water bill', 'comcast', 'xfinity', 'spectrum', 'internet', 'phone bill', 'verizon', 'att'],
+            'Healthcare': ['pharmacy', 'cvs', 'walgreens', 'doctor', 'hospital', 'medical', 'dentist', 'clinic'],
+            'Travel': ['airline', 'delta', 'united', 'flight', 'airbnb', 'hotel', 'marriott', 'hilton', 'booking.com', 'expedia'],
+            'Subscriptions': ['subscription', 'membership', 'monthly', 'adobe', 'dropbox', 'linkedin', 'patreon', 'canva'],
+            'Income': ['payroll', 'salary', 'direct deposit', 'paycheck', 'dividend', 'interest'],
+            'Transfer': ['transfer', 'ach', 'wire', 'zelle', 'venmo', 'paypal', 'atm', 'credit card payment']
+        };
+
+        // --- LOGIC HELPERS ---
+        function fuzzyMatchCategory(csvValue) {
+            if (!csvValue) return 'Uncategorized';
+            const val = csvValue.trim().toLowerCase();
+            const exact = CATEGORIES.find(c => c.toLowerCase() === val);
+            if (exact) return exact;
+            const contains = CATEGORIES.find(c => val.includes(c.toLowerCase()) || c.toLowerCase().includes(val));
+            if (contains) return contains;
+            return 'Uncategorized';
+        }
+
+        function ruleMatch(description) {
+            if (!description) return 'Uncategorized';
+            const desc = description.toLowerCase();
+            for (const [cat, keywords] of Object.entries(CATEGORY_RULES)) {
+                if (keywords.some(k => desc.includes(k.toLowerCase()))) return cat;
+            }
+            return 'Uncategorized';
+        }
+
+        // --- COMPONENTS ---
+
+        const Dashboard = ({ expenses }) => {
+            const stats = useMemo(() => {
+                const spendingExpenses = expenses.filter(e => e.category !== 'Transfer' && e.category !== 'Income');
+                const total = spendingExpenses.reduce((sum, e) => sum + e.amount, 0);
+                const dataMap = {};
+                spendingExpenses.forEach(e => {
+                    dataMap[e.category] = (dataMap[e.category] || 0) + e.amount;
+                });
+                const chartData = Object.entries(dataMap)
+                    .map(([name, value]) => ({ name, value: Number(value.toFixed(2)) }))
+                    .sort((a, b) => b.value - a.value);
+                return { total, chartData };
+            }, [expenses]);
+
+            return (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-xl shadow-slate-200/50">
+                        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Monthly Spending</h3>
+                        <p className="text-5xl font-black text-slate-900 mt-3 tabular-nums">
+                            ${stats.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </p>
+                        <div className="mt-6 flex items-center gap-2">
+                            <span className="flex h-2 w-2 rounded-full bg-indigo-500"></span>
+                            <p className="text-xs text-slate-400 font-medium tracking-tight">Across {stats.chartData.length} categories</p>
+                        </div>
+                    </div>
+                    <div className="lg:col-span-2 bg-white p-6 rounded-3xl border border-slate-100 shadow-xl shadow-slate-200/50 h-72">
+                        <ResponsiveContainer width="100%" height="100%" className="chart-container">
+                            <BarChart data={stats.chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                <XAxis dataKey="name" fontSize={10} axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontWeight: 600}} dy={10} />
+                                <YAxis fontSize={10} axisLine={false} tickLine={false} tick={{fill: '#94a3b8'}} />
+                                <Tooltip 
+                                    cursor={{fill: '#f8fafc'}}
+                                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                                />
+                                <Bar dataKey="value" fill="#6366f1" radius={[6, 6, 0, 0]} barSize={40}>
+                                    {stats.chartData.map((entry, index) => (
+                                        <Cell key={`cell-${index}`} fill={index === 0 ? '#4f46e5' : '#818cf8'} />
+                                    ))}
+                                </Bar>
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+            );
+        };
+
+        const ImportDialog = ({ headers, onClose, onConfirm }) => {
+            const [mapping, setMapping] = useState({
+                date: headers.find(h => /date/i.test(h)) || headers[0],
+                amount: headers.find(h => /amount|debit|price/i.test(h)) || headers[1],
+                description: headers.find(h => /desc|memo|merchant/i.test(h)) || headers[2],
+                category: headers.find(h => /cat/i.test(h)) || '',
+            });
+            const [mode, setMode] = useState('column');
+
+            return (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={onClose} />
+                    <div className="relative bg-white w-full max-w-xl rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col border border-white/20">
+                        <div className="p-8 border-b border-slate-50">
+                            <h2 className="text-2xl font-black text-slate-800 tracking-tight">Import Configuration</h2>
+                            <p className="text-sm text-slate-400 mt-1 font-medium">Link your CSV columns to our internal database.</p>
+                        </div>
+                        <div className="p-8 space-y-6 overflow-y-auto max-h-[60vh]">
+                            <div className="grid grid-cols-2 gap-5">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Date</label>
+                                    <select className="w-full p-4 bg-slate-50 border-0 rounded-2xl text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none" 
+                                            value={mapping.date} onChange={e => setMapping({...mapping, date: e.target.value})}>
+                                        {headers.map(h => <option key={h} value={h}>{h}</option>)}
+                                    </select>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Amount</label>
+                                    <select className="w-full p-4 bg-slate-50 border-0 rounded-2xl text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none" 
+                                            value={mapping.amount} onChange={e => setMapping({...mapping, amount: e.target.value})}>
+                                        {headers.map(h => <option key={h} value={h}>{h}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Description</label>
+                                <select className="w-full p-4 bg-slate-50 border-0 rounded-2xl text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none" 
+                                        value={mapping.description} onChange={e => setMapping({...mapping, description: e.target.value})}>
+                                    {headers.map(h => <option key={h} value={h}>{h}</option>)}
+                                </select>
+                            </div>
+                            <div className="pt-6 border-t border-slate-50">
+                                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1 block mb-4">Sorting Engine</label>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <button onClick={() => setMode('column')} 
+                                            className={`p-5 rounded-3xl border-2 transition-all flex flex-col items-center gap-3 text-sm font-bold ${mode === 'column' ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-slate-100 bg-slate-50 text-slate-400 hover:border-slate-200'}`}>
+                                        <span className="text-2xl">📊</span> 
+                                        <span>Use CSV Category</span>
+                                    </button>
+                                    <button onClick={() => setMode('auto')} 
+                                            className={`p-5 rounded-3xl border-2 transition-all flex flex-col items-center gap-3 text-sm font-bold ${mode === 'auto' ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-slate-100 bg-slate-50 text-slate-400 hover:border-slate-200'}`}>
+                                        <span className="text-2xl">🧠</span> 
+                                        <span>Auto-Rules Only</span>
+                                    </button>
+                                </div>
+                                {mode === 'column' && (
+                                    <div className="mt-6 space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                                        <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Source Category Column</label>
+                                        <select className="w-full p-4 bg-slate-50 border-0 rounded-2xl text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none" 
+                                                value={mapping.category} onChange={e => setMapping({...mapping, category: e.target.value})}>
+                                            <option value="">-- Choose Column --</option>
+                                            {headers.map(h => <option key={h} value={h}>{h}</option>)}
+                                        </select>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                        <div className="p-8 bg-slate-50 flex gap-4">
+                            <button onClick={onClose} className="flex-1 py-4 font-bold text-slate-500 rounded-2xl hover:bg-slate-200 transition-colors">Cancel</button>
+                            <button onClick={() => onConfirm(mapping, mode)} className="flex-1 py-4 bg-indigo-600 text-white font-black rounded-2xl shadow-xl shadow-indigo-200 hover:bg-indigo-700 transition-all active:scale-95">Complete Import</button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const App = () => {
+            const [expenses, setExpenses] = useState([]);
+            const [importData, setImportData] = useState(null);
+
+            useEffect(() => {
+                const saved = localStorage.getItem('smart_expense_v4');
+                if (saved) setExpenses(JSON.parse(saved));
+            }, []);
+
+            useEffect(() => {
+                localStorage.setItem('smart_expense_v4', JSON.stringify(expenses));
+            }, [expenses]);
+
+            const handleFileUpload = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                Papa.parse(file, {
+                    header: true,
+                    skipEmptyLines: true,
+                    complete: (results) => setImportData(results)
+                });
+            };
+
+            const processImport = (mapping, mode) => {
+                const newExpenses = importData.data.map((row, i) => {
+                    const desc = row[mapping.description] || 'No Description';
+                    const rawAmount = String(row[mapping.amount] || '0').replace(/[^\d.-]/g, '');
+                    const amount = Math.abs(parseFloat(rawAmount)) || 0;
+                    let category = 'Uncategorized';
+                    let source = 'rule';
+                    if (mode === 'column' && mapping.category && row[mapping.category]) {
+                        category = fuzzyMatchCategory(row[mapping.category]);
+                        source = 'csv';
+                    }
+                    if (category === 'Uncategorized') {
+                        const matchedByRule = ruleMatch(desc);
+                        if (matchedByRule !== 'Uncategorized') {
+                            category = matchedByRule;
+                            source = 'auto-rule';
+                        }
+                    }
+                    return {
+                        id: `exp-${Date.now()}-${i}`,
+                        date: row[mapping.date] || new Date().toISOString().split('T')[0],
+                        description: desc,
+                        amount,
+                        category,
+                        source
+                    };
+                }).filter(e => e.amount > 0);
+                setExpenses([...expenses, ...newExpenses]);
+                setImportData(null);
+            };
+
+            return (
+                <div className="min-h-screen pb-20 selection:bg-indigo-100 selection:text-indigo-900">
+                    <header className="bg-white/80 backdrop-blur-xl border-b border-slate-100 h-20 flex items-center px-10 justify-between sticky top-0 z-40">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-indigo-700 rounded-2xl flex items-center justify-center text-white font-black shadow-lg shadow-indigo-200">S</div>
+                            <h1 className="text-xl font-black text-slate-800 tracking-tight">Smart<span className="text-indigo-600">Expense</span></h1>
+                        </div>
+                        <div className="flex gap-4">
+                            <label className="bg-indigo-600 text-white px-7 py-3 rounded-2xl font-black text-sm cursor-pointer hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100 active:scale-95">
+                                Import CSV
+                                <input type="file" className="hidden" accept=".csv" onChange={handleFileUpload} />
+                            </label>
+                        </div>
+                    </header>
+
+                    <main className="max-w-6xl mx-auto px-6 mt-12 space-y-12">
+                        <Dashboard expenses={expenses} />
+                        <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-xl shadow-slate-200/40 overflow-hidden">
+                            <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-white">
+                                <h2 className="font-black text-slate-800 tracking-tight">Transaction History</h2>
+                                <button onClick={() => { if(confirm("Wipe all data?")) setExpenses([]); }} 
+                                        className="text-xs font-black text-red-500 hover:text-red-700 uppercase tracking-widest bg-red-50 px-4 py-2 rounded-xl transition-colors">Clear All</button>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left text-sm">
+                                    <thead className="bg-slate-50/50 text-slate-400 uppercase text-[10px] font-black tracking-[0.2em] border-b border-slate-50">
+                                        <tr>
+                                            <th className="p-6">Date</th>
+                                            <th className="p-6">Description</th>
+                                            <th className="p-6">Category</th>
+                                            <th className="p-6 text-right">Amount</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-50">
+                                        {expenses.length === 0 ? (
+                                            <tr>
+                                                <td colSpan={4} className="p-32 text-center">
+                                                    <div className="flex flex-col items-center gap-4">
+                                                        <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center text-3xl">📁</div>
+                                                        <div>
+                                                            <p className="font-black text-slate-800 text-lg">Empty Wallet</p>
+                                                            <p className="text-slate-400 font-medium">Upload a CSV file to populate your dashboard.</p>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ) : (
+                                            [...expenses].reverse().map(e => (
+                                                <tr key={e.id} className="hover:bg-slate-50/80 transition-all duration-200 group">
+                                                    <td className="p-6 text-slate-400 font-bold tabular-nums">{e.date}</td>
+                                                    <td className="p-6 font-bold text-slate-700 max-w-xs">
+                                                        <div className="truncate group-hover:text-indigo-600 transition-colors">{e.description}</div>
+                                                    </td>
+                                                    <td className="p-6">
+                                                        <span className={`inline-flex items-center px-4 py-1.5 rounded-full text-[11px] font-black uppercase tracking-wider shadow-sm ${
+                                                            e.category === 'Uncategorized' ? 'bg-amber-50 text-amber-700' : 'bg-indigo-50 text-indigo-700'
+                                                        }`}>
+                                                            {e.category}
+                                                            <span className="ml-2 opacity-30 text-[9px] font-bold">
+                                                                {e.source === 'auto-rule' ? 'RULE' : 'CSV'}
+                                                            </span>
+                                                        </span>
+                                                    </td>
+                                                    <td className="p-6 text-right font-black tabular-nums text-slate-900 text-base">
+                                                        ${e.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </main>
+                    {importData && (
+                        <ImportDialog 
+                            headers={importData.meta.fields} 
+                            onClose={() => setImportData(null)} 
+                            onConfirm={processImport}
+                        />
+                    )}
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
