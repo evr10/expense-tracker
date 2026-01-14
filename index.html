@@ -9,191 +9,180 @@
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://unpkg.com/recharts@2.10.3/dist/Recharts.js"></script>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: linear-gradient(to bottom right, #f8fafc, #dbeafe); min-height: 100vh; }
-    .btn { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 8px; font-weight: 500; cursor: pointer; border: none; transition: all 0.2s; font-size: 14px; }
-    .btn-primary { background: #3b82f6; color: white; }
-    .btn-primary:hover { background: #2563eb; }
-    .btn-secondary { background: #8b5cf6; color: white; }
-    .btn-secondary:hover { background: #7c3aed; }
-    .card { background: white; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 24px; margin-bottom: 32px; }
-    input, select { width: 100%; padding: 10px 16px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; }
-    input:focus, select:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
-    table { width: 100%; border-collapse: collapse; }
-    th { text-align: left; padding: 12px 16px; color: #64748b; font-weight: 500; border-bottom: 1px solid #e2e8f0; font-size: 14px; }
-    td { padding: 12px 16px; border-bottom: 1px solid #f1f5f9; font-size: 14px; }
-    tr:hover { background: #f8fafc; }
-    .alert { padding: 16px; border-radius: 8px; margin-bottom: 24px; }
-    .alert-info { background: #dbeafe; color: #1e40af; }
-    .alert-warning { background: #fef3c7; color: #92400e; }
-    .modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; }
-    .modal.active { display: flex; }
-    .modal-content { background: white; border-radius: 12px; padding: 32px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto; }
+    body { font-family: system-ui, sans-serif; background: linear-gradient(to bottom right, #f8fafc, #dbeafe); min-height: 100vh; margin: 0; padding: 20px; }
+    .container { max-width: 1200px; margin: 0 auto; }
+    .btn { padding: 10px 16px; border-radius: 8px; border: none; cursor: pointer; font-size: 14px; font-weight: 500; }
+    .btn-blue { background: #3b82f6; color: white; }
+    .btn-purple { background: #8b5cf6; color: white; }
+    .btn-green { background: #10b981; color: white; }
+    .btn-gray { background: #e5e7eb; color: #1f2937; }
+    .card { background: white; border-radius: 12px; padding: 24px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
     input[type="file"] { display: none; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 12px; text-align: left; border-bottom: 1px solid #f1f5f9; }
+    th { font-weight: 500; color: #64748b; }
+    select, input { padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; }
+    .modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; }
+    .modal.show { display: flex; }
+    .modal-box { background: white; padding: 30px; border-radius: 12px; max-width: 500px; width: 90%; }
   </style>
 </head>
 <body>
   <div id="root"></div>
   
   <script type="text/babel">
-    const { useState, useMemo, useEffect } = React;
+    const { useState, useEffect } = React;
     
-    const ExpenseTracker = () => {
+    function App() {
       const [expenses, setExpenses] = useState(() => {
-        const saved = localStorage.getItem('expenses');
-        return saved ? JSON.parse(saved) : [];
+        try {
+          const saved = localStorage.getItem('expenses');
+          return saved ? JSON.parse(saved) : [];
+        } catch (e) {
+          console.error('Error loading from localStorage:', e);
+          return [];
+        }
       });
-      const [saveStatus, setSaveStatus] = useState('');
-      const [uploadStatus, setUploadStatus] = useState('');
-      const [showMapping, setShowMapping] = useState(false);
+      const [showModal, setShowModal] = useState(false);
       const [csvHeaders, setCsvHeaders] = useState([]);
       const [csvData, setCsvData] = useState([]);
-      const [columnMapping, setColumnMapping] = useState({ date: '', amount: '', description: '', account: '' });
+      const [mapping, setMapping] = useState({ date: '', amount: '', description: '', account: '' });
+      const [message, setMessage] = useState('');
 
       useEffect(() => {
-        localStorage.setItem('expenses', JSON.stringify(expenses));
-        setSaveStatus('Saved ✓');
-        const timer = setTimeout(() => setSaveStatus(''), 2000);
-        return () => clearTimeout(timer);
+        try {
+          localStorage.setItem('expenses', JSON.stringify(expenses));
+        } catch (e) {
+          console.error('Error saving to localStorage:', e);
+        }
       }, [expenses]);
 
       const categories = ['Groceries', 'Rent', 'Utilities', 'Transportation', 'Entertainment', 'Healthcare', 'Shopping', 'Dining', 'Other'];
-      const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
 
-      const handleFileUpload = (event) => {
-        const file = event.target.files[0];
+      function handleFileUpload(e) {
+        const file = e.target.files[0];
         if (!file) return;
+        
         const reader = new FileReader();
-        reader.onload = (e) => {
-          try {
-            const text = e.target.result;
-            const lines = text.split('\n').filter(line => line.trim());
-            const headers = lines[0].split(',').map(h => h.trim().replace(/['"]/g, ''));
-            setCsvHeaders(headers);
-            const data = lines.slice(1).map(line => {
-              const values = line.split(',').map(v => v.trim().replace(/['"]/g, ''));
-              const row = {};
-              headers.forEach((h, i) => row[h] = values[i] || '');
-              return row;
-            });
-            setCsvData(data);
-            setShowMapping(true);
-          } catch (error) {
-            setUploadStatus('Error reading CSV');
-            setTimeout(() => setUploadStatus(''), 3000);
-          }
+        reader.onload = (event) => {
+          const text = event.target.result;
+          const lines = text.split('\n').filter(l => l.trim());
+          const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+          const data = lines.slice(1).map(line => {
+            const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
+            const row = {};
+            headers.forEach((h, i) => row[h] = values[i] || '');
+            return row;
+          });
+          
+          setCsvHeaders(headers);
+          setCsvData(data);
+          setShowModal(true);
         };
         reader.readAsText(file);
-        event.target.value = '';
-      };
+        e.target.value = '';
+      }
 
-      const processCSVImport = () => {
-        if (!columnMapping.date || !columnMapping.amount) {
-          alert('Please map Date and Amount columns');
+      function processImport() {
+        if (!mapping.date || !mapping.amount) {
+          alert('Please select Date and Amount columns');
           return;
         }
+
         const newExpenses = csvData.map((row, i) => {
-          const dateObj = new Date(row[columnMapping.date]);
-          const formattedDate = !isNaN(dateObj.getTime()) ? dateObj.toISOString().slice(0, 7) : new Date().toISOString().slice(0, 7);
-          const amount = Math.abs(parseFloat(String(row[columnMapping.amount]).replace(/[$,]/g, ''))) || 0;
+          const dateStr = row[mapping.date];
+          const dateObj = new Date(dateStr);
+          const date = !isNaN(dateObj) ? dateObj.toISOString().slice(0, 7) : new Date().toISOString().slice(0, 7);
+          const amount = Math.abs(parseFloat(String(row[mapping.amount]).replace(/[$,]/g, ''))) || 0;
+          
           return {
             id: Date.now() + i,
-            date: formattedDate,
+            date,
             amount,
             category: 'Uncategorized',
-            account: columnMapping.account ? row[columnMapping.account] : 'Imported',
-            description: columnMapping.description ? row[columnMapping.description] : ''
+            account: mapping.account ? row[mapping.account] : 'Imported',
+            description: mapping.description ? row[mapping.description] : ''
           };
-        }).filter(exp => exp.amount > 0);
+        }).filter(e => e.amount > 0);
+
         setExpenses([...expenses, ...newExpenses]);
-        setUploadStatus(`Imported ${newExpenses.length} transactions. Categorize them below.`);
-        setTimeout(() => setUploadStatus(''), 5000);
-        setShowMapping(false);
+        setMessage(`Imported ${newExpenses.length} transactions`);
+        setTimeout(() => setMessage(''), 3000);
+        setShowModal(false);
         setCsvHeaders([]);
         setCsvData([]);
-        setColumnMapping({ date: '', amount: '', description: '', account: '' });
-      };
+        setMapping({ date: '', amount: '', description: '', account: '' });
+      }
 
-      const updateCategory = (id, cat) => {
-        setExpenses(expenses.map(exp => exp.id === id ? { ...exp, category: cat } : exp));
-      };
+      function updateCategory(id, cat) {
+        setExpenses(expenses.map(e => e.id === id ? {...e, category: cat} : e));
+      }
 
-      const deleteExpense = (id) => setExpenses(expenses.filter(exp => exp.id !== id));
+      function deleteExpense(id) {
+        setExpenses(expenses.filter(e => e.id !== id));
+      }
 
-      const exportToCSV = () => {
-        const csv = ['date,amount,category,account,description', ...expenses.map(e => `${e.date},${e.amount},${e.category},${e.account},${e.description}`)].join('\n');
+      function exportCSV() {
+        const csv = ['date,amount,category,account,description', ...expenses.map(e => 
+          `${e.date},${e.amount},${e.category},${e.account},${e.description}`
+        )].join('\n');
         const blob = new Blob([csv], { type: 'text/csv' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `expenses_${new Date().toISOString().split('T')[0]}.csv`;
+        a.download = 'expenses.csv';
         a.click();
         URL.revokeObjectURL(url);
-      };
+      }
 
       const categorized = expenses.filter(e => e.category !== 'Uncategorized');
-      const totalExpenses = categorized.reduce((sum, e) => sum + e.amount, 0);
-      const uncategorizedCount = expenses.length - categorized.length;
-
-      const categoryData = useMemo(() => {
-        const grouped = {};
-        categorized.forEach(e => grouped[e.category] = (grouped[e.category] || 0) + e.amount);
-        return Object.entries(grouped).map(([name, value]) => ({ name, value }));
-      }, [expenses]);
-
-      const { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } = window.Recharts || {};
+      const total = categorized.reduce((sum, e) => sum + e.amount, 0);
+      const uncategorized = expenses.length - categorized.length;
 
       return (
-        <div style={{maxWidth: '1280px', margin: '0 auto', padding: '24px'}}>
-          <div style={{marginBottom: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px'}}>
-            <div>
-              <h1 style={{fontSize: '36px', fontWeight: 'bold', color: '#1e293b', marginBottom: '8px'}}>Expense Tracker</h1>
-              <p style={{color: '#64748b'}}>Import bank CSVs and categorize expenses</p>
-            </div>
-            <div style={{display: 'flex', gap: '12px'}}>
-              {saveStatus && <div style={{padding: '10px 16px', background: '#d1fae5', color: '#065f46', borderRadius: '8px'}}>{saveStatus}</div>}
-              <label className="btn btn-primary">
-                📤 Import CSV
-                <input type="file" accept=".csv" onChange={handleFileUpload} />
-              </label>
-              <button onClick={exportToCSV} className="btn btn-secondary">📥 Export</button>
-            </div>
+        <div className="container">
+          <div style={{marginBottom: '30px'}}>
+            <h1 style={{fontSize: '32px', fontWeight: 'bold', marginBottom: '8px'}}>Expense Tracker</h1>
+            <p style={{color: '#64748b'}}>Import bank CSVs and categorize expenses</p>
           </div>
 
-          {uploadStatus && <div className="alert alert-info">{uploadStatus}</div>}
-          {uncategorizedCount > 0 && <div className="alert alert-warning">⚠️ {uncategorizedCount} uncategorized transactions</div>}
-
-          <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '24px', marginBottom: '32px'}}>
-            <div className="card">
-              <p style={{fontSize: '14px', color: '#64748b', marginBottom: '4px'}}>Total Expenses</p>
-              <p style={{fontSize: '30px', fontWeight: 'bold', color: '#1e293b'}}>${totalExpenses.toFixed(2)}</p>
-            </div>
-            <div className="card">
-              <p style={{fontSize: '14px', color: '#64748b', marginBottom: '4px'}}>Categorized</p>
-              <p style={{fontSize: '30px', fontWeight: 'bold', color: '#1e293b'}}>{categorized.length}</p>
-            </div>
-            <div className="card">
-              <p style={{fontSize: '14px', color: '#64748b', marginBottom: '4px'}}>Needs Review</p>
-              <p style={{fontSize: '30px', fontWeight: 'bold', color: '#1e293b'}}>{uncategorizedCount}</p>
-            </div>
+          <div style={{display: 'flex', gap: '10px', marginBottom: '20px'}}>
+            <label className="btn btn-blue">
+              📤 Import CSV
+              <input type="file" accept=".csv" onChange={handleFileUpload} />
+            </label>
+            <button className="btn btn-purple" onClick={exportCSV}>📥 Export</button>
           </div>
 
-          {categoryData.length > 0 && PieChart && (
-            <div className="card">
-              <h2 style={{fontSize: '20px', fontWeight: '600', marginBottom: '16px'}}>Spending by Category</h2>
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie data={categoryData} cx="50%" cy="50%" labelLine={false} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} outerRadius={100} dataKey="value">
-                    {categoryData.map((e, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                  </Pie>
-                  <Tooltip formatter={(v) => `${v.toFixed(2)}`} />
-                </PieChart>
-              </ResponsiveContainer>
+          {message && (
+            <div style={{padding: '12px', background: '#dbeafe', color: '#1e40af', borderRadius: '8px', marginBottom: '20px'}}>
+              {message}
             </div>
           )}
 
+          {uncategorized > 0 && (
+            <div style={{padding: '12px', background: '#fef3c7', color: '#92400e', borderRadius: '8px', marginBottom: '20px'}}>
+              ⚠️ {uncategorized} transactions need categorization
+            </div>
+          )}
+
+          <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '30px'}}>
+            <div className="card">
+              <div style={{fontSize: '14px', color: '#64748b', marginBottom: '4px'}}>Total</div>
+              <div style={{fontSize: '28px', fontWeight: 'bold'}}>${total.toFixed(2)}</div>
+            </div>
+            <div className="card">
+              <div style={{fontSize: '14px', color: '#64748b', marginBottom: '4px'}}>Categorized</div>
+              <div style={{fontSize: '28px', fontWeight: 'bold'}}>{categorized.length}</div>
+            </div>
+            <div className="card">
+              <div style={{fontSize: '14px', color: '#64748b', marginBottom: '4px'}}>To Review</div>
+              <div style={{fontSize: '28px', fontWeight: 'bold'}}>{uncategorized}</div>
+            </div>
+          </div>
+
           <div className="card">
-            <h2 style={{fontSize: '20px', fontWeight: '600', marginBottom: '16px'}}>All Transactions</h2>
+            <h2 style={{fontSize: '20px', fontWeight: '600', marginBottom: '20px'}}>Transactions</h2>
             <div style={{overflowX: 'auto'}}>
               <table>
                 <thead>
@@ -203,24 +192,37 @@
                     <th>Account</th>
                     <th>Category</th>
                     <th style={{textAlign: 'right'}}>Amount</th>
-                    <th style={{textAlign: 'right'}}>Action</th>
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {expenses.sort((a, b) => a.category === 'Uncategorized' ? -1 : b.category === 'Uncategorized' ? 1 : 0).map((exp) => (
+                  {expenses.sort((a, b) => a.category === 'Uncategorized' ? -1 : 1).map(exp => (
                     <tr key={exp.id}>
                       <td>{exp.date}</td>
                       <td>{exp.description}</td>
                       <td>{exp.account}</td>
                       <td>
-                        <select value={exp.category} onChange={(e) => updateCategory(exp.id, e.target.value)} style={{padding: '4px 12px', borderRadius: '16px', fontSize: '13px', background: exp.category === 'Uncategorized' ? '#fee2e2' : '#dbeafe', color: exp.category === 'Uncategorized' ? '#991b1b' : '#1e40af', border: 'none', cursor: 'pointer'}}>
+                        <select 
+                          value={exp.category} 
+                          onChange={(e) => updateCategory(exp.id, e.target.value)}
+                          style={{
+                            background: exp.category === 'Uncategorized' ? '#fee2e2' : '#dbeafe',
+                            color: exp.category === 'Uncategorized' ? '#991b1b' : '#1e40af',
+                            border: 'none',
+                            padding: '4px 8px',
+                            borderRadius: '12px',
+                            cursor: 'pointer'
+                          }}
+                        >
                           <option value="Uncategorized">Uncategorized</option>
-                          {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                          {categories.map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
                       </td>
                       <td style={{textAlign: 'right', fontWeight: '600'}}>${exp.amount.toFixed(2)}</td>
-                      <td style={{textAlign: 'right'}}>
-                        <button onClick={() => deleteExpense(exp.id)} style={{color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px'}}>🗑️</button>
+                      <td>
+                        <button onClick={() => deleteExpense(exp.id)} style={{background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px'}}>
+                          🗑️
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -229,58 +231,57 @@
             </div>
           </div>
 
-          {showMapping && (
-            <div className={`modal ${showMapping ? 'active' : ''}`}>
-              <div className="modal-content">
-                <h2 style={{fontSize: '24px', fontWeight: 'bold', marginBottom: '16px'}}>Map CSV Columns</h2>
-                <p style={{color: '#64748b', marginBottom: '24px'}}>Match your CSV columns. Date and Amount are required.</p>
-                
-                <div style={{display: 'flex', flexDirection: 'column', gap: '16px'}}>
-                  <div>
-                    <label style={{display: 'block', marginBottom: '8px', fontWeight: '500'}}>Date Column *</label>
-                    <select value={columnMapping.date} onChange={(e) => setColumnMapping({...columnMapping, date: e.target.value})}>
-                      <option value="">Select...</option>
-                      {csvHeaders.map(h => <option key={h} value={h}>{h}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{display: 'block', marginBottom: '8px', fontWeight: '500'}}>Amount Column *</label>
-                    <select value={columnMapping.amount} onChange={(e) => setColumnMapping({...columnMapping, amount: e.target.value})}>
-                      <option value="">Select...</option>
-                      {csvHeaders.map(h => <option key={h} value={h}>{h}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{display: 'block', marginBottom: '8px', fontWeight: '500'}}>Description (Optional)</label>
-                    <select value={columnMapping.description} onChange={(e) => setColumnMapping({...columnMapping, description: e.target.value})}>
-                      <option value="">Select...</option>
-                      {csvHeaders.map(h => <option key={h} value={h}>{h}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{display: 'block', marginBottom: '8px', fontWeight: '500'}}>Account (Optional)</label>
-                    <select value={columnMapping.account} onChange={(e) => setColumnMapping({...columnMapping, account: e.target.value})}>
-                      <option value="">Select...</option>
-                      {csvHeaders.map(h => <option key={h} value={h}>{h}</option>)}
-                    </select>
-                  </div>
-                </div>
+          <div className={`modal ${showModal ? 'show' : ''}`}>
+            <div className="modal-box">
+              <h2 style={{fontSize: '22px', fontWeight: 'bold', marginBottom: '16px'}}>Map CSV Columns</h2>
+              <p style={{color: '#64748b', marginBottom: '20px'}}>Match columns (Date & Amount required)</p>
+              
+              <div style={{marginBottom: '16px'}}>
+                <label style={{display: 'block', marginBottom: '6px', fontWeight: '500'}}>Date *</label>
+                <select value={mapping.date} onChange={(e) => setMapping({...mapping, date: e.target.value})} style={{width: '100%'}}>
+                  <option value="">Select...</option>
+                  {csvHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                </select>
+              </div>
 
-                <div style={{display: 'flex', gap: '12px', marginTop: '24px'}}>
-                  <button onClick={processCSVImport} className="btn btn-primary" style={{flex: 1}}>
-                    Import {csvData.length} Transactions
-                  </button>
-                  <button onClick={() => setShowMapping(false)} style={{padding: '10px 16px', background: '#e5e7eb', borderRadius: '8px', border: 'none', cursor: 'pointer'}}>Cancel</button>
-                </div>
+              <div style={{marginBottom: '16px'}}>
+                <label style={{display: 'block', marginBottom: '6px', fontWeight: '500'}}>Amount *</label>
+                <select value={mapping.amount} onChange={(e) => setMapping({...mapping, amount: e.target.value})} style={{width: '100%'}}>
+                  <option value="">Select...</option>
+                  {csvHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                </select>
+              </div>
+
+              <div style={{marginBottom: '16px'}}>
+                <label style={{display: 'block', marginBottom: '6px', fontWeight: '500'}}>Description</label>
+                <select value={mapping.description} onChange={(e) => setMapping({...mapping, description: e.target.value})} style={{width: '100%'}}>
+                  <option value="">Select...</option>
+                  {csvHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                </select>
+              </div>
+
+              <div style={{marginBottom: '20px'}}>
+                <label style={{display: 'block', marginBottom: '6px', fontWeight: '500'}}>Account</label>
+                <select value={mapping.account} onChange={(e) => setMapping({...mapping, account: e.target.value})} style={{width: '100%'}}>
+                  <option value="">Select...</option>
+                  {csvHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                </select>
+              </div>
+
+              <div style={{display: 'flex', gap: '10px'}}>
+                <button onClick={processImport} className="btn btn-blue" style={{flex: 1}}>
+                  Import {csvData.length} Transactions
+                </button>
+                <button onClick={() => setShowModal(false)} className="btn btn-gray">Cancel</button>
               </div>
             </div>
-          )}
+          </div>
         </div>
       );
-    };
+    }
 
     const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(<ExpenseTracker />);
+    root.render(<App />);
   </script>
 </body>
 </html>
