@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import ReactDOM from 'react-dom/client';
 import { 
-  TrendingUp, Download, Upload, 
-  Trash2, AlertCircle, Calendar, Info, LayoutDashboard, ListFilter,
-  ArrowRight
+  TrendingUp, Upload, AlertCircle, Calendar, Info, 
+  LayoutDashboard, ListFilter, ArrowRight
 } from 'lucide-react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, 
@@ -225,7 +224,6 @@ const TransactionBoxPlot = ({ expenses, years }: { expenses: Expense[], years: n
   );
 };
 
-// --- MAIN APP ---
 const App: React.FC = () => {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [tab, setTab] = useState<'dash' | 'list'>('dash');
