@@ -30,6 +30,11 @@
     .error-banner p { margin: 0; font-size: 14px; }
     .error-banner button { margin-top: 12px; }
     .warning-row { background: #fef3c7; }
+    .input-group { margin-bottom: 16px; }
+    .input-group label { display: block; margin-bottom: 6px; font-weight: 500; }
+    .input-group input, .input-group select { width: 100%; box-sizing: border-box; }
+    .radio-group { display: flex; gap: 16px; margin-bottom: 8px; }
+    .radio-group label { display: flex; align-items: center; gap: 6px; font-weight: normal; cursor: pointer; }
   </style>
 </head>
 <body>
@@ -180,6 +185,8 @@
       const [csvHeaders, setCsvHeaders] = useState([]);
       const [csvData, setCsvData] = useState([]);
       const [mapping, setMapping] = useState({ date: '', amount: '', description: '', account: '' });
+      const [accountMode, setAccountMode] = useState('manual'); // 'manual' or 'column'
+      const [manualAccountName, setManualAccountName] = useState('');
       const [message, setMessage] = useState('');
 
       // Load on mount
@@ -236,6 +243,10 @@
             
             setCsvHeaders(headers);
             setCsvData(data);
+            // Reset modal state
+            setMapping({ date: '', amount: '', description: '', account: '' });
+            setAccountMode('manual');
+            setManualAccountName('');
             setShowModal(true);
           } catch (err) {
             setImportErrors([`Error parsing CSV: ${err.message}`]);
@@ -249,6 +260,12 @@
         if (!mapping.date || !mapping.amount) {
           alert('Please select Date and Amount columns');
           return;
+        }
+
+        // Determine account name
+        let accountName = 'Imported';
+        if (accountMode === 'manual' && manualAccountName.trim()) {
+          accountName = manualAccountName.trim();
         }
 
         const errors = [];
@@ -268,13 +285,18 @@
               skippedCount++;
               return null;
             }
+
+            // Use column value if that mode is selected, otherwise use manual name
+            const finalAccount = accountMode === 'column' && mapping.account 
+              ? (row[mapping.account] || accountName)
+              : accountName;
             
             return {
               id: Date.now() + i,
               date,
               amount,
               category: 'Uncategorized',
-              account: mapping.account ? row[mapping.account] : 'Imported',
+              account: finalAccount,
               description: mapping.description ? row[mapping.description] : '',
               hasError: false,
               errorMsg: null
@@ -301,6 +323,7 @@
         setCsvHeaders([]);
         setCsvData([]);
         setMapping({ date: '', amount: '', description: '', account: '' });
+        setManualAccountName('');
       }
 
       function updateCategory(id, cat) {
@@ -508,39 +531,69 @@
               <h2 style={{fontSize: '22px', fontWeight: 'bold', marginBottom: '16px'}}>Map CSV Columns</h2>
               <p style={{color: '#64748b', marginBottom: '20px'}}>Match columns (Date & Amount required)</p>
               
-              <div style={{marginBottom: '16px'}}>
-                <label style={{display: 'block', marginBottom: '6px', fontWeight: '500'}}>Date *</label>
-                <select value={mapping.date} onChange={(e) => setMapping({...mapping, date: e.target.value})} style={{width: '100%'}}>
+              <div className="input-group">
+                <label>Date *</label>
+                <select value={mapping.date} onChange={(e) => setMapping({...mapping, date: e.target.value})}>
                   <option value="">Select...</option>
                   {csvHeaders.map(h => <option key={h} value={h}>{h}</option>)}
                 </select>
               </div>
 
-              <div style={{marginBottom: '16px'}}>
-                <label style={{display: 'block', marginBottom: '6px', fontWeight: '500'}}>Amount *</label>
-                <select value={mapping.amount} onChange={(e) => setMapping({...mapping, amount: e.target.value})} style={{width: '100%'}}>
+              <div className="input-group">
+                <label>Amount *</label>
+                <select value={mapping.amount} onChange={(e) => setMapping({...mapping, amount: e.target.value})}>
                   <option value="">Select...</option>
                   {csvHeaders.map(h => <option key={h} value={h}>{h}</option>)}
                 </select>
               </div>
 
-              <div style={{marginBottom: '16px'}}>
-                <label style={{display: 'block', marginBottom: '6px', fontWeight: '500'}}>Description</label>
-                <select value={mapping.description} onChange={(e) => setMapping({...mapping, description: e.target.value})} style={{width: '100%'}}>
+              <div className="input-group">
+                <label>Description</label>
+                <select value={mapping.description} onChange={(e) => setMapping({...mapping, description: e.target.value})}>
                   <option value="">Select...</option>
                   {csvHeaders.map(h => <option key={h} value={h}>{h}</option>)}
                 </select>
               </div>
 
-              <div style={{marginBottom: '20px'}}>
-                <label style={{display: 'block', marginBottom: '6px', fontWeight: '500'}}>Account</label>
-                <select value={mapping.account} onChange={(e) => setMapping({...mapping, account: e.target.value})} style={{width: '100%'}}>
-                  <option value="">Select...</option>
-                  {csvHeaders.map(h => <option key={h} value={h}>{h}</option>)}
-                </select>
+              <div className="input-group">
+                <label>Account</label>
+                <div className="radio-group">
+                  <label>
+                    <input 
+                      type="radio" 
+                      name="accountMode" 
+                      checked={accountMode === 'manual'} 
+                      onChange={() => setAccountMode('manual')}
+                    />
+                    Enter name
+                  </label>
+                  <label>
+                    <input 
+                      type="radio" 
+                      name="accountMode" 
+                      checked={accountMode === 'column'} 
+                      onChange={() => setAccountMode('column')}
+                    />
+                    From CSV column
+                  </label>
+                </div>
+                
+                {accountMode === 'manual' ? (
+                  <input 
+                    type="text" 
+                    placeholder="e.g., Chase Checking, Amex Gold..." 
+                    value={manualAccountName}
+                    onChange={(e) => setManualAccountName(e.target.value)}
+                  />
+                ) : (
+                  <select value={mapping.account} onChange={(e) => setMapping({...mapping, account: e.target.value})}>
+                    <option value="">Select...</option>
+                    {csvHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                  </select>
+                )}
               </div>
 
-              <div style={{display: 'flex', gap: '10px'}}>
+              <div style={{display: 'flex', gap: '10px', marginTop: '20px'}}>
                 <button onClick={processImport} className="btn btn-blue" style={{flex: 1}}>
                   Import {csvData.length} Transactions
                 </button>
