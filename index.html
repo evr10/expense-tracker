@@ -210,17 +210,17 @@ const BoxPlot = ({ expenses }) => {
     </div><div className="text-[10px] text-slate-400 text-center pt-2 border-t border-slate-100">Box=Q1-Q3 | Line=Median</div></div>);
 };
 
-// Pareto Chart
+// Pareto Chart (2025 only)
 const Pareto = ({ expenses }) => {
     const data = useMemo(() => {
-        const sp = expenses.filter(e => e.category !== 'Income' && e.category !== 'Transfer');
+        const sp = expenses.filter(e => e.category !== 'Income' && e.category !== 'Transfer' && getY(e.date) === 2025);
         const bc = {}; sp.forEach(e => bc[e.category] = (bc[e.category]||0) + safe(e.amount));
         const sorted = Object.entries(bc).map(([n,v]) => ({name:n,value:v})).sort((a,b) => b.value - a.value);
         const tot = sorted.reduce((s,i) => s + i.value, 0);
         let cum = 0;
         return sorted.map(i => { cum += i.value; return {...i, cumPct: tot>0 ? cum/tot*100 : 0}; });
     }, [expenses]);
-    if (!data.length) return <Empty msg="Import data" />;
+    if (!data.length) return <Empty msg="No 2025 data" />;
     const mx = Math.max(...data.map(d => d.value));
     return (<div className="h-full flex flex-col"><div className="flex-1 flex flex-col justify-end gap-1 pb-2">
         {data.slice(0,8).map(i => <div key={i.name} className="flex items-center gap-2">
@@ -234,16 +234,16 @@ const Pareto = ({ expenses }) => {
     </div><div className="text-[10px] text-slate-400 text-center pt-2 border-t border-slate-100">🔴 Red = cumulative %</div></div>);
 };
 
-// Scatter Plot
+// Scatter Plot (2025 only)
 const Scatter = ({ expenses }) => {
     const { pts, minD, maxD, maxA } = useMemo(() => {
-        const sp = expenses.filter(e => e.category !== 'Income' && e.category !== 'Transfer');
+        const sp = expenses.filter(e => e.category !== 'Income' && e.category !== 'Transfer' && getY(e.date) === 2025);
         if (!sp.length) return { pts:[], minD:0, maxD:1, maxA:100 };
         const pts = sp.map(e => ({ d:pDate(e.date).getTime(), a:safe(e.amount), desc:e.description }));
         const ds = pts.map(p => p.d), as = pts.map(p => p.a);
         return { pts, minD:Math.min(...ds), maxD:Math.max(...ds), maxA:Math.max(...as) };
     }, [expenses]);
-    if (!pts.length) return <Empty msg="Import data" />;
+    if (!pts.length) return <Empty msg="No 2025 data" />;
     const range = maxD - minD || 1;
     const small = pts.filter(p => p.a < 20).length;
     const pct = (small/pts.length*100).toFixed(0);
@@ -253,16 +253,16 @@ const Scatter = ({ expenses }) => {
     </div><div className="text-[10px] text-slate-400 text-center pt-2 border-t border-slate-100 mt-2">🔴 {pct}% under $20</div></div>);
 };
 
-// Stats
+// Stats (2025 only)
 const Stats = ({ expenses }) => {
     const { tot, cnt, avg } = useMemo(() => {
-        const sp = expenses.filter(e => e.category !== 'Income' && e.category !== 'Transfer');
+        const sp = expenses.filter(e => e.category !== 'Income' && e.category !== 'Transfer' && getY(e.date) === 2025);
         const tot = sp.reduce((s,e) => s + safe(e.amount), 0);
         return { tot, cnt: sp.length, avg: sp.length ? tot/sp.length : 0 };
     }, [expenses]);
     return (<div className="grid grid-cols-3 gap-4">
-        <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-[10px] font-bold text-slate-400 uppercase">Total Spent</h3><p className="text-2xl font-black text-slate-900 mt-1">${tot.toLocaleString(undefined,{maximumFractionDigits:0})}</p></div>
-        <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-[10px] font-bold text-slate-400 uppercase">Transactions</h3><p className="text-2xl font-black text-slate-900 mt-1">{cnt}</p></div>
+        <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-[10px] font-bold text-slate-400 uppercase">Total Spent (2025)</h3><p className="text-2xl font-black text-slate-900 mt-1">${tot.toLocaleString(undefined,{maximumFractionDigits:0})}</p></div>
+        <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-[10px] font-bold text-slate-400 uppercase">Transactions (2025)</h3><p className="text-2xl font-black text-slate-900 mt-1">{cnt}</p></div>
         <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-[10px] font-bold text-slate-400 uppercase">Avg Transaction</h3><p className="text-2xl font-black text-slate-900 mt-1">${avg.toFixed(0)}</p></div>
     </div>);
 };
@@ -344,8 +344,8 @@ const App = () => {
             {msg && <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-green-700 font-medium text-sm">{msg}</div>}
 
             {tab === 'dashboard' && (<><Stats expenses={expenses}/><div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">📊 Where Does It All Go?</h3><div className="h-56"><Pareto expenses={expenses}/></div></div>
-                <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">💸 Death by 1000 Cuts</h3><div className="h-56"><Scatter expenses={expenses}/></div></div>
+                <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">📊 Where Does It All Go? (2025)</h3><div className="h-56"><Pareto expenses={expenses}/></div></div>
+                <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">💸 Death by 1000 Cuts (2025)</h3><div className="h-56"><Scatter expenses={expenses}/></div></div>
             </div></>)}
 
             {tab === 'evolution' && (<>
