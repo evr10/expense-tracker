@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Expense Tracker</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; background: linear-gradient(to bottom right, #f8fafc, #dbeafe); min-height: 100vh; margin: 0; padding: 20px; }
+    .container { max-width: 1200px; margin: 0 auto; }
+    .btn { padding: 10px 16px; border-radius: 8px; border: none; cursor: pointer; font-size: 14px; font-weight: 500; }
+    .btn-blue { background: #3b82f6; color: white; }
+    .btn-purple { background: #8b5cf6; color: white; }
+    .btn-green { background: #10b981; color: white; }
+    .btn-gray { background: #e5e7eb; color: #1f2937; }
+    .btn-red { background: #ef4444; color: white; }
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .card { background: white; border-radius: 12px; padding: 24px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    input[type="file"] { display: none; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 12px; text-align: left; border-bottom: 1px solid #f1f5f9; }
+    th { font-weight: 500; color: #64748b; }
+    select, input { padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; }
+    .modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; z-index: 100; }
+    .modal.show { display: flex; }
+    .modal-box { background: white; padding: 30px; border-radius: 12px; max-width: 500px; width: 90%; max-height: 90vh; overflow-y: auto; }
+    .error-banner { padding: 16px; background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; border-radius: 8px; margin-bottom: 20px; }
+    .error-banner h3 { margin: 0 0 8px 0; font-size: 16px; }
+    .error-banner p { margin: 0; font-size: 14px; }
+    .error-banner button { margin-top: 12px; }
+    .warning-row { background: #fef3c7; }
+    .input-group { margin-bottom: 16px; }
+    .input-group label { display: block; margin-bottom: 6px; font-weight: 500; }
+    .input-group input, .input-group select { width: 100%; box-sizing: border-box; }
+    .radio-group { display: flex; gap: 16px; margin-bottom: 8px; }
+    .radio-group label { display: flex; align-items: center; gap: 6px; font-weight: normal; cursor: pointer; }
+    .auto-badge { display: inline-block; background: #dbeafe; color: #1e40af; font-size: 10px; padding: 2px 6px; border-radius: 4px; margin-left: 6px; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  
+  <script type="text/babel">
+    const { useState, useEffect, Component } = React;
+
+    const CATEGORIES = ['Groceries', 'Rent', 'Utilities', 'Transportation', 'Entertainment', 'Healthcare', 'Shopping', 'Dining', 'Travel', 'Subscriptions', 'Income', 'Transfer', 'Other'];
+
+    // Rule-based categorization keywords
+    const CATEGORY_RULES = {
+      'Groceries': [
+        'walmart', 'kroger', 'safeway', 'trader joe', 'whole foods', 'aldi', 'costco', 
+        'target', 'publix', 'h-e-b', 'heb', 'wegmans', 'food lion', 'giant', 'stop & shop',
+        'shoprite', 'meijer', 'winco', 'sprouts', 'grocery', 'supermarket', 'market basket',
+        'food mart', 'piggly wiggly', 'albertsons', 'vons', 'ralphs', 'fry\'s', 'smith\'s',
+        'harris teeter', 'bi-lo', 'winn-dixie', 'save-a-lot', 'food 4 less', 'grocery outlet'
+      ],
+      'Dining': [
+        'mcdonald', 'starbucks', 'chipotle', 'subway', 'burger king', 'wendy', 'taco bell',
+        'chick-fil-a', 'dunkin', 'panera', 'domino', 'pizza hut', 'papa john', 'kfc',
+        'popeyes', 'sonic', 'arby', 'five guys', 'in-n-out', 'shake shack', 'chili\'s',
+        'applebee', 'olive garden', 'red lobster', 'outback', 'cheesecake factory',
+        'ihop', 'denny', 'waffle house', 'buffalo wild', 'wingstop', 'panda express',
+        'restaurant', 'cafe', 'coffee', 'diner', 'grill', 'kitchen', 'bistro', 'eatery',
+        'doordash', 'uber eats', 'ubereats', 'grubhub', 'postmates', 'seamless', 'caviar'
+      ],
+      'Transportation': [
+        'uber', 'lyft', 'taxi', 'shell', 'exxon', 'mobil', 'chevron', 'bp ', 'gas',
+        'citgo', 'sunoco', 'marathon', 'speedway', 'wawa', 'sheetz', 'quiktrip', 'racetrac',
+        'phillips 66', 'valero', 'arco', 'ampm', '76 ', 'fuel', 'petro', 'parking',
+        'metro', 'transit', 'subway', 'bus', 'train', 'amtrak', 'greyhound', 'toll',
+        'ez pass', 'fastrak', 'car wash', 'jiffy lube', 'autozone', 'o\'reilly', 'advance auto',
+        'napa ', 'pep boys', 'firestone', 'goodyear', 'discount tire', 'tire', 'mechanic'
+      ],
+      'Shopping': [
+        'amazon', 'ebay', 'etsy', 'best buy', 'apple store', 'apple.com', 'microsoft',
+        'home depot', 'lowe\'s', 'lowes', 'ikea', 'bed bath', 'pottery barn', 'crate & barrel',
+        'williams sonoma', 'pier 1', 'wayfair', 'overstock', 'nordstrom', 'macy\'s', 'macys',
+        'jcpenney', 'kohl\'s', 'kohls', 'ross', 'tj maxx', 'tjmaxx', 'marshalls', 'burlington',
+        'old navy', 'gap', 'banana republic', 'h&m', 'zara', 'forever 21', 'urban outfitters',
+        'nike', 'adidas', 'foot locker', 'dick\'s sporting', 'rei ', 'academy sports',
+        'sephora', 'ulta', 'bath & body', 'victoria\'s secret', 'lululemon', 'athleta',
+        'office depot', 'staples', 'michaels', 'joann', 'hobby lobby', 'gamestop', 'mall'
+      ],
+      'Entertainment': [
+        'netflix', 'hulu', 'disney+', 'disney plus', 'hbo', 'max.com', 'paramount',
+        'peacock', 'apple tv', 'amazon prime', 'prime video', 'youtube', 'twitch',
+        'spotify', 'apple music', 'pandora', 'soundcloud', 'tidal', 'audible',
+        'amc theatre', 'regal', 'cinemark', 'movie', 'cinema', 'theater', 'theatre',
+        'xbox', 'playstation', 'nintendo', 'steam', 'epic games', 'ea.com',
+        'ticketmaster', 'stubhub', 'livenation', 'concert', 'event', 'show',
+        'bowling', 'arcade', 'dave & buster', 'topgolf', 'golf', 'gym', 'fitness',
+        'planet fitness', 'la fitness', 'equinox', 'orangetheory', 'crossfit', 'yoga'
+      ],
+      'Utilities': [
+        'electric', 'power', 'energy', 'gas bill', 'water bill', 'sewage', 'trash',
+        'waste management', 'comcast', 'xfinity', 'spectrum', 'at&t', 'att', 'verizon',
+        't-mobile', 'tmobile', 'sprint', 'cricket', 'metro pcs', 'boost mobile',
+        'internet', 'cable', 'phone bill', 'wireless', 'utility', 'utilities'
+      ],
+      'Healthcare': [
+        'pharmacy', 'cvs', 'walgreens', 'rite aid', 'duane reade', 'drugstore',
+        'doctor', 'hospital', 'clinic', 'medical', 'dental', 'dentist', 'optometrist',
+        'vision', 'eyecare', 'urgent care', 'health', 'healthcare', 'insurance',
+        'prescription', 'rx ', 'labcorp', 'quest diagnostics', 'therapy', 'therapist',
+        'counseling', 'mental health', 'psychiatr', 'psycholog', 'chiropract', 'physical therapy'
+      ],
+      'Travel': [
+        'airline', 'delta', 'united', 'american airlines', 'southwest', 'jetblue',
+        'spirit', 'frontier', 'alaska air', 'hawaiian', 'flight', 'airbnb', 'vrbo',
+        'hotel', 'marriott', 'hilton', 'hyatt', 'ihg', 'wyndham', 'best western',
+        'holiday inn', 'hampton', 'sheraton', 'westin', 'motel', 'resort', 'inn',
+        'expedia', 'booking.com', 'hotels.com', 'kayak', 'priceline', 'travelocity',
+        'hertz', 'enterprise', 'avis', 'budget', 'national', 'car rental', 'rental car',
+        'cruise', 'carnival', 'royal caribbean', 'norwegian'
+      ],
+      'Subscriptions': [
+        'subscription', 'membership', 'monthly', 'annual', 'renewal',
+        'adobe', 'microsoft 365', 'office 365', 'dropbox', 'google storage', 'icloud',
+        'linkedin', 'premium', 'pro plan', 'plus plan', 'patreon', 'substack',
+        'newspaper', 'magazine', 'nytimes', 'wsj', 'washington post', 'medium',
+        'gym membership', 'amazon prime', 'costco member', 'sam\'s club'
+      ],
+      'Rent': [
+        'rent', 'lease', 'apartment', 'landlord', 'property management', 'housing',
+        'mortgage', 'hoa', 'homeowner'
+      ],
+      'Income': [
+        'payroll', 'salary', 'direct deposit', 'paycheck', 'wages', 'income',
+        'dividend', 'interest', 'refund', 'reimbursement', 'cashback', 'cash back',
+        'deposit', 'credit', 'payment received', 'venmo', 'zelle', 'transfer from'
+      ],
+      'Transfer': [
+        'transfer', 'ach', 'wire', 'zelle', 'venmo', 'paypal', 'cash app', 'cashapp',
+        'bank transfer', 'internal transfer', 'external transfer', 'withdrawal', 'atm'
+      ]
+    };
+
+    // Auto-categorize based on description
+    function autoCategorize(description) {
+      if (!description) return { category: 'Uncategorized', auto: false };
+      
+      const desc = description.toLowerCase();
+      
+      for (const [category, keywords] of Object.entries(CATEGORY_RULES)) {
+        for (const keyword of keywords) {
+          if (desc.includes(keyword.toLowerCase())) {
+            return { category, auto: true };
+          }
+        }
+      }
+      
+      return { category: 'Uncategorized', auto: false };
+    }
+
+    // Error Boundary to catch rendering errors
+    class ErrorBoundary extends Component {
+      constructor(props) {
+        super(props);
+        this.state = { hasError: false, error: null };
+      }
+
+      static getDerivedStateFromError(error) {
+        return { hasError: true, error };
+      }
+
+      componentDidCatch(error, errorInfo) {
+        console.error('App Error:', error, errorInfo);
+      }
+
+      render() {
+        if (this.state.hasError) {
+          return (
+            <div className="container">
+              <div className="error-banner">
+                <h3>⚠️ Something went wrong</h3>
+                <p>The app encountered an error. This might be due to corrupted data.</p>
+                <p style={{marginTop: '8px', fontSize: '12px', fontFamily: 'monospace', color: '#666'}}>
+                  {this.state.error?.message}
+                </p>
+                <button 
+                  className="btn btn-red" 
+                  onClick={() => {
+                    localStorage.removeItem('expenses');
+                    window.location.reload();
+                  }}
+                >
+                  Clear Data & Reload
+                </button>
+                <button 
+                  className="btn btn-gray" 
+                  style={{marginLeft: '10px'}}
+                  onClick={() => window.location.reload()}
+                >
+                  Try Again
+                </button>
+              </div>
+            </div>
+          );
+        }
+
+        return this.props.children;
+      }
+    }
+
+    // Safe number formatting
+    function safeAmount(value) {
+      if (value === null || value === undefined || isNaN(value)) {
+        return 0;
+      }
+      return Number(value);
+    }
+
+    function formatAmount(value) {
+      const num = safeAmount(value);
+      return '$' + num.toFixed(2);
+    }
+
+    // Validate and clean expense object
+    function validateExpense(exp, index) {
+      const errors = [];
+      
+      if (!exp || typeof exp !== 'object') {
+        return { valid: false, expense: null, errors: ['Invalid expense data'] };
+      }
+
+      const cleaned = {
+        id: exp.id || Date.now() + index,
+        date: exp.date || 'Unknown',
+        amount: safeAmount(exp.amount),
+        category: exp.category || 'Uncategorized',
+        account: exp.account || 'Unknown',
+        description: exp.description || '',
+        autoCategorized: exp.autoCategorized || false,
+        hasError: false,
+        errorMsg: null
+      };
+
+      if (exp.amount === null || exp.amount === undefined || isNaN(exp.amount)) {
+        errors.push('Invalid amount');
+        cleaned.hasError = true;
+      }
+
+      if (cleaned.amount === 0 && exp.amount !== 0) {
+        errors.push('Amount could not be parsed');
+        cleaned.hasError = true;
+      }
+
+      if (errors.length > 0) {
+        cleaned.errorMsg = errors.join(', ');
+      }
+
+      return { valid: true, expense: cleaned, errors };
+    }
+
+    // Load expenses safely from localStorage
+    function loadExpenses() {
+      try {
+        const saved = localStorage.getItem('expenses');
+        if (!saved) return { expenses: [], errors: [] };
+
+        const parsed = JSON.parse(saved);
+        if (!Array.isArray(parsed)) {
+          return { 
+            expenses: [], 
+            errors: ['Stored data is not an array. Data has been reset.'] 
+          };
+        }
+
+        const results = parsed.map((exp, i) => validateExpense(exp, i));
+        const validExpenses = results
+          .filter(r => r.valid && r.expense)
+          .map(r => r.expense);
+        
+        const errorCount = results.filter(r => r.expense?.hasError).length;
+        const errors = errorCount > 0 
+          ? [`${errorCount} expense(s) had issues and were loaded with default values`]
+          : [];
+
+        return { expenses: validExpenses, errors };
+      } catch (e) {
+        console.error('Error loading from localStorage:', e);
+        return { 
+          expenses: [], 
+          errors: [`Failed to load saved data: ${e.message}`] 
+        };
+      }
+    }
+    
+    function App() {
+      const [expenses, setExpenses] = useState([]);
+      const [loadErrors, setLoadErrors] = useState([]);
+      const [importErrors, setImportErrors] = useState([]);
+      const [showModal, setShowModal] = useState(false);
+      const [csvHeaders, setCsvHeaders] = useState([]);
+      const [csvData, setCsvData] = useState([]);
+      const [mapping, setMapping] = useState({ date: '', amount: '', description: '', account: '', category: '' });
+      const [accountMode, setAccountMode] = useState('manual');
+      const [manualAccountName, setManualAccountName] = useState('');
+      const [categoryMode, setCategoryMode] = useState('auto'); // 'auto', 'column', or 'none'
+      const [message, setMessage] = useState('');
+
+      // Load on mount
+      useEffect(() => {
+        const { expenses: loaded, errors } = loadExpenses();
+        setExpenses(loaded);
+        setLoadErrors(errors);
+      }, []);
+
+      // Save whenever expenses change
+      useEffect(() => {
+        try {
+          localStorage.setItem('expenses', JSON.stringify(expenses));
+        } catch (e) {
+          console.error('Error saving to localStorage:', e);
+        }
+      }, [expenses]);
+
+      function handleFileUpload(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        setImportErrors([]);
+        
+        const reader = new FileReader();
+        reader.onerror = () => {
+          setImportErrors([`Failed to read file: ${file.name}`]);
+        };
+        reader.onload = (event) => {
+          try {
+            const text = event.target.result;
+            const lines = text.split('\n').filter(l => l.trim());
+            
+            if (lines.length === 0) {
+              setImportErrors(['File is empty']);
+              return;
+            }
+            
+            const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+            
+            if (headers.length === 0) {
+              setImportErrors(['Could not parse CSV headers']);
+              return;
+            }
+            
+            const data = lines.slice(1).map(line => {
+              const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
+              const row = {};
+              headers.forEach((h, i) => row[h] = values[i] || '');
+              return row;
+            });
+            
+            setCsvHeaders(headers);
+            setCsvData(data);
+            setMapping({ date: '', amount: '', description: '', account: '', category: '' });
+            setAccountMode('manual');
+            setCategoryMode('auto');
+            setManualAccountName('');
+            setShowModal(true);
+          } catch (err) {
+            setImportErrors([`Error parsing CSV: ${err.message}`]);
+          }
+        };
+        reader.readAsText(file);
+        e.target.value = '';
+      }
+
+      function processImport() {
+        if (!mapping.date || !mapping.amount) {
+          alert('Please select Date and Amount columns');
+          return;
+        }
+
+        // Determine account name
+        let accountName = 'Imported';
+        if (accountMode === 'manual' && manualAccountName.trim()) {
+          accountName = manualAccountName.trim();
+        }
+
+        const errors = [];
+        let skippedCount = 0;
+        let autoCategorizedCount = 0;
+
+        const newExpenses = csvData.map((row, i) => {
+          try {
+            const dateStr = row[mapping.date];
+            const dateObj = new Date(dateStr);
+            const date = !isNaN(dateObj.getTime()) ? dateObj.toISOString().slice(0, 7) : new Date().toISOString().slice(0, 7);
+            
+            const rawAmountStr = String(row[mapping.amount] || '0').replace(/[$,]/g, '');
+            const rawAmount = parseFloat(rawAmountStr);
+            const amount = isNaN(rawAmount) ? 0 : Math.abs(rawAmount);
+            
+            if (amount === 0) {
+              skippedCount++;
+              return null;
+            }
+
+            const finalAccount = accountMode === 'column' && mapping.account 
+              ? (row[mapping.account] || accountName)
+              : accountName;
+
+            const description = mapping.description ? row[mapping.description] : '';
+
+            // Determine category
+            let category = 'Uncategorized';
+            let autoCategorized = false;
+
+            // First, check CSV column if selected
+            if (categoryMode === 'column' && mapping.category) {
+              const csvCategory = row[mapping.category]?.trim();
+              if (csvCategory) {
+                // Try to match to our categories
+                const match = CATEGORIES.find(c => 
+                  c.toLowerCase() === csvCategory.toLowerCase() ||
+                  csvCategory.toLowerCase().includes(c.toLowerCase()) ||
+                  c.toLowerCase().includes(csvCategory.toLowerCase())
+                );
+                if (match) {
+                  category = match;
+                }
+              }
+            }
+
+            // If still uncategorized and auto-categorization is enabled, try rules
+            if (category === 'Uncategorized' && (categoryMode === 'auto' || categoryMode === 'column')) {
+              const result = autoCategorize(description);
+              if (result.auto) {
+                category = result.category;
+                autoCategorized = true;
+                autoCategorizedCount++;
+              }
+            }
+            
+            return {
+              id: Date.now() + i,
+              date,
+              amount,
+              category,
+              account: finalAccount,
+              description,
+              autoCategorized,
+              hasError: false,
+              errorMsg: null
+            };
+          } catch (err) {
+            errors.push(`Row ${i + 1}: ${err.message}`);
+            return null;
+          }
+        }).filter(e => e !== null);
+
+        if (skippedCount > 0) {
+          errors.push(`${skippedCount} row(s) skipped due to zero or invalid amounts`);
+        }
+
+        setExpenses([...expenses, ...newExpenses]);
+        
+        if (errors.length > 0) {
+          setImportErrors(errors);
+        }
+
+        let msg = `Imported ${newExpenses.length} transactions`;
+        if (autoCategorizedCount > 0) {
+          msg += ` (${autoCategorizedCount} auto-categorized)`;
+        }
+        
+        setMessage(msg);
+        setTimeout(() => setMessage(''), 4000);
+        setShowModal(false);
+        setCsvHeaders([]);
+        setCsvData([]);
+        setMapping({ date: '', amount: '', description: '', account: '', category: '' });
+        setManualAccountName('');
+      }
+
+      function recategorizeUncategorized() {
+        let count = 0;
+        const updated = expenses.map(exp => {
+          if (exp.category === 'Uncategorized') {
+            const result = autoCategorize(exp.description);
+            if (result.auto) {
+              count++;
+              return { ...exp, category: result.category, autoCategorized: true };
+            }
+          }
+          return exp;
+        });
+        
+        setExpenses(updated);
+        setMessage(`Auto-categorized ${count} transactions`);
+        setTimeout(() => setMessage(''), 3000);
+      }
+
+      function updateCategory(id, cat) {
+        setExpenses(expenses.map(e => e.id === id ? {...e, category: cat, autoCategorized: false} : e));
+      }
+
+      function deleteExpense(id) {
+        setExpenses(expenses.filter(e => e.id !== id));
+      }
+
+      function removeErrorExpenses() {
+        setExpenses(expenses.filter(e => !e.hasError));
+      }
+
+      function clearAllData() {
+        if (confirm('Are you sure you want to delete all expenses? This cannot be undone.')) {
+          setExpenses([]);
+          setLoadErrors([]);
+          setImportErrors([]);
+          localStorage.removeItem('expenses');
+        }
+      }
+
+      function dismissErrors(type) {
+        if (type === 'load') setLoadErrors([]);
+        if (type === 'import') setImportErrors([]);
+      }
+
+      function exportCSV() {
+        const csv = ['date,amount,category,account,description', ...expenses.map(e => 
+          `${e.date},${safeAmount(e.amount)},${e.category},${e.account},"${(e.description || '').replace(/"/g, '""')}"`
+        )].join('\n');
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'expenses.csv';
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+
+      const validExpenses = expenses.filter(e => !e.hasError);
+      const errorExpenses = expenses.filter(e => e.hasError);
+      const categorized = validExpenses.filter(e => e.category !== 'Uncategorized');
+      const total = categorized.reduce((sum, e) => sum + safeAmount(e.amount), 0);
+      const uncategorizedCount = validExpenses.length - categorized.length;
+
+      return (
+        <div className="container">
+          <div style={{marginBottom: '30px'}}>
+            <h1 style={{fontSize: '32px', fontWeight: 'bold', marginBottom: '8px'}}>Expense Tracker</h1>
+            <p style={{color: '#64748b'}}>Import bank CSVs and categorize expenses</p>
+          </div>
+
+          {/* Load Errors */}
+          {loadErrors.length > 0 && (
+            <div className="error-banner">
+              <h3>⚠️ Data Loading Issues</h3>
+              {loadErrors.map((err, i) => (
+                <p key={i}>{err}</p>
+              ))}
+              <button className="btn btn-gray" onClick={() => dismissErrors('load')}>
+                Dismiss
+              </button>
+            </div>
+          )}
+
+          {/* Import Errors */}
+          {importErrors.length > 0 && (
+            <div className="error-banner">
+              <h3>⚠️ Import Issues</h3>
+              {importErrors.slice(0, 5).map((err, i) => (
+                <p key={i}>{err}</p>
+              ))}
+              {importErrors.length > 5 && (
+                <p>...and {importErrors.length - 5} more issues</p>
+              )}
+              <button className="btn btn-gray" onClick={() => dismissErrors('import')}>
+                Dismiss
+              </button>
+            </div>
+          )}
+
+          {/* Error Expenses Warning */}
+          {errorExpenses.length > 0 && (
+            <div className="error-banner">
+              <h3>⚠️ {errorExpenses.length} expense(s) have data issues</h3>
+              <p>These rows are highlighted in yellow below. You can fix or remove them.</p>
+              <button className="btn btn-red" onClick={removeErrorExpenses}>
+                Remove All Problem Rows
+              </button>
+            </div>
+          )}
+
+          <div style={{display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap'}}>
+            <label className="btn btn-blue">
+              📤 Import CSV
+              <input type="file" accept=".csv" onChange={handleFileUpload} />
+            </label>
+            <button className="btn btn-purple" onClick={exportCSV}>📥 Export</button>
+            {uncategorizedCount > 0 && (
+              <button className="btn btn-green" onClick={recategorizeUncategorized}>
+                🏷️ Auto-Categorize ({uncategorizedCount})
+              </button>
+            )}
+            <button className="btn btn-red" onClick={clearAllData}>🗑️ Clear All</button>
+          </div>
+
+          {message && (
+            <div style={{padding: '12px', background: '#dbeafe', color: '#1e40af', borderRadius: '8px', marginBottom: '20px'}}>
+              {message}
+            </div>
+          )}
+
+          {uncategorizedCount > 0 && (
+            <div style={{padding: '12px', background: '#fef3c7', color: '#92400e', borderRadius: '8px', marginBottom: '20px'}}>
+              ⚠️ {uncategorizedCount} transactions need categorization
+            </div>
+          )}
+
+          <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '30px'}}>
+            <div className="card">
+              <div style={{fontSize: '14px', color: '#64748b', marginBottom: '4px'}}>Total</div>
+              <div style={{fontSize: '28px', fontWeight: 'bold'}}>{formatAmount(total)}</div>
+            </div>
+            <div className="card">
+              <div style={{fontSize: '14px', color: '#64748b', marginBottom: '4px'}}>Categorized</div>
+              <div style={{fontSize: '28px', fontWeight: 'bold'}}>{categorized.length}</div>
+            </div>
+            <div className="card">
+              <div style={{fontSize: '14px', color: '#64748b', marginBottom: '4px'}}>To Review</div>
+              <div style={{fontSize: '28px', fontWeight: 'bold'}}>{uncategorizedCount}</div>
+            </div>
+          </div>
+
+          <div className="card">
+            <h2 style={{fontSize: '20px', fontWeight: '600', marginBottom: '20px'}}>Transactions</h2>
+            <div style={{overflowX: 'auto'}}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Description</th>
+                    <th>Account</th>
+                    <th>Category</th>
+                    <th style={{textAlign: 'right'}}>Amount</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {expenses.length === 0 ? (
+                    <tr>
+                      <td colSpan="6" style={{textAlign: 'center', color: '#64748b', padding: '40px'}}>
+                        No expenses yet. Import a CSV to get started.
+                      </td>
+                    </tr>
+                  ) : (
+                    [...expenses].sort((a, b) => {
+                      if (a.hasError && !b.hasError) return -1;
+                      if (!a.hasError && b.hasError) return 1;
+                      if (a.category === 'Uncategorized' && b.category !== 'Uncategorized') return -1;
+                      if (a.category !== 'Uncategorized' && b.category === 'Uncategorized') return 1;
+                      return 0;
+                    }).map(exp => (
+                      <tr key={exp.id} className={exp.hasError ? 'warning-row' : ''}>
+                        <td>
+                          {exp.date}
+                          {exp.hasError && (
+                            <div style={{fontSize: '11px', color: '#991b1b'}}>
+                              ⚠️ {exp.errorMsg}
+                            </div>
+                          )}
+                        </td>
+                        <td>{exp.description}</td>
+                        <td>{exp.account}</td>
+                        <td>
+                          <select 
+                            value={exp.category} 
+                            onChange={(e) => updateCategory(exp.id, e.target.value)}
+                            style={{
+                              background: exp.category === 'Uncategorized' ? '#fee2e2' : '#dbeafe',
+                              color: exp.category === 'Uncategorized' ? '#991b1b' : '#1e40af',
+                              border: 'none',
+                              padding: '4px 8px',
+                              borderRadius: '12px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <option value="Uncategorized">Uncategorized</option>
+                            {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                          {exp.autoCategorized && <span className="auto-badge">Auto</span>}
+                        </td>
+                        <td style={{textAlign: 'right', fontWeight: '600'}}>{formatAmount(exp.amount)}</td>
+                        <td>
+                          <button onClick={() => deleteExpense(exp.id)} style={{background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px'}}>
+                            🗑️
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className={`modal ${showModal ? 'show' : ''}`}>
+            <div className="modal-box">
+              <h2 style={{fontSize: '22px', fontWeight: 'bold', marginBottom: '16px'}}>Map CSV Columns</h2>
+              <p style={{color: '#64748b', marginBottom: '20px'}}>Match columns (Date & Amount required)</p>
+              
+              <div className="input-group">
+                <label>Date *</label>
+                <select value={mapping.date} onChange={(e) => setMapping({...mapping, date: e.target.value})}>
+                  <option value="">Select...</option>
+                  {csvHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                </select>
+              </div>
+
+              <div className="input-group">
+                <label>Amount *</label>
+                <select value={mapping.amount} onChange={(e) => setMapping({...mapping, amount: e.target.value})}>
+                  <option value="">Select...</option>
+                  {csvHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                </select>
+              </div>
+
+              <div className="input-group">
+                <label>Description</label>
+                <select value={mapping.description} onChange={(e) => setMapping({...mapping, description: e.target.value})}>
+                  <option value="">Select...</option>
+                  {csvHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                </select>
+              </div>
+
+              <div className="input-group">
+                <label>Account</label>
+                <div className="radio-group">
+                  <label>
+                    <input 
+                      type="radio" 
+                      name="accountMode" 
+                      checked={accountMode === 'manual'} 
+                      onChange={() => setAccountMode('manual')}
+                    />
+                    Enter name
+                  </label>
+                  <label>
+                    <input 
+                      type="radio" 
+                      name="accountMode" 
+                      checked={accountMode === 'column'} 
+                      onChange={() => setAccountMode('column')}
+                    />
+                    From CSV column
+                  </label>
+                </div>
+                
+                {accountMode === 'manual' ? (
+                  <input 
+                    type="text" 
+                    placeholder="e.g., Chase Checking, Amex Gold..." 
+                    value={manualAccountName}
+                    onChange={(e) => setManualAccountName(e.target.value)}
+                  />
+                ) : (
+                  <select value={mapping.account} onChange={(e) => setMapping({...mapping, account: e.target.value})}>
+                    <option value="">Select...</option>
+                    {csvHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                  </select>
+                )}
+              </div>
+
+              <div className="input-group">
+                <label>Category</label>
+                <div className="radio-group">
+                  <label>
+                    <input 
+                      type="radio" 
+                      name="categoryMode" 
+                      checked={categoryMode === 'auto'} 
+                      onChange={() => setCategoryMode('auto')}
+                    />
+                    🏷️ Auto-detect
+                  </label>
+                  <label>
+                    <input 
+                      type="radio" 
+                      name="categoryMode" 
+                      checked={categoryMode === 'column'} 
+                      onChange={() => setCategoryMode('column')}
+                    />
+                    From CSV column
+                  </label>
+                  <label>
+                    <input 
+                      type="radio" 
+                      name="categoryMode" 
+                      checked={categoryMode === 'none'} 
+                      onChange={() => setCategoryMode('none')}
+                    />
+                    Manual
+                  </label>
+                </div>
+                <p style={{fontSize: '12px', color: '#64748b', marginBottom: '8px'}}>
+                  {categoryMode === 'auto' && 'Auto-detects category from transaction description (e.g., "Walmart" → Groceries)'}
+                  {categoryMode === 'column' && 'Uses CSV column, auto-detects for any missing'}
+                  {categoryMode === 'none' && 'All transactions imported as Uncategorized'}
+                </p>
+                
+                {categoryMode === 'column' && (
+                  <select value={mapping.category} onChange={(e) => setMapping({...mapping, category: e.target.value})}>
+                    <option value="">Select...</option>
+                    {csvHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                  </select>
+                )}
+              </div>
+
+              <div style={{display: 'flex', gap: '10px', marginTop: '20px'}}>
+                <button onClick={processImport} className="btn btn-blue" style={{flex: 1}}>
+                  Import {csvData.length} Transactions
+                </button>
+                <button onClick={() => setShowModal(false)} className="btn btn-gray">Cancel</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(
+      <ErrorBoundary>
+        <App />
+      </ErrorBoundary>
+    );
+  </script>
+</body>
+</html>
