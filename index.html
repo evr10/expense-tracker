@@ -1,786 +1,315 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Expense Tracker</title>
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <style>
-    body { font-family: system-ui, sans-serif; background: linear-gradient(to bottom right, #f8fafc, #dbeafe); min-height: 100vh; margin: 0; padding: 20px; }
-    .container { max-width: 1200px; margin: 0 auto; }
-    .btn { padding: 10px 16px; border-radius: 8px; border: none; cursor: pointer; font-size: 14px; font-weight: 500; }
-    .btn-blue { background: #3b82f6; color: white; }
-    .btn-purple { background: #8b5cf6; color: white; }
-    .btn-green { background: #10b981; color: white; }
-    .btn-gray { background: #e5e7eb; color: #1f2937; }
-    .btn-red { background: #ef4444; color: white; }
-    .btn:disabled { opacity: 0.6; cursor: not-allowed; }
-    .card { background: white; border-radius: 12px; padding: 24px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-    input[type="file"] { display: none; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { padding: 12px; text-align: left; border-bottom: 1px solid #f1f5f9; }
-    th { font-weight: 500; color: #64748b; }
-    select, input { padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; }
-    .modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; z-index: 100; }
-    .modal.show { display: flex; }
-    .modal-box { background: white; padding: 30px; border-radius: 12px; max-width: 500px; width: 90%; max-height: 90vh; overflow-y: auto; }
-    .error-banner { padding: 16px; background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; border-radius: 8px; margin-bottom: 20px; }
-    .error-banner h3 { margin: 0 0 8px 0; font-size: 16px; }
-    .error-banner p { margin: 0; font-size: 14px; }
-    .error-banner button { margin-top: 12px; }
-    .warning-row { background: #fef3c7; }
-    .input-group { margin-bottom: 16px; }
-    .input-group label { display: block; margin-bottom: 6px; font-weight: 500; }
-    .input-group input, .input-group select { width: 100%; box-sizing: border-box; }
-    .radio-group { display: flex; gap: 16px; margin-bottom: 8px; }
-    .radio-group label { display: flex; align-items: center; gap: 6px; font-weight: normal; cursor: pointer; }
-    .ai-badge { display: inline-block; background: #ddd6fe; color: #5b21b6; font-size: 10px; padding: 2px 6px; border-radius: 4px; margin-left: 6px; }
-    .loading-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,0.9); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 200; }
-    .spinner { width: 40px; height: 40px; border: 4px solid #e5e7eb; border-top-color: #3b82f6; border-radius: 50%; animation: spin 1s linear infinite; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Expense Tracker Pro</title>
+    <!-- Dependencies -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+    <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@19.0.0",
+    "react-dom": "https://esm.sh/react-dom@19.0.0",
+    "react-dom/client": "https://esm.sh/react-dom@19.0.0/client",
+    "recharts": "https://esm.sh/recharts@2.15.0",
+    "@google/genai": "https://esm.sh/@google/genai@^1.35.0",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/"
+  }
+}
+</script>
 </head>
-<body>
-  <div id="root"></div>
-  
-  <script type="text/babel">
-    const { useState, useEffect, Component } = React;
+<body class="bg-slate-50 text-slate-900">
+    <div id="root"></div>
 
-    const CATEGORIES = ['Groceries', 'Rent', 'Utilities', 'Transportation', 'Entertainment', 'Healthcare', 'Shopping', 'Dining', 'Travel', 'Subscriptions', 'Income', 'Transfer', 'Other'];
+    <script type="text/babel" data-type="module">
+        import React, { useState, useEffect, useMemo } from 'react';
+        import ReactDOM from 'react-dom/client';
+        import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
+        import { GoogleGenAI, Type } from "@google/genai";
 
-    // Error Boundary to catch rendering errors
-    class ErrorBoundary extends Component {
-      constructor(props) {
-        super(props);
-        this.state = { hasError: false, error: null };
-      }
+        // --- CONSTANTS & TYPES ---
+        const CATEGORIES = [
+            'Groceries', 'Rent', 'Utilities', 'Transportation', 'Entertainment', 
+            'Healthcare', 'Shopping', 'Dining', 'Travel', 'Subscriptions', 
+            'Income', 'Transfer', 'Other'
+        ];
 
-      static getDerivedStateFromError(error) {
-        return { hasError: true, error };
-      }
-
-      componentDidCatch(error, errorInfo) {
-        console.error('App Error:', error, errorInfo);
-      }
-
-      render() {
-        if (this.state.hasError) {
-          return (
-            <div className="container">
-              <div className="error-banner">
-                <h3>⚠️ Something went wrong</h3>
-                <p>The app encountered an error. This might be due to corrupted data.</p>
-                <p style={{marginTop: '8px', fontSize: '12px', fontFamily: 'monospace', color: '#666'}}>
-                  {this.state.error?.message}
-                </p>
-                <button 
-                  className="btn btn-red" 
-                  onClick={() => {
-                    localStorage.removeItem('expenses');
-                    window.location.reload();
-                  }}
-                >
-                  Clear Data & Reload
-                </button>
-                <button 
-                  className="btn btn-gray" 
-                  style={{marginLeft: '10px'}}
-                  onClick={() => window.location.reload()}
-                >
-                  Try Again
-                </button>
-              </div>
-            </div>
-          );
-        }
-
-        return this.props.children;
-      }
-    }
-
-    // Safe number formatting
-    function safeAmount(value) {
-      if (value === null || value === undefined || isNaN(value)) {
-        return 0;
-      }
-      return Number(value);
-    }
-
-    function formatAmount(value) {
-      const num = safeAmount(value);
-      return '$' + num.toFixed(2);
-    }
-
-    // Validate and clean expense object
-    function validateExpense(exp, index) {
-      const errors = [];
-      
-      if (!exp || typeof exp !== 'object') {
-        return { valid: false, expense: null, errors: ['Invalid expense data'] };
-      }
-
-      const cleaned = {
-        id: exp.id || Date.now() + index,
-        date: exp.date || 'Unknown',
-        amount: safeAmount(exp.amount),
-        category: exp.category || 'Uncategorized',
-        account: exp.account || 'Unknown',
-        description: exp.description || '',
-        aiCategorized: exp.aiCategorized || false,
-        hasError: false,
-        errorMsg: null
-      };
-
-      if (exp.amount === null || exp.amount === undefined || isNaN(exp.amount)) {
-        errors.push('Invalid amount');
-        cleaned.hasError = true;
-      }
-
-      if (cleaned.amount === 0 && exp.amount !== 0) {
-        errors.push('Amount could not be parsed');
-        cleaned.hasError = true;
-      }
-
-      if (errors.length > 0) {
-        cleaned.errorMsg = errors.join(', ');
-      }
-
-      return { valid: true, expense: cleaned, errors };
-    }
-
-    // Load expenses safely from localStorage
-    function loadExpenses() {
-      try {
-        const saved = localStorage.getItem('expenses');
-        if (!saved) return { expenses: [], errors: [] };
-
-        const parsed = JSON.parse(saved);
-        if (!Array.isArray(parsed)) {
-          return { 
-            expenses: [], 
-            errors: ['Stored data is not an array. Data has been reset.'] 
-          };
-        }
-
-        const results = parsed.map((exp, i) => validateExpense(exp, i));
-        const validExpenses = results
-          .filter(r => r.valid && r.expense)
-          .map(r => r.expense);
-        
-        const errorCount = results.filter(r => r.expense?.hasError).length;
-        const errors = errorCount > 0 
-          ? [`${errorCount} expense(s) had issues and were loaded with default values`]
-          : [];
-
-        return { expenses: validExpenses, errors };
-      } catch (e) {
-        console.error('Error loading from localStorage:', e);
-        return { 
-          expenses: [], 
-          errors: [`Failed to load saved data: ${e.message}`] 
+        const CATEGORY_RULES = {
+            'Groceries': ['walmart', 'kroger', 'safeway', 'trader joe', 'whole foods', 'aldi', 'costco', 'target', 'publix', 'grocery', 'supermarket'],
+            'Dining': ['mcdonald', 'starbucks', 'chipotle', 'subway', 'burger king', 'wendy', 'taco bell', 'restaurant', 'cafe', 'coffee', 'doordash', 'uber eats'],
+            'Transportation': ['uber', 'lyft', 'taxi', 'shell', 'exxon', 'mobil', 'chevron', 'gas', 'fuel', 'parking', 'metro', 'transit'],
+            'Shopping': ['amazon', 'ebay', 'etsy', 'best buy', 'apple store', 'home depot', 'lowes', 'ikea', 'nike', 'adidas'],
+            'Entertainment': ['netflix', 'hulu', 'disney', 'hbo', 'spotify', 'movie', 'cinema', 'xbox', 'steam'],
+            'Utilities': ['electric', 'power', 'water bill', 'comcast', 'xfinity', 'spectrum', 'internet', 'phone bill'],
+            'Healthcare': ['pharmacy', 'cvs', 'walgreens', 'doctor', 'hospital', 'medical'],
+            'Travel': ['airline', 'delta', 'united', 'flight', 'airbnb', 'hotel', 'marriott', 'hilton'],
+            'Subscriptions': ['subscription', 'membership', 'monthly', 'adobe', 'dropbox', 'linkedin'],
+            'Income': ['payroll', 'salary', 'direct deposit', 'paycheck'],
+            'Transfer': ['transfer', 'ach', 'wire', 'zelle', 'venmo', 'paypal', 'atm', 'credit card payment']
         };
-      }
-    }
 
-    // AI Categorization function
-    async function categorizeWithAI(transactions) {
-      const uncategorized = transactions.filter(t => !t.category || t.category === 'Uncategorized');
-      
-      if (uncategorized.length === 0) return transactions;
-
-      const prompt = `Categorize these transactions into one of these categories: ${CATEGORIES.join(', ')}.
-
-Transactions to categorize:
-${uncategorized.map((t, i) => `${i + 1}. "${t.description}" - $${t.amount}`).join('\n')}
-
-Respond with ONLY a JSON array of category names in the same order, like: ["Groceries", "Dining", "Other"]
-No explanation, just the JSON array.`;
-
-      try {
-        const response = await fetch("https://api.anthropic.com/v1/messages", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "claude-sonnet-4-20250514",
-            max_tokens: 1000,
-            messages: [
-              { role: "user", content: prompt }
-            ],
-          })
-        });
-
-        const data = await response.json();
-        const text = data.content?.[0]?.text || '';
-        
-        // Parse the JSON response
-        const cleanText = text.replace(/```json|```/g, '').trim();
-        const categories = JSON.parse(cleanText);
-
-        // Map categories back to transactions
-        let catIndex = 0;
-        return transactions.map(t => {
-          if (!t.category || t.category === 'Uncategorized') {
-            const aiCategory = categories[catIndex] || 'Other';
-            catIndex++;
-            // Validate category is in our list
-            const validCategory = CATEGORIES.includes(aiCategory) ? aiCategory : 'Other';
-            return { ...t, category: validCategory, aiCategorized: true };
-          }
-          return t;
-        });
-      } catch (error) {
-        console.error('AI categorization failed:', error);
-        // Return transactions unchanged if AI fails
-        return transactions;
-      }
-    }
-    
-    function App() {
-      const [expenses, setExpenses] = useState([]);
-      const [loadErrors, setLoadErrors] = useState([]);
-      const [importErrors, setImportErrors] = useState([]);
-      const [showModal, setShowModal] = useState(false);
-      const [csvHeaders, setCsvHeaders] = useState([]);
-      const [csvData, setCsvData] = useState([]);
-      const [mapping, setMapping] = useState({ date: '', amount: '', description: '', account: '', category: '' });
-      const [accountMode, setAccountMode] = useState('manual');
-      const [manualAccountName, setManualAccountName] = useState('');
-      const [categoryMode, setCategoryMode] = useState('ai'); // 'ai', 'column', or 'manual'
-      const [message, setMessage] = useState('');
-      const [isLoading, setIsLoading] = useState(false);
-      const [loadingMessage, setLoadingMessage] = useState('');
-
-      // Load on mount
-      useEffect(() => {
-        const { expenses: loaded, errors } = loadExpenses();
-        setExpenses(loaded);
-        setLoadErrors(errors);
-      }, []);
-
-      // Save whenever expenses change
-      useEffect(() => {
-        try {
-          localStorage.setItem('expenses', JSON.stringify(expenses));
-        } catch (e) {
-          console.error('Error saving to localStorage:', e);
+        // --- CATEGORIZATION LOGIC ---
+        function parseCSVCategory(csvCategory) {
+            if (!csvCategory) return 'Uncategorized';
+            const normalized = String(csvCategory).trim().toLowerCase();
+            const directMatch = CATEGORIES.find(c => c.toLowerCase() === normalized);
+            if (directMatch) return directMatch;
+            return 'Uncategorized';
         }
-      }, [expenses]);
 
-      function handleFileUpload(e) {
-        const file = e.target.files[0];
-        if (!file) return;
-        
-        setImportErrors([]);
-        
-        const reader = new FileReader();
-        reader.onerror = () => {
-          setImportErrors([`Failed to read file: ${file.name}`]);
+        function autoCategorizeByDescription(description) {
+            if (!description) return { category: 'Uncategorized', isAuto: false };
+            const desc = description.toLowerCase();
+            for (const [category, keywords] of Object.entries(CATEGORY_RULES)) {
+                for (const keyword of keywords) {
+                    if (desc.includes(keyword.toLowerCase())) {
+                        return { category: category, isAuto: true };
+                    }
+                }
+            }
+            return { category: 'Uncategorized', isAuto: false };
+        }
+
+        function determineCategory(description, csvCategoryRaw, mode = 'auto') {
+            // Priority 1: User's selected CSV column
+            if (mode === 'column' && csvCategoryRaw) {
+                const fromCsv = parseCSVCategory(csvCategoryRaw);
+                if (fromCsv !== 'Uncategorized') return { category: fromCsv, isAuto: false };
+            }
+            // Priority 2: Keyword rules
+            if (mode !== 'none') {
+                const fromRules = autoCategorizeByDescription(description);
+                if (fromRules.isAuto) return fromRules;
+            }
+            return { category: 'Uncategorized', isAuto: false };
+        }
+
+        // --- COMPONENTS ---
+
+        const Dashboard = ({ expenses }) => {
+            const stats = useMemo(() => {
+                const totalSpending = expenses
+                    .filter(e => e.category !== 'Transfer' && e.category !== 'Income')
+                    .reduce((sum, e) => sum + e.amount, 0);
+
+                const categoryData = {};
+                expenses
+                    .filter(e => e.category !== 'Transfer' && e.category !== 'Income')
+                    .forEach(e => {
+                        categoryData[e.category] = (categoryData[e.category] || 0) + e.amount;
+                    });
+
+                const chartData = Object.entries(categoryData)
+                    .map(([name, value]) => ({ name, value }))
+                    .sort((a, b) => b.value - a.value);
+
+                return { totalSpending, chartData, uncategorizedCount: expenses.filter(e => e.category === 'Uncategorized').length };
+            }, [expenses]);
+
+            const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+
+            return (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+                    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                        <p className="text-sm font-medium text-slate-500">Monthly Spending</p>
+                        <p className="text-3xl font-bold mt-1">${stats.totalSpending.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                        <div className="mt-4">
+                            <span className={`px-2 py-1 rounded-full text-xs font-semibold ${stats.uncategorizedCount > 0 ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}`}>
+                                {stats.uncategorizedCount > 0 ? `${stats.uncategorizedCount} Uncategorized` : 'Clean Books'}
+                            </span>
+                        </div>
+                    </div>
+                    <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm h-64">
+                        <h3 className="text-sm font-medium text-slate-500 mb-4">Spending by Category</h3>
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={stats.chartData}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                <XAxis dataKey="name" fontSize={10} axisLine={false} tickLine={false} />
+                                <YAxis fontSize={10} axisLine={false} tickLine={false} />
+                                <Tooltip cursor={{fill: '#f8fafc'}} />
+                                <Bar dataKey="value" fill="#6366f1" radius={[4, 4, 0, 0]} barSize={40} />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+            );
         };
-        reader.onload = (event) => {
-          try {
-            const text = event.target.result;
-            const lines = text.split('\n').filter(l => l.trim());
-            
-            if (lines.length === 0) {
-              setImportErrors(['File is empty']);
-              return;
-            }
-            
-            const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
-            
-            if (headers.length === 0) {
-              setImportErrors(['Could not parse CSV headers']);
-              return;
-            }
-            
-            const data = lines.slice(1).map(line => {
-              const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
-              const row = {};
-              headers.forEach((h, i) => row[h] = values[i] || '');
-              return row;
+
+        const ImportModal = ({ headers, count, onClose, onConfirm }) => {
+            const [mapping, setMapping] = useState({
+                date: headers.find(h => /date/i.test(h)) || '',
+                amount: headers.find(h => /amount|debit|price/i.test(h)) || '',
+                description: headers.find(h => /desc|memo|merchant/i.test(h)) || '',
+                category: headers.find(h => /cat/i.test(h)) || '',
             });
-            
-            setCsvHeaders(headers);
-            setCsvData(data);
-            setMapping({ date: '', amount: '', description: '', account: '', category: '' });
-            setAccountMode('manual');
-            setCategoryMode('ai');
-            setManualAccountName('');
-            setShowModal(true);
-          } catch (err) {
-            setImportErrors([`Error parsing CSV: ${err.message}`]);
-          }
-        };
-        reader.readAsText(file);
-        e.target.value = '';
-      }
+            const [categoryMode, setCategoryMode] = useState('column');
 
-      async function processImport() {
-        if (!mapping.date || !mapping.amount) {
-          alert('Please select Date and Amount columns');
-          return;
-        }
-
-        setShowModal(false);
-        setIsLoading(true);
-        setLoadingMessage('Processing CSV...');
-
-        // Determine account name
-        let accountName = 'Imported';
-        if (accountMode === 'manual' && manualAccountName.trim()) {
-          accountName = manualAccountName.trim();
-        }
-
-        const errors = [];
-        let skippedCount = 0;
-
-        const newExpenses = csvData.map((row, i) => {
-          try {
-            const dateStr = row[mapping.date];
-            const dateObj = new Date(dateStr);
-            const date = !isNaN(dateObj.getTime()) ? dateObj.toISOString().slice(0, 7) : new Date().toISOString().slice(0, 7);
-            
-            const rawAmountStr = String(row[mapping.amount] || '0').replace(/[$,]/g, '');
-            const rawAmount = parseFloat(rawAmountStr);
-            const amount = isNaN(rawAmount) ? 0 : Math.abs(rawAmount);
-            
-            if (amount === 0) {
-              skippedCount++;
-              return null;
-            }
-
-            const finalAccount = accountMode === 'column' && mapping.account 
-              ? (row[mapping.account] || accountName)
-              : accountName;
-
-            // Get category from CSV if column mode selected
-            let category = 'Uncategorized';
-            if (categoryMode === 'column' && mapping.category) {
-              const csvCategory = row[mapping.category]?.trim();
-              if (csvCategory && CATEGORIES.includes(csvCategory)) {
-                category = csvCategory;
-              } else if (csvCategory) {
-                // Try to match partial/similar category names
-                const match = CATEGORIES.find(c => 
-                  c.toLowerCase() === csvCategory.toLowerCase() ||
-                  csvCategory.toLowerCase().includes(c.toLowerCase()) ||
-                  c.toLowerCase().includes(csvCategory.toLowerCase())
-                );
-                category = match || 'Uncategorized';
-              }
-            }
-            
-            return {
-              id: Date.now() + i,
-              date,
-              amount,
-              category,
-              account: finalAccount,
-              description: mapping.description ? row[mapping.description] : '',
-              aiCategorized: false,
-              hasError: false,
-              errorMsg: null
-            };
-          } catch (err) {
-            errors.push(`Row ${i + 1}: ${err.message}`);
-            return null;
-          }
-        }).filter(e => e !== null);
-
-        if (skippedCount > 0) {
-          errors.push(`${skippedCount} row(s) skipped due to zero or invalid amounts`);
-        }
-
-        // AI categorization if enabled
-        let finalExpenses = newExpenses;
-        if (categoryMode === 'ai' || (categoryMode === 'column' && newExpenses.some(e => e.category === 'Uncategorized'))) {
-          const needsAI = newExpenses.filter(e => e.category === 'Uncategorized').length;
-          if (needsAI > 0) {
-            setLoadingMessage(`Categorizing ${needsAI} transactions with AI...`);
-            finalExpenses = await categorizeWithAI(newExpenses);
-          }
-        }
-
-        setExpenses([...expenses, ...finalExpenses]);
-        
-        if (errors.length > 0) {
-          setImportErrors(errors);
-        }
-
-        const aiCount = finalExpenses.filter(e => e.aiCategorized).length;
-        let msg = `Imported ${finalExpenses.length} transactions`;
-        if (aiCount > 0) {
-          msg += ` (${aiCount} categorized by AI)`;
-        }
-        
-        setMessage(msg);
-        setIsLoading(false);
-        setTimeout(() => setMessage(''), 4000);
-        setCsvHeaders([]);
-        setCsvData([]);
-        setMapping({ date: '', amount: '', description: '', account: '', category: '' });
-        setManualAccountName('');
-      }
-
-      async function recategorizeUncategorized() {
-        const uncategorized = expenses.filter(e => e.category === 'Uncategorized');
-        if (uncategorized.length === 0) {
-          setMessage('No uncategorized transactions to process');
-          setTimeout(() => setMessage(''), 3000);
-          return;
-        }
-
-        setIsLoading(true);
-        setLoadingMessage(`Categorizing ${uncategorized.length} transactions with AI...`);
-
-        const categorized = await categorizeWithAI(expenses);
-        setExpenses(categorized);
-
-        const newlyCategorized = categorized.filter(e => e.aiCategorized && expenses.find(o => o.id === e.id)?.category === 'Uncategorized').length;
-        
-        setIsLoading(false);
-        setMessage(`AI categorized ${newlyCategorized} transactions`);
-        setTimeout(() => setMessage(''), 3000);
-      }
-
-      function updateCategory(id, cat) {
-        setExpenses(expenses.map(e => e.id === id ? {...e, category: cat, aiCategorized: false} : e));
-      }
-
-      function deleteExpense(id) {
-        setExpenses(expenses.filter(e => e.id !== id));
-      }
-
-      function removeErrorExpenses() {
-        setExpenses(expenses.filter(e => !e.hasError));
-      }
-
-      function clearAllData() {
-        if (confirm('Are you sure you want to delete all expenses? This cannot be undone.')) {
-          setExpenses([]);
-          setLoadErrors([]);
-          setImportErrors([]);
-          localStorage.removeItem('expenses');
-        }
-      }
-
-      function dismissErrors(type) {
-        if (type === 'load') setLoadErrors([]);
-        if (type === 'import') setImportErrors([]);
-      }
-
-      function exportCSV() {
-        const csv = ['date,amount,category,account,description', ...expenses.map(e => 
-          `${e.date},${safeAmount(e.amount)},${e.category},${e.account},"${(e.description || '').replace(/"/g, '""')}"`
-        )].join('\n');
-        const blob = new Blob([csv], { type: 'text/csv' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'expenses.csv';
-        a.click();
-        URL.revokeObjectURL(url);
-      }
-
-      const validExpenses = expenses.filter(e => !e.hasError);
-      const errorExpenses = expenses.filter(e => e.hasError);
-      const categorized = validExpenses.filter(e => e.category !== 'Uncategorized');
-      const total = categorized.reduce((sum, e) => sum + safeAmount(e.amount), 0);
-      const uncategorizedCount = validExpenses.length - categorized.length;
-
-      return (
-        <div className="container">
-          {/* Loading Overlay */}
-          {isLoading && (
-            <div className="loading-overlay">
-              <div className="spinner"></div>
-              <p style={{marginTop: '16px', color: '#64748b'}}>{loadingMessage}</p>
-            </div>
-          )}
-
-          <div style={{marginBottom: '30px'}}>
-            <h1 style={{fontSize: '32px', fontWeight: 'bold', marginBottom: '8px'}}>Expense Tracker</h1>
-            <p style={{color: '#64748b'}}>Import bank CSVs and categorize expenses</p>
-          </div>
-
-          {/* Load Errors */}
-          {loadErrors.length > 0 && (
-            <div className="error-banner">
-              <h3>⚠️ Data Loading Issues</h3>
-              {loadErrors.map((err, i) => (
-                <p key={i}>{err}</p>
-              ))}
-              <button className="btn btn-gray" onClick={() => dismissErrors('load')}>
-                Dismiss
-              </button>
-            </div>
-          )}
-
-          {/* Import Errors */}
-          {importErrors.length > 0 && (
-            <div className="error-banner">
-              <h3>⚠️ Import Issues</h3>
-              {importErrors.slice(0, 5).map((err, i) => (
-                <p key={i}>{err}</p>
-              ))}
-              {importErrors.length > 5 && (
-                <p>...and {importErrors.length - 5} more issues</p>
-              )}
-              <button className="btn btn-gray" onClick={() => dismissErrors('import')}>
-                Dismiss
-              </button>
-            </div>
-          )}
-
-          {/* Error Expenses Warning */}
-          {errorExpenses.length > 0 && (
-            <div className="error-banner">
-              <h3>⚠️ {errorExpenses.length} expense(s) have data issues</h3>
-              <p>These rows are highlighted in yellow below. You can fix or remove them.</p>
-              <button className="btn btn-red" onClick={removeErrorExpenses}>
-                Remove All Problem Rows
-              </button>
-            </div>
-          )}
-
-          <div style={{display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap'}}>
-            <label className="btn btn-blue">
-              📤 Import CSV
-              <input type="file" accept=".csv" onChange={handleFileUpload} />
-            </label>
-            <button className="btn btn-purple" onClick={exportCSV}>📥 Export</button>
-            {uncategorizedCount > 0 && (
-              <button className="btn btn-green" onClick={recategorizeUncategorized}>
-                🤖 AI Categorize ({uncategorizedCount})
-              </button>
-            )}
-            <button className="btn btn-red" onClick={clearAllData}>🗑️ Clear All</button>
-          </div>
-
-          {message && (
-            <div style={{padding: '12px', background: '#dbeafe', color: '#1e40af', borderRadius: '8px', marginBottom: '20px'}}>
-              {message}
-            </div>
-          )}
-
-          {uncategorizedCount > 0 && (
-            <div style={{padding: '12px', background: '#fef3c7', color: '#92400e', borderRadius: '8px', marginBottom: '20px'}}>
-              ⚠️ {uncategorizedCount} transactions need categorization
-            </div>
-          )}
-
-          <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '30px'}}>
-            <div className="card">
-              <div style={{fontSize: '14px', color: '#64748b', marginBottom: '4px'}}>Total</div>
-              <div style={{fontSize: '28px', fontWeight: 'bold'}}>{formatAmount(total)}</div>
-            </div>
-            <div className="card">
-              <div style={{fontSize: '14px', color: '#64748b', marginBottom: '4px'}}>Categorized</div>
-              <div style={{fontSize: '28px', fontWeight: 'bold'}}>{categorized.length}</div>
-            </div>
-            <div className="card">
-              <div style={{fontSize: '14px', color: '#64748b', marginBottom: '4px'}}>To Review</div>
-              <div style={{fontSize: '28px', fontWeight: 'bold'}}>{uncategorizedCount}</div>
-            </div>
-          </div>
-
-          <div className="card">
-            <h2 style={{fontSize: '20px', fontWeight: '600', marginBottom: '20px'}}>Transactions</h2>
-            <div style={{overflowX: 'auto'}}>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Description</th>
-                    <th>Account</th>
-                    <th>Category</th>
-                    <th style={{textAlign: 'right'}}>Amount</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {expenses.length === 0 ? (
-                    <tr>
-                      <td colSpan="6" style={{textAlign: 'center', color: '#64748b', padding: '40px'}}>
-                        No expenses yet. Import a CSV to get started.
-                      </td>
-                    </tr>
-                  ) : (
-                    [...expenses].sort((a, b) => {
-                      if (a.hasError && !b.hasError) return -1;
-                      if (!a.hasError && b.hasError) return 1;
-                      if (a.category === 'Uncategorized' && b.category !== 'Uncategorized') return -1;
-                      if (a.category !== 'Uncategorized' && b.category === 'Uncategorized') return 1;
-                      return 0;
-                    }).map(exp => (
-                      <tr key={exp.id} className={exp.hasError ? 'warning-row' : ''}>
-                        <td>
-                          {exp.date}
-                          {exp.hasError && (
-                            <div style={{fontSize: '11px', color: '#991b1b'}}>
-                              ⚠️ {exp.errorMsg}
+            return (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose} />
+                    <div className="relative bg-white w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden">
+                        <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+                            <h2 className="text-xl font-bold">Import Data</h2>
+                            <span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-full text-xs font-bold">{count} Rows</span>
+                        </div>
+                        <div className="p-6 space-y-6">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Date Column</label>
+                                    <select className="w-full p-2 bg-slate-50 border rounded-lg text-sm" value={mapping.date} onChange={e => setMapping({...mapping, date: e.target.value})}>
+                                        <option value="">Select...</option>
+                                        {headers.map(h => <option key={h} value={h}>{h}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Amount Column</label>
+                                    <select className="w-full p-2 bg-slate-50 border rounded-lg text-sm" value={mapping.amount} onChange={e => setMapping({...mapping, amount: e.target.value})}>
+                                        <option value="">Select...</option>
+                                        {headers.map(h => <option key={h} value={h}>{h}</option>)}
+                                    </select>
+                                </div>
                             </div>
-                          )}
-                        </td>
-                        <td>{exp.description}</td>
-                        <td>{exp.account}</td>
-                        <td>
-                          <select 
-                            value={exp.category} 
-                            onChange={(e) => updateCategory(exp.id, e.target.value)}
-                            style={{
-                              background: exp.category === 'Uncategorized' ? '#fee2e2' : '#dbeafe',
-                              color: exp.category === 'Uncategorized' ? '#991b1b' : '#1e40af',
-                              border: 'none',
-                              padding: '4px 8px',
-                              borderRadius: '12px',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            <option value="Uncategorized">Uncategorized</option>
-                            {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                          </select>
-                          {exp.aiCategorized && <span className="ai-badge">AI</span>}
-                        </td>
-                        <td style={{textAlign: 'right', fontWeight: '600'}}>{formatAmount(exp.amount)}</td>
-                        <td>
-                          <button onClick={() => deleteExpense(exp.id)} style={{background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px'}}>
-                            🗑️
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div className={`modal ${showModal ? 'show' : ''}`}>
-            <div className="modal-box">
-              <h2 style={{fontSize: '22px', fontWeight: 'bold', marginBottom: '16px'}}>Map CSV Columns</h2>
-              <p style={{color: '#64748b', marginBottom: '20px'}}>Match columns (Date & Amount required)</p>
-              
-              <div className="input-group">
-                <label>Date *</label>
-                <select value={mapping.date} onChange={(e) => setMapping({...mapping, date: e.target.value})}>
-                  <option value="">Select...</option>
-                  {csvHeaders.map(h => <option key={h} value={h}>{h}</option>)}
-                </select>
-              </div>
-
-              <div className="input-group">
-                <label>Amount *</label>
-                <select value={mapping.amount} onChange={(e) => setMapping({...mapping, amount: e.target.value})}>
-                  <option value="">Select...</option>
-                  {csvHeaders.map(h => <option key={h} value={h}>{h}</option>)}
-                </select>
-              </div>
-
-              <div className="input-group">
-                <label>Description</label>
-                <select value={mapping.description} onChange={(e) => setMapping({...mapping, description: e.target.value})}>
-                  <option value="">Select...</option>
-                  {csvHeaders.map(h => <option key={h} value={h}>{h}</option>)}
-                </select>
-              </div>
-
-              <div className="input-group">
-                <label>Account</label>
-                <div className="radio-group">
-                  <label>
-                    <input 
-                      type="radio" 
-                      name="accountMode" 
-                      checked={accountMode === 'manual'} 
-                      onChange={() => setAccountMode('manual')}
-                    />
-                    Enter name
-                  </label>
-                  <label>
-                    <input 
-                      type="radio" 
-                      name="accountMode" 
-                      checked={accountMode === 'column'} 
-                      onChange={() => setAccountMode('column')}
-                    />
-                    From CSV column
-                  </label>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Categorization Strategy</label>
+                                <div className="flex gap-2 mt-2">
+                                    <button onClick={() => setCategoryMode('column')} className={`flex-1 p-3 rounded-xl border text-sm font-semibold ${categoryMode === 'column' ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'bg-slate-50'}`}>Use CSV Column</button>
+                                    <button onClick={() => setCategoryMode('auto')} className={`flex-1 p-3 rounded-xl border text-sm font-semibold ${categoryMode === 'auto' ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'bg-slate-50'}`}>Smart Rules</button>
+                                </div>
+                                {categoryMode === 'column' && (
+                                    <select className="w-full mt-3 p-2 bg-slate-50 border rounded-lg text-sm" value={mapping.category} onChange={e => setMapping({...mapping, category: e.target.value})}>
+                                        <option value="">Select Category Column...</option>
+                                        {headers.map(h => <option key={h} value={h}>{h}</option>)}
+                                    </select>
+                                )}
+                            </div>
+                        </div>
+                        <div className="p-6 bg-slate-50 border-t flex gap-3">
+                            <button onClick={onClose} className="flex-1 py-3 bg-white border font-bold rounded-xl">Cancel</button>
+                            <button onClick={() => onConfirm({ mapping, categoryMode })} className="flex-1 py-3 bg-indigo-600 text-white font-bold rounded-xl shadow-lg">Process Import</button>
+                        </div>
+                    </div>
                 </div>
-                
-                {accountMode === 'manual' ? (
-                  <input 
-                    type="text" 
-                    placeholder="e.g., Chase Checking, Amex Gold..." 
-                    value={manualAccountName}
-                    onChange={(e) => setManualAccountName(e.target.value)}
-                  />
-                ) : (
-                  <select value={mapping.account} onChange={(e) => setMapping({...mapping, account: e.target.value})}>
-                    <option value="">Select...</option>
-                    {csvHeaders.map(h => <option key={h} value={h}>{h}</option>)}
-                  </select>
-                )}
-              </div>
+            );
+        };
 
-              <div className="input-group">
-                <label>Category</label>
-                <div className="radio-group">
-                  <label>
-                    <input 
-                      type="radio" 
-                      name="categoryMode" 
-                      checked={categoryMode === 'ai'} 
-                      onChange={() => setCategoryMode('ai')}
-                    />
-                    🤖 Use AI
-                  </label>
-                  <label>
-                    <input 
-                      type="radio" 
-                      name="categoryMode" 
-                      checked={categoryMode === 'column'} 
-                      onChange={() => setCategoryMode('column')}
-                    />
-                    From CSV column
-                  </label>
+        const App = () => {
+            const [expenses, setExpenses] = useState([]);
+            const [importData, setImportData] = useState(null);
+
+            useEffect(() => {
+                const saved = localStorage.getItem('expenses_simple');
+                if (saved) setExpenses(JSON.parse(saved));
+            }, []);
+
+            useEffect(() => {
+                localStorage.setItem('expenses_simple', JSON.stringify(expenses));
+            }, [expenses]);
+
+            const handleFile = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                Papa.parse(file, {
+                    header: true,
+                    complete: (res) => setImportData(res)
+                });
+            };
+
+            const confirmImport = (settings) => {
+                const processed = importData.data.map((row, i) => {
+                    const desc = row[settings.mapping.description] || 'No Description';
+                    const rawCat = row[settings.mapping.category];
+                    const amount = Math.abs(parseFloat(String(row[settings.mapping.amount] || '0').replace(/[^\d.-]/g, ''))) || 0;
+                    const { category, isAuto } = determineCategory(desc, rawCat, settings.categoryMode);
+
+                    return {
+                        id: Date.now() + '-' + i,
+                        date: row[settings.mapping.date] || new Date().toISOString().split('T')[0],
+                        description: desc,
+                        amount,
+                        category,
+                        isAuto
+                    };
+                }).filter(e => e.amount > 0);
+
+                setExpenses([...expenses, ...processed]);
+                setImportData(null);
+            };
+
+            return (
+                <div className="min-h-screen pb-20">
+                    <header className="bg-white border-b h-16 flex items-center px-4 justify-between sticky top-0 z-10">
+                        <h1 className="text-xl font-bold text-slate-800">Smart<span className="text-indigo-600">Expense</span></h1>
+                        <label className="bg-indigo-600 text-white px-5 py-2 rounded-full font-bold text-sm cursor-pointer hover:bg-indigo-700 transition-all shadow-md">
+                            Import CSV
+                            <input type="file" className="hidden" accept=".csv" onChange={handleFile} />
+                        </label>
+                    </header>
+
+                    <main className="max-w-6xl mx-auto px-4 mt-8">
+                        <Dashboard expenses={expenses} />
+                        
+                        <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
+                            <div className="p-5 border-b flex justify-between items-center">
+                                <h2 className="font-bold">Transactions</h2>
+                                <button onClick={() => setExpenses([])} className="text-xs font-bold text-red-500 hover:underline">Clear Data</button>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left text-sm">
+                                    <thead className="bg-slate-50 text-slate-500 uppercase text-[10px] font-bold">
+                                        <tr>
+                                            <th className="p-4">Date</th>
+                                            <th className="p-4">Description</th>
+                                            <th className="p-4">Category</th>
+                                            <th className="p-4 text-right">Amount</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y">
+                                        {expenses.length === 0 ? (
+                                            <tr><td colSpan="4" className="p-10 text-center text-slate-400">No transactions. Upload a CSV to start.</td></tr>
+                                        ) : expenses.map(e => (
+                                            <tr key={e.id} className="hover:bg-slate-50">
+                                                <td className="p-4 text-slate-500">{e.date}</td>
+                                                <td className="p-4 font-medium">{e.description}</td>
+                                                <td className="p-4">
+                                                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${e.category === 'Uncategorized' ? 'bg-amber-100 text-amber-600' : 'bg-indigo-50 text-indigo-600'}`}>
+                                                        {e.category} {e.isAuto && <span className="ml-1 opacity-40 italic">Auto</span>}
+                                                    </span>
+                                                </td>
+                                                <td className="p-4 text-right font-bold">${e.amount.toFixed(2)}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </main>
+
+                    {importData && (
+                        <ImportModal 
+                            headers={importData.meta.fields} 
+                            count={importData.data.length} 
+                            onClose={() => setImportData(null)}
+                            onConfirm={confirmImport}
+                        />
+                    )}
                 </div>
-                <p style={{fontSize: '12px', color: '#64748b', marginBottom: '8px'}}>
-                  {categoryMode === 'ai' 
-                    ? 'AI will categorize based on transaction descriptions' 
-                    : 'Select a column, AI will fill in any missing categories'}
-                </p>
-                
-                {categoryMode === 'column' && (
-                  <select value={mapping.category} onChange={(e) => setMapping({...mapping, category: e.target.value})}>
-                    <option value="">Select...</option>
-                    {csvHeaders.map(h => <option key={h} value={h}>{h}</option>)}
-                  </select>
-                )}
-              </div>
+            );
+        };
 
-              <div style={{display: 'flex', gap: '10px', marginTop: '20px'}}>
-                <button onClick={processImport} className="btn btn-blue" style={{flex: 1}}>
-                  Import {csvData.length} Transactions
-                </button>
-                <button onClick={() => setShowModal(false)} className="btn btn-gray">Cancel</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(
-      <ErrorBoundary>
-        <App />
-      </ErrorBoundary>
-    );
-  </script>
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
 </body>
 </html>
