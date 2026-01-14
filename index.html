@@ -4,349 +4,51 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Expense Tracker</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/recharts@2.10.3/dist/Recharts.js"></script>
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-    
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      background: linear-gradient(to bottom right, #f8fafc, #dbeafe);
-      min-height: 100vh;
-    }
-    
-    .container {
-      max-width: 1280px;
-      margin: 0 auto;
-      padding: 24px;
-    }
-    
-    .header {
-      margin-bottom: 32px;
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      flex-wrap: wrap;
-      gap: 16px;
-    }
-    
-    h1 {
-      font-size: 36px;
-      font-weight: bold;
-      color: #1e293b;
-      margin-bottom: 8px;
-    }
-    
-    .subtitle {
-      color: #64748b;
-      font-size: 16px;
-    }
-    
-    .button-group {
-      display: flex;
-      gap: 12px;
-      flex-wrap: wrap;
-    }
-    
-    .btn {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 10px 16px;
-      border-radius: 8px;
-      font-weight: 500;
-      cursor: pointer;
-      border: none;
-      transition: all 0.2s;
-      font-size: 14px;
-    }
-    
-    .btn-primary {
-      background: #3b82f6;
-      color: white;
-    }
-    
-    .btn-primary:hover {
-      background: #2563eb;
-    }
-    
-    .btn-secondary {
-      background: #8b5cf6;
-      color: white;
-    }
-    
-    .btn-secondary:hover {
-      background: #7c3aed;
-    }
-    
-    .btn-success {
-      background: #10b981;
-      color: white;
-      pointer-events: none;
-    }
-    
-    .card {
-      background: white;
-      border-radius: 12px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-      padding: 24px;
-      margin-bottom: 32px;
-    }
-    
-    .grid {
-      display: grid;
-      gap: 24px;
-      margin-bottom: 32px;
-    }
-    
-    .grid-3 {
-      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    }
-    
-    .grid-2 {
-      grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-    }
-    
-    .stat-card {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    
-    .stat-label {
-      font-size: 14px;
-      color: #64748b;
-      margin-bottom: 4px;
-    }
-    
-    .stat-value {
-      font-size: 30px;
-      font-weight: bold;
-      color: #1e293b;
-    }
-    
-    .icon {
-      font-size: 40px;
-    }
-    
-    .form-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 16px;
-      margin-bottom: 16px;
-    }
-    
-    input, select {
-      width: 100%;
-      padding: 10px 16px;
-      border: 1px solid #cbd5e1;
-      border-radius: 8px;
-      font-size: 14px;
-      transition: all 0.2s;
-    }
-    
-    input:focus, select:focus {
-      outline: none;
-      border-color: #3b82f6;
-      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-    }
-    
-    .alert {
-      padding: 16px;
-      border-radius: 8px;
-      margin-bottom: 24px;
-    }
-    
-    .alert-info {
-      background: #dbeafe;
-      color: #1e40af;
-    }
-    
-    .alert-warning {
-      background: #fef3c7;
-      color: #92400e;
-      border: 1px solid #fbbf24;
-    }
-    
-    .alert-success {
-      background: #d1fae5;
-      color: #065f46;
-    }
-    
-    h2 {
-      font-size: 20px;
-      font-weight: 600;
-      color: #1e293b;
-      margin-bottom: 16px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    
-    h3 {
-      font-size: 16px;
-      font-weight: 600;
-      color: #78350f;
-      margin-bottom: 8px;
-    }
-    
-    table {
-      width: 100%;
-      border-collapse: collapse;
-    }
-    
-    th {
-      text-align: left;
-      padding: 12px 16px;
-      color: #64748b;
-      font-weight: 500;
-      border-bottom: 1px solid #e2e8f0;
-      font-size: 14px;
-    }
-    
-    td {
-      padding: 12px 16px;
-      border-bottom: 1px solid #f1f5f9;
-      font-size: 14px;
-    }
-    
-    tr:hover {
-      background: #f8fafc;
-    }
-    
-    .category-badge {
-      display: inline-block;
-      padding: 4px 12px;
-      background: #dbeafe;
-      color: #1e40af;
-      border-radius: 16px;
-      font-size: 13px;
-      font-weight: 500;
-    }
-    
-    .delete-btn {
-      color: #ef4444;
-      cursor: pointer;
-      background: none;
-      border: none;
-      font-size: 18px;
-      padding: 4px;
-      transition: color 0.2s;
-    }
-    
-    .delete-btn:hover {
-      color: #dc2626;
-    }
-    
-    .text-right {
-      text-align: right;
-    }
-    
-    code {
-      background: #fef3c7;
-      padding: 2px 8px;
-      border-radius: 4px;
-      font-family: monospace;
-      font-size: 13px;
-    }
-    
-    .overflow-x {
-      overflow-x: auto;
-    }
-    
-    input[type="file"] {
-      display: none;
-    }
-    
-    .chart-placeholder {
-      height: 300px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: #f8fafc;
-      border-radius: 8px;
-      color: #64748b;
-    }
-    
-    @media (max-width: 768px) {
-      h1 {
-        font-size: 28px;
-      }
-      
-      .grid-2 {
-        grid-template-columns: 1fr;
-      }
-      
-      .form-grid {
-        grid-template-columns: 1fr;
-      }
-      
-      .header {
-        flex-direction: column;
-      }
-    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: linear-gradient(to bottom right, #f8fafc, #dbeafe); min-height: 100vh; }
+    .btn { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 8px; font-weight: 500; cursor: pointer; border: none; transition: all 0.2s; font-size: 14px; }
+    .btn-primary { background: #3b82f6; color: white; }
+    .btn-primary:hover { background: #2563eb; }
+    .btn-secondary { background: #8b5cf6; color: white; }
+    .btn-secondary:hover { background: #7c3aed; }
+    .card { background: white; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 24px; margin-bottom: 32px; }
+    input, select { width: 100%; padding: 10px 16px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; }
+    input:focus, select:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; padding: 12px 16px; color: #64748b; font-weight: 500; border-bottom: 1px solid #e2e8f0; font-size: 14px; }
+    td { padding: 12px 16px; border-bottom: 1px solid #f1f5f9; font-size: 14px; }
+    tr:hover { background: #f8fafc; }
+    .alert { padding: 16px; border-radius: 8px; margin-bottom: 24px; }
+    .alert-info { background: #dbeafe; color: #1e40af; }
+    .alert-warning { background: #fef3c7; color: #92400e; }
+    .modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; }
+    .modal.active { display: flex; }
+    .modal-content { background: white; border-radius: 12px; padding: 32px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto; }
+    input[type="file"] { display: none; }
   </style>
 </head>
 <body>
   <div id="root"></div>
   
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <script src="https://unpkg.com/recharts@2.10.3/dist/Recharts.js"></script>
-  
   <script type="text/babel">
     const { useState, useMemo, useEffect } = React;
     
-    // Wait for Recharts to load
-    const waitForRecharts = () => {
-      return new Promise((resolve) => {
-        if (window.Recharts) {
-          resolve(window.Recharts);
-        } else {
-          const interval = setInterval(() => {
-            if (window.Recharts) {
-              clearInterval(interval);
-              resolve(window.Recharts);
-            }
-          }, 100);
-        }
-      });
-    };
-
     const ExpenseTracker = () => {
       const [expenses, setExpenses] = useState(() => {
         const saved = localStorage.getItem('expenses');
-        return saved ? JSON.parse(saved) : [
-          { id: 1, date: '2024-01', amount: 1200, category: 'Groceries', account: 'Chase Sapphire', description: 'Weekly shopping' },
-          { id: 2, date: '2024-01', amount: 800, category: 'Rent', account: 'Bank Account', description: 'Monthly rent' },
-          { id: 3, date: '2024-01', amount: 150, category: 'Utilities', account: 'Amex Gold', description: 'Electric bill' },
-          { id: 4, date: '2024-02', amount: 1150, category: 'Groceries', account: 'Chase Sapphire', description: 'Weekly shopping' },
-          { id: 5, date: '2024-02', amount: 200, category: 'Entertainment', account: 'Amex Gold', description: 'Concert tickets' },
-          { id: 6, date: '2024-02', amount: 800, category: 'Rent', account: 'Bank Account', description: 'Monthly rent' },
-          { id: 7, date: '2024-03', amount: 1300, category: 'Groceries', account: 'Chase Sapphire', description: 'Weekly shopping' },
-          { id: 8, date: '2024-03', amount: 450, category: 'Transportation', account: 'Amex Gold', description: 'Gas and car maintenance' },
-          { id: 9, date: '2024-03', amount: 800, category: 'Rent', account: 'Bank Account', description: 'Monthly rent' },
-        ];
+        return saved ? JSON.parse(saved) : [];
       });
-
-      const [newExpense, setNewExpense] = useState({
-        date: '',
-        amount: '',
-        category: '',
-        account: '',
-        description: ''
-      });
-
       const [saveStatus, setSaveStatus] = useState('');
       const [uploadStatus, setUploadStatus] = useState('');
-      const [chartsReady, setChartsReady] = useState(false);
-
-      useEffect(() => {
-        waitForRecharts().then(() => setChartsReady(true));
-      }, []);
+      const [showMapping, setShowMapping] = useState(false);
+      const [csvHeaders, setCsvHeaders] = useState([]);
+      const [csvData, setCsvData] = useState([]);
+      const [columnMapping, setColumnMapping] = useState({ date: '', amount: '', description: '', account: '' });
 
       useEffect(() => {
         localStorage.setItem('expenses', JSON.stringify(expenses));
@@ -356,60 +58,28 @@
       }, [expenses]);
 
       const categories = ['Groceries', 'Rent', 'Utilities', 'Transportation', 'Entertainment', 'Healthcare', 'Shopping', 'Dining', 'Other'];
-      const accounts = ['Chase Sapphire', 'Amex Gold', 'Bank Account', 'Capital One', 'Other'];
-
       const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
-
-      const addExpense = () => {
-        if (newExpense.date && newExpense.amount && newExpense.category && newExpense.account) {
-          setExpenses([...expenses, { ...newExpense, id: Date.now(), amount: parseFloat(newExpense.amount) }]);
-          setNewExpense({ date: '', amount: '', category: '', account: '', description: '' });
-        }
-      };
-
-      const deleteExpense = (id) => {
-        setExpenses(expenses.filter(exp => exp.id !== id));
-      };
 
       const handleFileUpload = (event) => {
         const file = event.target.files[0];
         if (!file) return;
-
         const reader = new FileReader();
         reader.onload = (e) => {
           try {
             const text = e.target.result;
-            const lines = text.split('\n');
-            const headers = lines[0].toLowerCase().split(',').map(h => h.trim());
-            
-            const newExpenses = [];
-            for (let i = 1; i < lines.length; i++) {
-              if (!lines[i].trim()) continue;
-              
-              const values = lines[i].split(',').map(v => v.trim());
-              const expense = {};
-              
-              headers.forEach((header, index) => {
-                expense[header] = values[index] || '';
-              });
-              
-              if (expense.date && expense.amount) {
-                newExpenses.push({
-                  id: Date.now() + i,
-                  date: expense.date,
-                  amount: parseFloat(expense.amount),
-                  category: expense.category || 'Other',
-                  account: expense.account || 'Other',
-                  description: expense.description || ''
-                });
-              }
-            }
-            
-            setExpenses([...expenses, ...newExpenses]);
-            setUploadStatus(`Successfully imported ${newExpenses.length} expenses!`);
-            setTimeout(() => setUploadStatus(''), 3000);
+            const lines = text.split('\n').filter(line => line.trim());
+            const headers = lines[0].split(',').map(h => h.trim().replace(/['"]/g, ''));
+            setCsvHeaders(headers);
+            const data = lines.slice(1).map(line => {
+              const values = line.split(',').map(v => v.trim().replace(/['"]/g, ''));
+              const row = {};
+              headers.forEach((h, i) => row[h] = values[i] || '');
+              return row;
+            });
+            setCsvData(data);
+            setShowMapping(true);
           } catch (error) {
-            setUploadStatus('Error importing CSV. Please check format.');
+            setUploadStatus('Error reading CSV');
             setTimeout(() => setUploadStatus(''), 3000);
           }
         };
@@ -417,307 +87,140 @@
         event.target.value = '';
       };
 
+      const processCSVImport = () => {
+        if (!columnMapping.date || !columnMapping.amount) {
+          alert('Please map Date and Amount columns');
+          return;
+        }
+        const newExpenses = csvData.map((row, i) => {
+          const dateObj = new Date(row[columnMapping.date]);
+          const formattedDate = !isNaN(dateObj.getTime()) ? dateObj.toISOString().slice(0, 7) : new Date().toISOString().slice(0, 7);
+          const amount = Math.abs(parseFloat(String(row[columnMapping.amount]).replace(/[$,]/g, ''))) || 0;
+          return {
+            id: Date.now() + i,
+            date: formattedDate,
+            amount,
+            category: 'Uncategorized',
+            account: columnMapping.account ? row[columnMapping.account] : 'Imported',
+            description: columnMapping.description ? row[columnMapping.description] : ''
+          };
+        }).filter(exp => exp.amount > 0);
+        setExpenses([...expenses, ...newExpenses]);
+        setUploadStatus(`Imported ${newExpenses.length} transactions. Categorize them below.`);
+        setTimeout(() => setUploadStatus(''), 5000);
+        setShowMapping(false);
+        setCsvHeaders([]);
+        setCsvData([]);
+        setColumnMapping({ date: '', amount: '', description: '', account: '' });
+      };
+
+      const updateCategory = (id, cat) => {
+        setExpenses(expenses.map(exp => exp.id === id ? { ...exp, category: cat } : exp));
+      };
+
+      const deleteExpense = (id) => setExpenses(expenses.filter(exp => exp.id !== id));
+
       const exportToCSV = () => {
-        const headers = ['date', 'amount', 'category', 'account', 'description'];
-        const csvContent = [
-          headers.join(','),
-          ...expenses.map(exp => 
-            headers.map(h => exp[h]).join(',')
-          )
-        ].join('\n');
-        
-        const blob = new Blob([csvContent], { type: 'text/csv' });
-        const url = window.URL.createObjectURL(blob);
+        const csv = ['date,amount,category,account,description', ...expenses.map(e => `${e.date},${e.amount},${e.category},${e.account},${e.description}`)].join('\n');
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
         a.download = `expenses_${new Date().toISOString().split('T')[0]}.csv`;
         a.click();
-        window.URL.revokeObjectURL(url);
+        URL.revokeObjectURL(url);
       };
 
-      const monthlyData = useMemo(() => {
-        const grouped = expenses.reduce((acc, exp) => {
-          if (!acc[exp.date]) {
-            acc[exp.date] = { month: exp.date, total: 0 };
-          }
-          acc[exp.date].total += exp.amount;
-          
-          if (!acc[exp.date][exp.category]) {
-            acc[exp.date][exp.category] = 0;
-          }
-          acc[exp.date][exp.category] += exp.amount;
-          
-          return acc;
-        }, {});
-        
-        return Object.values(grouped).sort((a, b) => a.month.localeCompare(b.month));
-      }, [expenses]);
+      const categorized = expenses.filter(e => e.category !== 'Uncategorized');
+      const totalExpenses = categorized.reduce((sum, e) => sum + e.amount, 0);
+      const uncategorizedCount = expenses.length - categorized.length;
 
       const categoryData = useMemo(() => {
-        const grouped = expenses.reduce((acc, exp) => {
-          if (!acc[exp.category]) {
-            acc[exp.category] = 0;
-          }
-          acc[exp.category] += exp.amount;
-          return acc;
-        }, {});
-        
+        const grouped = {};
+        categorized.forEach(e => grouped[e.category] = (grouped[e.category] || 0) + e.amount);
         return Object.entries(grouped).map(([name, value]) => ({ name, value }));
       }, [expenses]);
 
-      const accountData = useMemo(() => {
-        const grouped = expenses.reduce((acc, exp) => {
-          if (!acc[exp.account]) {
-            acc[exp.account] = 0;
-          }
-          acc[exp.account] += exp.amount;
-          return acc;
-        }, {});
-        
-        return Object.entries(grouped).map(([name, value]) => ({ name, value }));
-      }, [expenses]);
+      const { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } = window.Recharts || {};
 
-      const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
-
-      // Render charts only when Recharts is ready
-      const renderCharts = () => {
-        if (!chartsReady || !window.Recharts) {
-          return (
-            <>
-              <div className="card">
-                <h2>Monthly Spending Trend</h2>
-                <div className="chart-placeholder">Loading charts...</div>
-              </div>
-              <div className="card">
-                <h2>Spending by Category</h2>
-                <div className="chart-placeholder">Loading charts...</div>
-              </div>
-              <div className="card">
-                <h2>Category Evolution Over Time</h2>
-                <div className="chart-placeholder">Loading charts...</div>
-              </div>
-              <div className="card">
-                <h2>Spending by Account</h2>
-                <div className="chart-placeholder">Loading charts...</div>
-              </div>
-            </>
-          );
-        }
-
-        const { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } = window.Recharts;
-
-        return (
-          <>
-            <div className="card">
-              <h2>Monthly Spending Trend</h2>
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={monthlyData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" />
-                  <YAxis />
-                  <Tooltip formatter={(value) => `$${value.toFixed(2)}`} />
-                  <Legend />
-                  <Line type="monotone" dataKey="total" stroke="#3b82f6" strokeWidth={2} />
-                </LineChart>
-              </ResponsiveContainer>
+      return (
+        <div style={{maxWidth: '1280px', margin: '0 auto', padding: '24px'}}>
+          <div style={{marginBottom: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px'}}>
+            <div>
+              <h1 style={{fontSize: '36px', fontWeight: 'bold', color: '#1e293b', marginBottom: '8px'}}>Expense Tracker</h1>
+              <p style={{color: '#64748b'}}>Import bank CSVs and categorize expenses</p>
             </div>
+            <div style={{display: 'flex', gap: '12px'}}>
+              {saveStatus && <div style={{padding: '10px 16px', background: '#d1fae5', color: '#065f46', borderRadius: '8px'}}>{saveStatus}</div>}
+              <label className="btn btn-primary">
+                📤 Import CSV
+                <input type="file" accept=".csv" onChange={handleFileUpload} />
+              </label>
+              <button onClick={exportToCSV} className="btn btn-secondary">📥 Export</button>
+            </div>
+          </div>
 
+          {uploadStatus && <div className="alert alert-info">{uploadStatus}</div>}
+          {uncategorizedCount > 0 && <div className="alert alert-warning">⚠️ {uncategorizedCount} uncategorized transactions</div>}
+
+          <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '24px', marginBottom: '32px'}}>
             <div className="card">
-              <h2>Spending by Category</h2>
+              <p style={{fontSize: '14px', color: '#64748b', marginBottom: '4px'}}>Total Expenses</p>
+              <p style={{fontSize: '30px', fontWeight: 'bold', color: '#1e293b'}}>${totalExpenses.toFixed(2)}</p>
+            </div>
+            <div className="card">
+              <p style={{fontSize: '14px', color: '#64748b', marginBottom: '4px'}}>Categorized</p>
+              <p style={{fontSize: '30px', fontWeight: 'bold', color: '#1e293b'}}>{categorized.length}</p>
+            </div>
+            <div className="card">
+              <p style={{fontSize: '14px', color: '#64748b', marginBottom: '4px'}}>Needs Review</p>
+              <p style={{fontSize: '30px', fontWeight: 'bold', color: '#1e293b'}}>{uncategorizedCount}</p>
+            </div>
+          </div>
+
+          {categoryData.length > 0 && PieChart && (
+            <div className="card">
+              <h2 style={{fontSize: '20px', fontWeight: '600', marginBottom: '16px'}}>Spending by Category</h2>
               <ResponsiveContainer width="100%" height={300}>
                 <PieChart>
-                  <Pie
-                    data={categoryData}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                    outerRadius={100}
-                    fill="#8884d8"
-                    dataKey="value"
-                  >
-                    {categoryData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
+                  <Pie data={categoryData} cx="50%" cy="50%" labelLine={false} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} outerRadius={100} dataKey="value">
+                    {categoryData.map((e, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                   </Pie>
-                  <Tooltip formatter={(value) => `$${value.toFixed(2)}`} />
+                  <Tooltip formatter={(v) => `${v.toFixed(2)}`} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
-
-            <div className="card">
-              <h2>Category Evolution Over Time</h2>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={monthlyData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" />
-                  <YAxis />
-                  <Tooltip formatter={(value) => `$${value?.toFixed(2) || '0.00'}`} />
-                  <Legend />
-                  {categories.map((cat, idx) => (
-                    <Bar key={cat} dataKey={cat} stackId="a" fill={COLORS[idx % COLORS.length]} />
-                  ))}
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-
-            <div className="card">
-              <h2>Spending by Account</h2>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={accountData} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" />
-                  <YAxis dataKey="name" type="category" width={120} />
-                  <Tooltip formatter={(value) => `$${value.toFixed(2)}`} />
-                  <Bar dataKey="value" fill="#8b5cf6" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </>
-        );
-      };
-
-      return (
-        <div className="container">
-          <div className="header">
-            <div>
-              <h1>Expense Tracker</h1>
-              <p className="subtitle">Track and analyze your spending across multiple accounts</p>
-            </div>
-            <div className="button-group">
-              {saveStatus && (
-                <div className="btn btn-success">
-                  {saveStatus}
-                </div>
-              )}
-              <label className="btn btn-primary">
-                📤 Import CSV
-                <input
-                  type="file"
-                  accept=".csv"
-                  onChange={handleFileUpload}
-                />
-              </label>
-              <button onClick={exportToCSV} className="btn btn-secondary">
-                📥 Export CSV
-              </button>
-            </div>
-          </div>
-
-          {uploadStatus && (
-            <div className="alert alert-info">
-              {uploadStatus}
-            </div>
           )}
 
-          <div className="alert alert-warning">
-            <h3>CSV Import Format</h3>
-            <p style={{fontSize: '14px', marginBottom: '8px'}}>
-              Your CSV should have these columns: <code>date, amount, category, account, description</code>
-            </p>
-            <p style={{fontSize: '14px'}}>
-              Date format: YYYY-MM (e.g., 2024-01). Example: <code>2024-01,150.00,Groceries,Chase Sapphire,Weekly shopping</code>
-            </p>
-          </div>
-
-          <div className="grid grid-3">
-            <div className="card stat-card">
-              <div>
-                <div className="stat-label">Total Expenses</div>
-                <div className="stat-value">${totalExpenses.toFixed(2)}</div>
-              </div>
-              <div className="icon">💵</div>
-            </div>
-            
-            <div className="card stat-card">
-              <div>
-                <div className="stat-label">Categories</div>
-                <div className="stat-value">{categoryData.length}</div>
-              </div>
-              <div className="icon">📈</div>
-            </div>
-            
-            <div className="card stat-card">
-              <div>
-                <div className="stat-label">Accounts</div>
-                <div className="stat-value">{accountData.length}</div>
-              </div>
-              <div className="icon">💳</div>
-            </div>
-          </div>
-
           <div className="card">
-            <h2>➕ Add New Expense</h2>
-            <div className="form-grid">
-              <input
-                type="month"
-                value={newExpense.date}
-                onChange={(e) => setNewExpense({...newExpense, date: e.target.value})}
-              />
-              <input
-                type="number"
-                placeholder="Amount"
-                value={newExpense.amount}
-                onChange={(e) => setNewExpense({...newExpense, amount: e.target.value})}
-              />
-              <select
-                value={newExpense.category}
-                onChange={(e) => setNewExpense({...newExpense, category: e.target.value})}
-              >
-                <option value="">Select Category</option>
-                {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-              </select>
-              <select
-                value={newExpense.account}
-                onChange={(e) => setNewExpense({...newExpense, account: e.target.value})}
-              >
-                <option value="">Select Account</option>
-                {accounts.map(acc => <option key={acc} value={acc}>{acc}</option>)}
-              </select>
-              <input
-                type="text"
-                placeholder="Description (optional)"
-                value={newExpense.description}
-                onChange={(e) => setNewExpense({...newExpense, description: e.target.value})}
-              />
-            </div>
-            <button onClick={addExpense} className="btn btn-primary">
-              Add Expense
-            </button>
-          </div>
-
-          <div className="grid grid-2">
-            {renderCharts()}
-          </div>
-
-          <div className="card">
-            <h2>Recent Expenses</h2>
-            <div className="overflow-x">
+            <h2 style={{fontSize: '20px', fontWeight: '600', marginBottom: '16px'}}>All Transactions</h2>
+            <div style={{overflowX: 'auto'}}>
               <table>
                 <thead>
                   <tr>
                     <th>Date</th>
-                    <th>Category</th>
-                    <th>Account</th>
                     <th>Description</th>
-                    <th className="text-right">Amount</th>
-                    <th className="text-right">Action</th>
+                    <th>Account</th>
+                    <th>Category</th>
+                    <th style={{textAlign: 'right'}}>Amount</th>
+                    <th style={{textAlign: 'right'}}>Action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {expenses.sort((a, b) => b.date.localeCompare(a.date)).map((exp) => (
+                  {expenses.sort((a, b) => a.category === 'Uncategorized' ? -1 : b.category === 'Uncategorized' ? 1 : 0).map((exp) => (
                     <tr key={exp.id}>
                       <td>{exp.date}</td>
-                      <td>
-                        <span className="category-badge">{exp.category}</span>
-                      </td>
-                      <td>{exp.account}</td>
                       <td>{exp.description}</td>
-                      <td className="text-right" style={{fontWeight: 600}}>${exp.amount.toFixed(2)}</td>
-                      <td className="text-right">
-                        <button onClick={() => deleteExpense(exp.id)} className="delete-btn">
-                          🗑️
-                        </button>
+                      <td>{exp.account}</td>
+                      <td>
+                        <select value={exp.category} onChange={(e) => updateCategory(exp.id, e.target.value)} style={{padding: '4px 12px', borderRadius: '16px', fontSize: '13px', background: exp.category === 'Uncategorized' ? '#fee2e2' : '#dbeafe', color: exp.category === 'Uncategorized' ? '#991b1b' : '#1e40af', border: 'none', cursor: 'pointer'}}>
+                          <option value="Uncategorized">Uncategorized</option>
+                          {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                        </select>
+                      </td>
+                      <td style={{textAlign: 'right', fontWeight: '600'}}>${exp.amount.toFixed(2)}</td>
+                      <td style={{textAlign: 'right'}}>
+                        <button onClick={() => deleteExpense(exp.id)} style={{color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px'}}>🗑️</button>
                       </td>
                     </tr>
                   ))}
@@ -725,6 +228,53 @@
               </table>
             </div>
           </div>
+
+          {showMapping && (
+            <div className={`modal ${showMapping ? 'active' : ''}`}>
+              <div className="modal-content">
+                <h2 style={{fontSize: '24px', fontWeight: 'bold', marginBottom: '16px'}}>Map CSV Columns</h2>
+                <p style={{color: '#64748b', marginBottom: '24px'}}>Match your CSV columns. Date and Amount are required.</p>
+                
+                <div style={{display: 'flex', flexDirection: 'column', gap: '16px'}}>
+                  <div>
+                    <label style={{display: 'block', marginBottom: '8px', fontWeight: '500'}}>Date Column *</label>
+                    <select value={columnMapping.date} onChange={(e) => setColumnMapping({...columnMapping, date: e.target.value})}>
+                      <option value="">Select...</option>
+                      {csvHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{display: 'block', marginBottom: '8px', fontWeight: '500'}}>Amount Column *</label>
+                    <select value={columnMapping.amount} onChange={(e) => setColumnMapping({...columnMapping, amount: e.target.value})}>
+                      <option value="">Select...</option>
+                      {csvHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{display: 'block', marginBottom: '8px', fontWeight: '500'}}>Description (Optional)</label>
+                    <select value={columnMapping.description} onChange={(e) => setColumnMapping({...columnMapping, description: e.target.value})}>
+                      <option value="">Select...</option>
+                      {csvHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{display: 'block', marginBottom: '8px', fontWeight: '500'}}>Account (Optional)</label>
+                    <select value={columnMapping.account} onChange={(e) => setColumnMapping({...columnMapping, account: e.target.value})}>
+                      <option value="">Select...</option>
+                      {csvHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                <div style={{display: 'flex', gap: '12px', marginTop: '24px'}}>
+                  <button onClick={processCSVImport} className="btn btn-primary" style={{flex: 1}}>
+                    Import {csvData.length} Transactions
+                  </button>
+                  <button onClick={() => setShowMapping(false)} style={{padding: '10px 16px', background: '#e5e7eb', borderRadius: '8px', border: 'none', cursor: 'pointer'}}>Cancel</button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       );
     };
