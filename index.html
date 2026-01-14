@@ -16,8 +16,9 @@
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: #f1f1f1; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
         .bar-fill { transition: width 0.5s ease-out; }
+        .chart-dot { transition: all 0.2s ease; }
+        .chart-dot:hover { transform: scale(1.5); }
     </style>
 </head>
 <body class="bg-slate-50">
@@ -32,15 +33,12 @@
                 super(props);
                 this.state = { hasError: false, error: null };
             }
-
             static getDerivedStateFromError(error) {
                 return { hasError: true, error };
             }
-
             componentDidCatch(error, errorInfo) {
                 console.error('App Error:', error, errorInfo);
             }
-
             render() {
                 if (this.state.hasError) {
                     return (
@@ -48,24 +46,17 @@
                             <div className="bg-white rounded-3xl shadow-xl p-10 max-w-lg w-full text-center border border-red-100">
                                 <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center text-4xl mx-auto mb-6">⚠️</div>
                                 <h1 className="text-2xl font-black text-slate-800 mb-3">Something went wrong</h1>
-                                <p className="text-slate-500 mb-4">The app encountered an error. This might be due to corrupted data.</p>
+                                <p className="text-slate-500 mb-4">The app encountered an error.</p>
                                 <p className="text-xs text-red-500 bg-red-50 p-3 rounded-xl mb-6 font-mono break-all">
                                     {this.state.error?.message || 'Unknown error'}
                                 </p>
                                 <div className="flex gap-4">
-                                    <button 
-                                        onClick={() => {
-                                            localStorage.removeItem('smart_expense_v5');
-                                            window.location.reload();
-                                        }}
-                                        className="flex-1 py-4 bg-red-600 text-white font-bold rounded-2xl hover:bg-red-700 transition-colors"
-                                    >
+                                    <button onClick={() => { localStorage.removeItem('smart_expense_v6'); window.location.reload(); }}
+                                        className="flex-1 py-4 bg-red-600 text-white font-bold rounded-2xl hover:bg-red-700">
                                         Clear Data & Reload
                                     </button>
-                                    <button 
-                                        onClick={() => window.location.reload()}
-                                        className="flex-1 py-4 bg-slate-200 text-slate-700 font-bold rounded-2xl hover:bg-slate-300 transition-colors"
-                                    >
+                                    <button onClick={() => window.location.reload()}
+                                        className="flex-1 py-4 bg-slate-200 text-slate-700 font-bold rounded-2xl hover:bg-slate-300">
                                         Try Again
                                     </button>
                                 </div>
@@ -77,45 +68,39 @@
             }
         }
 
-        // --- CONFIGURATION & CONSTANTS ---
+        // --- CONFIGURATION ---
         const CATEGORIES = [
             'Groceries', 'Rent', 'Utilities', 'Transportation', 'Entertainment', 
             'Healthcare', 'Shopping', 'Dining', 'Travel', 'Subscriptions', 
             'Income', 'Transfer', 'Other'
         ];
 
+        const FIXED_CATEGORIES = ['Rent', 'Utilities', 'Subscriptions', 'Healthcare'];
+        const VARIABLE_CATEGORIES = ['Groceries', 'Dining', 'Shopping', 'Entertainment', 'Travel', 'Transportation', 'Other'];
+
         const CATEGORY_COLORS = {
-            'Groceries': '#22c55e',
-            'Rent': '#f59e0b',
-            'Utilities': '#3b82f6',
-            'Transportation': '#8b5cf6',
-            'Entertainment': '#ec4899',
-            'Healthcare': '#14b8a6',
-            'Shopping': '#f43f5e',
-            'Dining': '#f97316',
-            'Travel': '#06b6d4',
-            'Subscriptions': '#6366f1',
-            'Income': '#10b981',
-            'Transfer': '#64748b',
-            'Other': '#94a3b8',
-            'Uncategorized': '#fbbf24'
+            'Groceries': '#22c55e', 'Rent': '#f59e0b', 'Utilities': '#3b82f6',
+            'Transportation': '#8b5cf6', 'Entertainment': '#ec4899', 'Healthcare': '#14b8a6',
+            'Shopping': '#f43f5e', 'Dining': '#f97316', 'Travel': '#06b6d4',
+            'Subscriptions': '#6366f1', 'Income': '#10b981', 'Transfer': '#64748b',
+            'Other': '#94a3b8', 'Uncategorized': '#fbbf24'
         };
 
         const CATEGORY_RULES = {
-            'Groceries': ['walmart', 'kroger', 'safeway', 'trader joe', 'whole foods', 'aldi', 'costco', 'target', 'publix', 'grocery', 'supermarket', 'tesco', 'lidl', 'food lion', 'wegmans', 'sprouts'],
-            'Dining': ['sweetgreen', 'mcdonald', 'starbucks', 'chipotle', 'subway', 'burger king', 'wendy', 'taco bell', 'restaurant', 'cafe', 'coffee', 'doordash', 'uber eats', 'grubhub', 'pizza', 'kfc', 'chick-fil-a', 'panera', 'dunkin'],
-            'Transportation': ['uber', 'lyft', 'taxi', 'shell', 'exxon', 'mobil', 'chevron', 'gas', 'fuel', 'parking', 'metro', 'transit', 'train', 'bus', 'amtrak', 'toll'],
-            'Shopping': ['amazon', 'ebay', 'etsy', 'best buy', 'apple store', 'home depot', 'lowes', 'ikea', 'nike', 'adidas', 'zara', 'h&m', 'nordstrom', 'macys', 'target'],
-            'Entertainment': ['netflix', 'hulu', 'disney', 'hbo', 'spotify', 'apple music', 'movie', 'cinema', 'xbox', 'steam', 'playstation', 'nintendo', 'theater', 'concert'],
-            'Utilities': ['electric', 'power', 'water bill', 'comcast', 'xfinity', 'spectrum', 'internet', 'phone bill', 'verizon', 'att', 't-mobile', 'utility'],
-            'Healthcare': ['pharmacy', 'cvs', 'walgreens', 'doctor', 'hospital', 'medical', 'dentist', 'clinic', 'health', 'rx', 'prescription'],
-            'Travel': ['airline', 'delta', 'united', 'american airlines', 'southwest', 'jetblue', 'flight', 'airbnb', 'vrbo', 'hotel', 'marriott', 'hilton', 'hyatt', 'booking.com', 'expedia'],
-            'Subscriptions': ['subscription', 'membership', 'monthly', 'adobe', 'dropbox', 'linkedin', 'patreon', 'canva', 'microsoft', 'google storage', 'icloud'],
-            'Income': ['payroll', 'salary', 'direct deposit', 'paycheck', 'dividend', 'interest', 'refund', 'autopay payment', 'payment - thank'],
-            'Transfer': ['transfer', 'ach', 'wire', 'zelle', 'venmo', 'paypal', 'atm', 'credit card payment', 'withdrawal']
+            'Groceries': ['walmart', 'kroger', 'safeway', 'trader joe', 'whole foods', 'aldi', 'costco', 'target', 'publix', 'grocery', 'supermarket'],
+            'Dining': ['sweetgreen', 'mcdonald', 'starbucks', 'chipotle', 'subway', 'burger king', 'restaurant', 'cafe', 'coffee', 'doordash', 'uber eats', 'pizza'],
+            'Transportation': ['uber', 'lyft', 'taxi', 'shell', 'exxon', 'chevron', 'gas', 'fuel', 'parking', 'metro', 'transit'],
+            'Shopping': ['amazon', 'ebay', 'best buy', 'apple store', 'home depot', 'lowes', 'ikea', 'nike', 'nordstrom', 'macys'],
+            'Entertainment': ['netflix', 'hulu', 'disney', 'hbo', 'spotify', 'movie', 'cinema', 'xbox', 'steam', 'playstation'],
+            'Utilities': ['electric', 'power', 'water bill', 'comcast', 'xfinity', 'spectrum', 'internet', 'phone bill', 'verizon', 'att'],
+            'Healthcare': ['pharmacy', 'cvs', 'walgreens', 'doctor', 'hospital', 'medical', 'dentist', 'clinic'],
+            'Travel': ['airline', 'delta', 'united', 'southwest', 'flight', 'airbnb', 'hotel', 'marriott', 'hilton', 'expedia'],
+            'Subscriptions': ['subscription', 'membership', 'adobe', 'dropbox', 'linkedin', 'patreon', 'microsoft'],
+            'Income': ['payroll', 'salary', 'direct deposit', 'paycheck', 'dividend', 'autopay payment', 'payment - thank'],
+            'Transfer': ['transfer', 'ach', 'wire', 'zelle', 'venmo', 'paypal', 'atm']
         };
 
-        // --- LOGIC HELPERS ---
+        // --- HELPERS ---
         function safeAmount(value) {
             if (value === null || value === undefined || isNaN(value)) return 0;
             return Number(value);
@@ -124,25 +109,18 @@
         function fuzzyMatchCategory(csvValue) {
             if (!csvValue) return 'Uncategorized';
             const val = csvValue.trim().toLowerCase();
-            
             const exact = CATEGORIES.find(c => c.toLowerCase() === val);
             if (exact) return exact;
-            
             const contains = CATEGORIES.find(c => val.includes(c.toLowerCase()) || c.toLowerCase().includes(val));
             if (contains) return contains;
-            
             const parts = val.split('-').map(p => p.trim());
             for (const part of parts) {
-                const partMatch = CATEGORIES.find(c => 
-                    part.includes(c.toLowerCase()) || c.toLowerCase().includes(part)
-                );
+                const partMatch = CATEGORIES.find(c => part.includes(c.toLowerCase()) || c.toLowerCase().includes(part));
                 if (partMatch) return partMatch;
             }
-            
             if (val.includes('restaurant') || val.includes('food')) return 'Dining';
-            if (val.includes('taxi') || val.includes('coach') || val.includes('rideshare')) return 'Transportation';
-            if (val.includes('airline') || val.includes('hotel') || val.includes('lodging')) return 'Travel';
-            
+            if (val.includes('taxi') || val.includes('coach')) return 'Transportation';
+            if (val.includes('airline') || val.includes('hotel')) return 'Travel';
             return 'Uncategorized';
         }
 
@@ -155,131 +133,345 @@
             return 'Uncategorized';
         }
 
-        function validateExpense(exp, index) {
-            if (!exp || typeof exp !== 'object') {
-                return { valid: false, expense: null };
-            }
-
-            const cleaned = {
-                id: exp.id || `exp-${Date.now()}-${index}`,
-                date: exp.date || 'Unknown',
-                description: exp.description || '',
-                amount: safeAmount(exp.amount),
-                category: exp.category || 'Uncategorized',
-                account: exp.account || 'Unknown',
-                source: exp.source || 'manual',
-                hasError: false,
-                errorMsg: null
-            };
-
-            if (isNaN(exp.amount) || exp.amount === null || exp.amount === undefined) {
-                cleaned.hasError = true;
-                cleaned.errorMsg = 'Invalid amount';
-            }
-
-            return { valid: true, expense: cleaned };
-        }
-
         function loadExpenses() {
             try {
-                const saved = localStorage.getItem('smart_expense_v5');
+                const saved = localStorage.getItem('smart_expense_v6');
                 if (!saved) return { expenses: [], errors: [] };
-
                 const parsed = JSON.parse(saved);
-                if (!Array.isArray(parsed)) {
-                    return { expenses: [], errors: ['Stored data is not an array.'] };
-                }
-
-                const results = parsed.map((exp, i) => validateExpense(exp, i));
-                const validExpenses = results.filter(r => r.valid && r.expense).map(r => r.expense);
-                const errorCount = results.filter(r => r.expense?.hasError).length;
-                const errors = errorCount > 0 ? [`${errorCount} expense(s) had issues and were loaded with defaults`] : [];
-
-                return { expenses: validExpenses, errors };
+                if (!Array.isArray(parsed)) return { expenses: [], errors: ['Invalid data'] };
+                return { expenses: parsed.filter(e => e && typeof e.amount === 'number'), errors: [] };
             } catch (e) {
-                console.error('Error loading from localStorage:', e);
-                return { expenses: [], errors: [`Failed to load saved data: ${e.message}`] };
+                return { expenses: [], errors: [e.message] };
             }
         }
 
-        // --- SIMPLE BAR CHART COMPONENT (no Recharts) ---
-        const SimpleBarChart = ({ data }) => {
-            if (!data || data.length === 0) {
-                return (
-                    <div className="h-full flex items-center justify-center text-slate-400">
-                        <div className="text-center">
-                            <div className="text-4xl mb-2">📊</div>
-                            <p className="font-medium">Import data to see your spending chart</p>
-                        </div>
-                    </div>
-                );
+        function parseDate(dateStr) {
+            if (!dateStr) return new Date();
+            const d = new Date(dateStr);
+            return isNaN(d.getTime()) ? new Date() : d;
+        }
+
+        function getMonthKey(dateStr) {
+            const d = parseDate(dateStr);
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        }
+
+        function getMonthLabel(monthKey) {
+            const [year, month] = monthKey.split('-');
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            return `${months[parseInt(month) - 1]} ${year.slice(2)}`;
+        }
+
+        // --- CHART COMPONENTS ---
+
+        // 1. PARETO CHART - "Where Does It All Go?"
+        const ParetoChart = ({ expenses }) => {
+            const data = useMemo(() => {
+                const spending = expenses.filter(e => e.category !== 'Income' && e.category !== 'Transfer');
+                const byCategory = {};
+                spending.forEach(e => {
+                    byCategory[e.category] = (byCategory[e.category] || 0) + safeAmount(e.amount);
+                });
+                const sorted = Object.entries(byCategory)
+                    .map(([name, value]) => ({ name, value }))
+                    .sort((a, b) => b.value - a.value);
+                
+                const total = sorted.reduce((sum, item) => sum + item.value, 0);
+                let cumulative = 0;
+                return sorted.map(item => {
+                    cumulative += item.value;
+                    return { ...item, cumPercent: total > 0 ? (cumulative / total) * 100 : 0 };
+                });
+            }, [expenses]);
+
+            if (data.length === 0) {
+                return <EmptyChart message="Import data to see where your money goes" />;
             }
 
             const maxValue = Math.max(...data.map(d => d.value));
 
             return (
-                <div className="h-full flex flex-col justify-end gap-2 py-4">
-                    {data.slice(0, 6).map((item, index) => (
-                        <div key={item.name} className="flex items-center gap-3">
-                            <div className="w-24 text-xs font-semibold text-slate-500 truncate text-right">
-                                {item.name}
-                            </div>
-                            <div className="flex-1 h-8 bg-slate-100 rounded-lg overflow-hidden">
-                                <div 
-                                    className="h-full rounded-lg bar-fill flex items-center justify-end pr-3"
-                                    style={{ 
-                                        width: `${(item.value / maxValue) * 100}%`,
-                                        backgroundColor: CATEGORY_COLORS[item.name] || '#6366f1',
-                                        minWidth: '60px'
-                                    }}
-                                >
-                                    <span className="text-xs font-bold text-white">
-                                        ${item.value.toLocaleString()}
-                                    </span>
+                <div className="h-full flex flex-col">
+                    <div className="flex-1 flex flex-col justify-end gap-1 pb-2">
+                        {data.slice(0, 8).map((item, index) => (
+                            <div key={item.name} className="flex items-center gap-2">
+                                <div className="w-20 text-[10px] font-semibold text-slate-500 truncate text-right">
+                                    {item.name}
+                                </div>
+                                <div className="flex-1 h-6 bg-slate-100 rounded relative overflow-hidden">
+                                    <div 
+                                        className="h-full rounded bar-fill"
+                                        style={{ 
+                                            width: `${(item.value / maxValue) * 100}%`,
+                                            backgroundColor: CATEGORY_COLORS[item.name] || '#6366f1'
+                                        }}
+                                    />
+                                    {/* Cumulative line marker */}
+                                    <div 
+                                        className="absolute top-0 bottom-0 w-0.5 bg-red-500"
+                                        style={{ left: `${item.cumPercent}%` }}
+                                    />
+                                </div>
+                                <div className="w-16 text-[10px] font-bold text-slate-600 text-right">
+                                    {item.cumPercent.toFixed(0)}%
                                 </div>
                             </div>
-                        </div>
-                    ))}
+                        ))}
+                    </div>
+                    <div className="text-[10px] text-slate-400 text-center pt-2 border-t border-slate-100">
+                        🔴 Red line = cumulative % (80/20 rule: few categories = most spending)
+                    </div>
                 </div>
             );
         };
 
-        // --- COMPONENTS ---
-        const Dashboard = ({ expenses }) => {
-            const stats = useMemo(() => {
-                const spendingExpenses = expenses.filter(e => e.category !== 'Transfer' && e.category !== 'Income' && !e.hasError);
-                const total = spendingExpenses.reduce((sum, e) => sum + safeAmount(e.amount), 0);
-                const dataMap = {};
-                spendingExpenses.forEach(e => {
-                    dataMap[e.category] = (dataMap[e.category] || 0) + safeAmount(e.amount);
+        // 2. MONTHLY TREND - "Am I Getting Worse?"
+        const MonthlyTrendChart = ({ expenses }) => {
+            const data = useMemo(() => {
+                const spending = expenses.filter(e => e.category !== 'Income' && e.category !== 'Transfer');
+                const byMonth = {};
+                spending.forEach(e => {
+                    const month = getMonthKey(e.date);
+                    byMonth[month] = (byMonth[month] || 0) + safeAmount(e.amount);
                 });
-                const chartData = Object.entries(dataMap)
-                    .map(([name, value]) => ({ name, value: Number(value.toFixed(2)) }))
-                    .sort((a, b) => b.value - a.value);
-                return { total, chartData };
+                return Object.entries(byMonth)
+                    .map(([month, value]) => ({ month, label: getMonthLabel(month), value }))
+                    .sort((a, b) => a.month.localeCompare(b.month));
+            }, [expenses]);
+
+            if (data.length === 0) {
+                return <EmptyChart message="Import data to track monthly trends" />;
+            }
+
+            const maxValue = Math.max(...data.map(d => d.value));
+            const avgValue = data.reduce((sum, d) => sum + d.value, 0) / data.length;
+            const avgPercent = maxValue > 0 ? ((maxValue - avgValue) / maxValue) * 100 : 50;
+
+            return (
+                <div className="h-full flex flex-col">
+                    <div className="flex-1 relative">
+                        {/* Average line */}
+                        <div 
+                            className="absolute left-0 right-0 border-t-2 border-dashed border-amber-400 z-10"
+                            style={{ top: `${avgPercent}%` }}
+                        >
+                            <span className="absolute -top-3 right-0 text-[9px] font-bold text-amber-500 bg-white px-1">
+                                AVG ${avgValue.toFixed(0)}
+                            </span>
+                        </div>
+                        
+                        {/* Bars */}
+                        <div className="h-full flex items-end gap-1 pt-4">
+                            {data.map((item, index) => {
+                                const height = maxValue > 0 ? (item.value / maxValue) * 100 : 0;
+                                const isAboveAvg = item.value > avgValue;
+                                return (
+                                    <div key={item.month} className="flex-1 flex flex-col items-center">
+                                        <div className="w-full flex flex-col items-center flex-1 justify-end">
+                                            <div 
+                                                className={`w-full max-w-8 rounded-t transition-all hover:opacity-80 ${isAboveAvg ? 'bg-red-400' : 'bg-emerald-400'}`}
+                                                style={{ height: `${height}%`, minHeight: height > 0 ? '4px' : '0' }}
+                                                title={`$${item.value.toFixed(2)}`}
+                                            />
+                                        </div>
+                                        <div className="text-[8px] font-bold text-slate-400 mt-1 whitespace-nowrap">
+                                            {item.label}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                    <div className="text-[10px] text-slate-400 text-center pt-2 border-t border-slate-100 mt-2">
+                        🟢 Below average | 🔴 Above average spending
+                    </div>
+                </div>
+            );
+        };
+
+        // 3. LIFESTYLE CREEP - Fixed vs Variable
+        const LifestyleCreepChart = ({ expenses }) => {
+            const data = useMemo(() => {
+                const spending = expenses.filter(e => e.category !== 'Income' && e.category !== 'Transfer');
+                const byMonth = {};
+                spending.forEach(e => {
+                    const month = getMonthKey(e.date);
+                    if (!byMonth[month]) byMonth[month] = { fixed: 0, variable: 0 };
+                    const isFixed = FIXED_CATEGORIES.includes(e.category);
+                    if (isFixed) {
+                        byMonth[month].fixed += safeAmount(e.amount);
+                    } else {
+                        byMonth[month].variable += safeAmount(e.amount);
+                    }
+                });
+                return Object.entries(byMonth)
+                    .map(([month, values]) => ({ 
+                        month, 
+                        label: getMonthLabel(month), 
+                        fixed: values.fixed,
+                        variable: values.variable,
+                        total: values.fixed + values.variable
+                    }))
+                    .sort((a, b) => a.month.localeCompare(b.month));
+            }, [expenses]);
+
+            if (data.length === 0) {
+                return <EmptyChart message="Import data to see fixed vs variable spending" />;
+            }
+
+            const maxValue = Math.max(...data.map(d => d.total));
+
+            return (
+                <div className="h-full flex flex-col">
+                    <div className="flex-1 flex items-end gap-1">
+                        {data.map((item) => {
+                            const fixedHeight = maxValue > 0 ? (item.fixed / maxValue) * 100 : 0;
+                            const variableHeight = maxValue > 0 ? (item.variable / maxValue) * 100 : 0;
+                            return (
+                                <div key={item.month} className="flex-1 flex flex-col items-center">
+                                    <div className="w-full flex flex-col items-center flex-1 justify-end">
+                                        <div className="w-full max-w-8 flex flex-col-reverse">
+                                            {/* Fixed (bottom) */}
+                                            <div 
+                                                className="w-full bg-blue-400 rounded-b"
+                                                style={{ height: `${fixedHeight}%`, minHeight: fixedHeight > 0 ? '2px' : '0' }}
+                                                title={`Fixed: $${item.fixed.toFixed(2)}`}
+                                            />
+                                            {/* Variable (top) */}
+                                            <div 
+                                                className="w-full bg-pink-400 rounded-t"
+                                                style={{ height: `${variableHeight}%`, minHeight: variableHeight > 0 ? '2px' : '0' }}
+                                                title={`Variable: $${item.variable.toFixed(2)}`}
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="text-[8px] font-bold text-slate-400 mt-1">
+                                        {item.label}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                    <div className="flex justify-center gap-4 text-[10px] text-slate-400 pt-2 border-t border-slate-100 mt-2">
+                        <span>🔵 Fixed (Rent, Utilities, Subscriptions)</span>
+                        <span>🩷 Variable (Dining, Shopping, etc.)</span>
+                    </div>
+                </div>
+            );
+        };
+
+        // 4. SCATTER PLOT - "Death by a Thousand Cuts"
+        const ScatterPlot = ({ expenses }) => {
+            const data = useMemo(() => {
+                const spending = expenses.filter(e => e.category !== 'Income' && e.category !== 'Transfer');
+                if (spending.length === 0) return { points: [], minDate: 0, maxDate: 1, maxAmount: 100 };
+                
+                const points = spending.map(e => ({
+                    date: parseDate(e.date).getTime(),
+                    amount: safeAmount(e.amount),
+                    description: e.description,
+                    category: e.category
+                }));
+                
+                const dates = points.map(p => p.date);
+                const amounts = points.map(p => p.amount);
+                
+                return {
+                    points,
+                    minDate: Math.min(...dates),
+                    maxDate: Math.max(...dates),
+                    maxAmount: Math.max(...amounts)
+                };
+            }, [expenses]);
+
+            if (data.points.length === 0) {
+                return <EmptyChart message="Import data to see spending patterns" />;
+            }
+
+            const { points, minDate, maxDate, maxAmount } = data;
+            const dateRange = maxDate - minDate || 1;
+            const smallPurchases = points.filter(p => p.amount < 20).length;
+            const smallPercent = ((smallPurchases / points.length) * 100).toFixed(0);
+
+            return (
+                <div className="h-full flex flex-col">
+                    <div className="flex-1 relative bg-slate-50 rounded-lg overflow-hidden">
+                        {/* $20 threshold line */}
+                        <div 
+                            className="absolute left-0 right-0 border-t border-dashed border-red-300"
+                            style={{ bottom: `${(20 / maxAmount) * 100}%` }}
+                        >
+                            <span className="absolute -top-2 left-1 text-[8px] font-bold text-red-400">$20</span>
+                        </div>
+                        
+                        {/* Dots */}
+                        {points.map((point, index) => {
+                            const x = ((point.date - minDate) / dateRange) * 100;
+                            const y = (point.amount / maxAmount) * 100;
+                            const isSmall = point.amount < 20;
+                            return (
+                                <div
+                                    key={index}
+                                    className={`absolute w-2 h-2 rounded-full chart-dot ${isSmall ? 'bg-red-400' : 'bg-indigo-400'}`}
+                                    style={{ 
+                                        left: `${x}%`, 
+                                        bottom: `${y}%`,
+                                        opacity: 0.7
+                                    }}
+                                    title={`${point.description}: $${point.amount.toFixed(2)}`}
+                                />
+                            );
+                        })}
+                    </div>
+                    <div className="text-[10px] text-slate-400 text-center pt-2 border-t border-slate-100 mt-2">
+                        🔴 {smallPercent}% of transactions are under $20 — watch for "death by a thousand cuts"
+                    </div>
+                </div>
+            );
+        };
+
+        const EmptyChart = ({ message }) => (
+            <div className="h-full flex items-center justify-center text-slate-400">
+                <div className="text-center">
+                    <div className="text-3xl mb-2">📊</div>
+                    <p className="font-medium text-sm">{message}</p>
+                </div>
+            </div>
+        );
+
+        // --- SUMMARY STATS ---
+        const SummaryStats = ({ expenses }) => {
+            const stats = useMemo(() => {
+                const spending = expenses.filter(e => e.category !== 'Income' && e.category !== 'Transfer');
+                const total = spending.reduce((sum, e) => sum + safeAmount(e.amount), 0);
+                const count = spending.length;
+                const avg = count > 0 ? total / count : 0;
+                return { total, count, avg };
             }, [expenses]);
 
             return (
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-xl shadow-slate-200/50">
-                        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Total Spending</h3>
-                        <p className="text-4xl lg:text-5xl font-black text-slate-900 mt-3 tabular-nums">
+                <div className="grid grid-cols-3 gap-4">
+                    <div className="bg-white p-4 lg:p-6 rounded-2xl border border-slate-100 shadow-lg">
+                        <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total Spent</h3>
+                        <p className="text-2xl lg:text-3xl font-black text-slate-900 mt-1">
                             ${stats.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </p>
-                        <div className="mt-6 flex items-center gap-2">
-                            <span className="flex h-2 w-2 rounded-full bg-indigo-500"></span>
-                            <p className="text-xs text-slate-400 font-medium tracking-tight">
-                                {expenses.length} transactions • {stats.chartData.length} categories
-                            </p>
-                        </div>
                     </div>
-                    <div className="lg:col-span-2 bg-white p-6 rounded-3xl border border-slate-100 shadow-xl shadow-slate-200/50 h-72">
-                        <SimpleBarChart data={stats.chartData} />
+                    <div className="bg-white p-4 lg:p-6 rounded-2xl border border-slate-100 shadow-lg">
+                        <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Transactions</h3>
+                        <p className="text-2xl lg:text-3xl font-black text-slate-900 mt-1">{stats.count}</p>
+                    </div>
+                    <div className="bg-white p-4 lg:p-6 rounded-2xl border border-slate-100 shadow-lg">
+                        <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Avg Transaction</h3>
+                        <p className="text-2xl lg:text-3xl font-black text-slate-900 mt-1">
+                            ${stats.avg.toFixed(2)}
+                        </p>
                     </div>
                 </div>
             );
         };
 
+        // --- IMPORT DIALOG ---
         const ImportDialog = ({ headers, onClose, onConfirm }) => {
             const [mapping, setMapping] = useState({
                 date: headers.find(h => /date/i.test(h)) || headers[0],
@@ -293,257 +485,161 @@
             const [manualAccountName, setManualAccountName] = useState('');
 
             const handleConfirm = () => {
-                const finalMapping = {
-                    ...mapping,
-                    manualAccountName: accountMode === 'manual' ? manualAccountName : null,
-                    accountMode
-                };
-                onConfirm(finalMapping, mode);
+                onConfirm({ ...mapping, manualAccountName: accountMode === 'manual' ? manualAccountName : null, accountMode }, mode);
             };
 
             return (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
                     <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={onClose} />
-                    <div className="relative bg-white w-full max-w-xl rounded-3xl shadow-2xl overflow-hidden flex flex-col">
-                        <div className="p-6 lg:p-8 border-b border-slate-100">
-                            <h2 className="text-xl lg:text-2xl font-black text-slate-800">Import Configuration</h2>
+                    <div className="relative bg-white w-full max-w-xl rounded-3xl shadow-2xl overflow-hidden">
+                        <div className="p-6 border-b border-slate-100">
+                            <h2 className="text-xl font-black text-slate-800">Import Configuration</h2>
                             <p className="text-sm text-slate-400 mt-1">Map your CSV columns</p>
                         </div>
-                        <div className="p-6 lg:p-8 space-y-5 overflow-y-auto max-h-[60vh]">
-                            {/* Date & Amount */}
+                        <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">Date *</label>
-                                    <select className="w-full p-3 bg-slate-50 border-0 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none" 
+                                    <label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Date *</label>
+                                    <select className="w-full p-3 bg-slate-50 rounded-xl text-sm font-semibold outline-none" 
                                             value={mapping.date} onChange={e => setMapping({...mapping, date: e.target.value})}>
                                         {headers.map(h => <option key={h} value={h}>{h}</option>)}
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">Amount *</label>
-                                    <select className="w-full p-3 bg-slate-50 border-0 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none" 
+                                    <label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Amount *</label>
+                                    <select className="w-full p-3 bg-slate-50 rounded-xl text-sm font-semibold outline-none" 
                                             value={mapping.amount} onChange={e => setMapping({...mapping, amount: e.target.value})}>
                                         {headers.map(h => <option key={h} value={h}>{h}</option>)}
                                     </select>
                                 </div>
                             </div>
-
-                            {/* Description */}
                             <div>
-                                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-2">Description</label>
-                                <select className="w-full p-3 bg-slate-50 border-0 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none" 
+                                <label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Description</label>
+                                <select className="w-full p-3 bg-slate-50 rounded-xl text-sm font-semibold outline-none" 
                                         value={mapping.description} onChange={e => setMapping({...mapping, description: e.target.value})}>
                                     {headers.map(h => <option key={h} value={h}>{h}</option>)}
                                 </select>
                             </div>
-
-                            {/* Account Section */}
                             <div className="pt-4 border-t border-slate-100">
-                                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-3">Account Name</label>
+                                <label className="text-[10px] font-black uppercase text-slate-400 block mb-3">Account Name</label>
                                 <div className="grid grid-cols-2 gap-3 mb-3">
                                     <button onClick={() => setAccountMode('manual')} 
-                                            className={`p-3 rounded-xl border-2 transition-all flex items-center justify-center gap-2 text-sm font-bold ${accountMode === 'manual' ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-slate-100 bg-slate-50 text-slate-400'}`}>
+                                            className={`p-3 rounded-xl border-2 text-sm font-bold ${accountMode === 'manual' ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-slate-100 bg-slate-50 text-slate-400'}`}>
                                         ✏️ Enter Name
                                     </button>
                                     <button onClick={() => setAccountMode('column')} 
-                                            className={`p-3 rounded-xl border-2 transition-all flex items-center justify-center gap-2 text-sm font-bold ${accountMode === 'column' ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-slate-100 bg-slate-50 text-slate-400'}`}>
+                                            className={`p-3 rounded-xl border-2 text-sm font-bold ${accountMode === 'column' ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-slate-100 bg-slate-50 text-slate-400'}`}>
                                         📋 From CSV
                                     </button>
                                 </div>
                                 {accountMode === 'manual' ? (
-                                    <input 
-                                        type="text"
-                                        placeholder="e.g., Chase Checking, Amex Gold..."
-                                        value={manualAccountName}
-                                        onChange={e => setManualAccountName(e.target.value)}
-                                        className="w-full p-3 bg-slate-50 border-0 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none"
-                                    />
+                                    <input type="text" placeholder="e.g., Chase Checking, Amex Gold..."
+                                        value={manualAccountName} onChange={e => setManualAccountName(e.target.value)}
+                                        className="w-full p-3 bg-slate-50 rounded-xl text-sm font-semibold outline-none" />
                                 ) : (
-                                    <select className="w-full p-3 bg-slate-50 border-0 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none" 
+                                    <select className="w-full p-3 bg-slate-50 rounded-xl text-sm font-semibold outline-none" 
                                             value={mapping.account} onChange={e => setMapping({...mapping, account: e.target.value})}>
                                         <option value="">-- Choose Column --</option>
                                         {headers.map(h => <option key={h} value={h}>{h}</option>)}
                                     </select>
                                 )}
                             </div>
-
-                            {/* Category Section */}
                             <div className="pt-4 border-t border-slate-100">
-                                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block mb-3">Category Engine</label>
+                                <label className="text-[10px] font-black uppercase text-slate-400 block mb-3">Category Engine</label>
                                 <div className="grid grid-cols-2 gap-3">
                                     <button onClick={() => setMode('column')} 
-                                            className={`p-4 rounded-xl border-2 transition-all flex flex-col items-center gap-2 text-sm font-bold ${mode === 'column' ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-slate-100 bg-slate-50 text-slate-400'}`}>
-                                        <span className="text-xl">📊</span> 
-                                        <span>From CSV</span>
-                                        <span className="text-[10px] opacity-60">+ Rule fallback</span>
+                                            className={`p-4 rounded-xl border-2 text-sm font-bold ${mode === 'column' ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-slate-100 bg-slate-50 text-slate-400'}`}>
+                                        📊 From CSV
                                     </button>
                                     <button onClick={() => setMode('auto')} 
-                                            className={`p-4 rounded-xl border-2 transition-all flex flex-col items-center gap-2 text-sm font-bold ${mode === 'auto' ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-slate-100 bg-slate-50 text-slate-400'}`}>
-                                        <span className="text-xl">🏷️</span> 
-                                        <span>Rule-Based</span>
-                                        <span className="text-[10px] opacity-60">Auto-detect</span>
+                                            className={`p-4 rounded-xl border-2 text-sm font-bold ${mode === 'auto' ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-slate-100 bg-slate-50 text-slate-400'}`}>
+                                        🏷️ Rule-Based
                                     </button>
                                 </div>
                                 {mode === 'column' && (
-                                    <div className="mt-4">
-                                        <select className="w-full p-3 bg-slate-50 border-0 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none" 
-                                                value={mapping.category} onChange={e => setMapping({...mapping, category: e.target.value})}>
-                                            <option value="">-- Choose Category Column --</option>
-                                            {headers.map(h => <option key={h} value={h}>{h}</option>)}
-                                        </select>
-                                    </div>
+                                    <select className="w-full p-3 bg-slate-50 rounded-xl text-sm font-semibold outline-none mt-3" 
+                                            value={mapping.category} onChange={e => setMapping({...mapping, category: e.target.value})}>
+                                        <option value="">-- Choose Category Column --</option>
+                                        {headers.map(h => <option key={h} value={h}>{h}</option>)}
+                                    </select>
                                 )}
                             </div>
                         </div>
-                        <div className="p-6 lg:p-8 bg-slate-50 flex gap-4">
-                            <button onClick={onClose} className="flex-1 py-3 font-bold text-slate-500 rounded-xl hover:bg-slate-200 transition-colors">Cancel</button>
-                            <button onClick={handleConfirm} className="flex-1 py-3 bg-indigo-600 text-white font-black rounded-xl hover:bg-indigo-700 transition-all">Import</button>
+                        <div className="p-6 bg-slate-50 flex gap-4">
+                            <button onClick={onClose} className="flex-1 py-3 font-bold text-slate-500 rounded-xl hover:bg-slate-200">Cancel</button>
+                            <button onClick={handleConfirm} className="flex-1 py-3 bg-indigo-600 text-white font-black rounded-xl hover:bg-indigo-700">Import</button>
                         </div>
                     </div>
                 </div>
             );
         };
 
-        const ErrorBanner = ({ errors, onDismiss }) => {
-            if (!errors || errors.length === 0) return null;
-            
-            return (
-                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-6">
-                    <div className="flex items-start gap-3">
-                        <span className="text-xl">⚠️</span>
-                        <div className="flex-1">
-                            <h3 className="font-bold text-amber-800 mb-1">Issues Detected</h3>
-                            {errors.map((err, i) => (
-                                <p key={i} className="text-amber-700 text-sm">{err}</p>
-                            ))}
-                        </div>
-                        <button onClick={onDismiss} className="text-amber-400 hover:text-amber-600 font-bold text-lg">×</button>
-                    </div>
-                </div>
-            );
-        };
-
+        // --- MAIN APP ---
         const App = () => {
             const [expenses, setExpenses] = useState([]);
             const [importData, setImportData] = useState(null);
-            const [loadErrors, setLoadErrors] = useState([]);
-            const [importErrors, setImportErrors] = useState([]);
             const [message, setMessage] = useState('');
+            const [activeTab, setActiveTab] = useState('dashboard');
 
             useEffect(() => {
-                const { expenses: loaded, errors } = loadExpenses();
+                const { expenses: loaded } = loadExpenses();
                 setExpenses(loaded);
-                setLoadErrors(errors);
             }, []);
 
             useEffect(() => {
-                try {
-                    localStorage.setItem('smart_expense_v5', JSON.stringify(expenses));
-                } catch (e) {
-                    console.error('Error saving to localStorage:', e);
-                }
+                localStorage.setItem('smart_expense_v6', JSON.stringify(expenses));
             }, [expenses]);
 
             const handleFileUpload = (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
-                
-                setImportErrors([]);
-                
                 Papa.parse(file, {
                     header: true,
                     skipEmptyLines: true,
                     complete: (results) => {
-                        if (results.errors.length > 0) {
-                            setImportErrors(results.errors.slice(0, 5).map(e => e.message));
-                        }
-                        if (results.data.length > 0) {
-                            setImportData(results);
-                        } else {
-                            setImportErrors(['No data found in file']);
-                        }
-                    },
-                    error: (error) => {
-                        setImportErrors([`Failed to parse CSV: ${error.message}`]);
+                        if (results.data.length > 0) setImportData(results);
                     }
                 });
                 e.target.value = '';
             };
 
             const processImport = (mapping, mode) => {
-                const errors = [];
-                let skippedCount = 0;
-
                 const newExpenses = importData.data.map((row, i) => {
-                    try {
-                        const desc = row[mapping.description] || 'No Description';
-                        const rawAmount = String(row[mapping.amount] || '0').replace(/[^\d.-]/g, '');
-                        const amount = Math.abs(parseFloat(rawAmount)) || 0;
-                        
-                        if (amount === 0) {
-                            skippedCount++;
-                            return null;
-                        }
+                    const desc = row[mapping.description] || 'No Description';
+                    const rawAmount = String(row[mapping.amount] || '0').replace(/[^\d.-]/g, '');
+                    const amount = Math.abs(parseFloat(rawAmount)) || 0;
+                    if (amount === 0) return null;
 
-                        let account = 'Imported';
-                        if (mapping.accountMode === 'manual' && mapping.manualAccountName) {
-                            account = mapping.manualAccountName.trim();
-                        } else if (mapping.accountMode === 'column' && mapping.account && row[mapping.account]) {
-                            account = row[mapping.account];
-                        }
+                    let account = mapping.accountMode === 'manual' && mapping.manualAccountName 
+                        ? mapping.manualAccountName.trim() 
+                        : (row[mapping.account] || 'Imported');
 
-                        let category = 'Uncategorized';
-                        let source = 'manual';
-
-                        if (mode === 'column' && mapping.category && row[mapping.category]) {
-                            category = fuzzyMatchCategory(row[mapping.category]);
-                            source = 'csv';
-                        }
-                        
-                        if (category === 'Uncategorized') {
-                            const matchedByRule = ruleMatch(desc);
-                            if (matchedByRule !== 'Uncategorized') {
-                                category = matchedByRule;
-                                source = 'auto-rule';
-                            }
-                        }
-
-                        return {
-                            id: `exp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${i}`,
-                            date: row[mapping.date] || new Date().toISOString().split('T')[0],
-                            description: desc,
-                            amount,
-                            category,
-                            account,
-                            source
-                        };
-                    } catch (err) {
-                        errors.push(`Row ${i + 1}: ${err.message}`);
-                        return null;
+                    let category = 'Uncategorized';
+                    if (mode === 'column' && mapping.category && row[mapping.category]) {
+                        category = fuzzyMatchCategory(row[mapping.category]);
                     }
+                    if (category === 'Uncategorized') {
+                        category = ruleMatch(desc);
+                    }
+
+                    return {
+                        id: `exp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${i}`,
+                        date: row[mapping.date] || new Date().toISOString().split('T')[0],
+                        description: desc,
+                        amount,
+                        category,
+                        account
+                    };
                 }).filter(e => e !== null);
-
-                if (skippedCount > 0) {
-                    errors.push(`${skippedCount} row(s) skipped (zero amount)`);
-                }
-
-                if (errors.length > 0) {
-                    setImportErrors(errors);
-                }
 
                 setExpenses([...expenses, ...newExpenses]);
                 setImportData(null);
-
-                const csvCount = newExpenses.filter(e => e.source === 'csv').length;
-                const ruleCount = newExpenses.filter(e => e.source === 'auto-rule').length;
-                setMessage(`✅ Imported ${newExpenses.length} transactions (${csvCount} from CSV, ${ruleCount} auto-categorized)`);
-                setTimeout(() => setMessage(''), 5000);
+                setMessage(`✅ Imported ${newExpenses.length} transactions`);
+                setTimeout(() => setMessage(''), 4000);
             };
 
             const updateCategory = (id, newCategory) => {
-                setExpenses(expenses.map(e => 
-                    e.id === id ? { ...e, category: newCategory, source: 'manual' } : e
-                ));
+                setExpenses(expenses.map(e => e.id === id ? { ...e, category: newCategory } : e));
             };
 
             const deleteExpense = (id) => {
@@ -552,118 +648,158 @@
 
             const exportCSV = () => {
                 const csv = ['date,amount,category,account,description', 
-                    ...expenses.map(e => 
-                        `${e.date},${e.amount},${e.category},${e.account},"${(e.description || '').replace(/"/g, '""')}"`
-                    )
+                    ...expenses.map(e => `${e.date},${e.amount},${e.category},${e.account},"${(e.description || '').replace(/"/g, '""')}"`)
                 ].join('\n');
                 const blob = new Blob([csv], { type: 'text/csv' });
-                const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
-                a.href = url;
+                a.href = URL.createObjectURL(blob);
                 a.download = 'expenses.csv';
                 a.click();
-                URL.revokeObjectURL(url);
             };
 
             return (
                 <div className="min-h-screen pb-20">
-                    <header className="bg-white/90 backdrop-blur-lg border-b border-slate-100 h-16 lg:h-20 flex items-center px-4 lg:px-10 justify-between sticky top-0 z-40">
-                        <div className="flex items-center gap-2 lg:gap-3">
-                            <div className="w-8 h-8 lg:w-10 lg:h-10 bg-gradient-to-br from-indigo-500 to-indigo-700 rounded-xl lg:rounded-2xl flex items-center justify-center text-white font-black shadow-lg shadow-indigo-200 text-sm lg:text-base">S</div>
-                            <h1 className="text-lg lg:text-xl font-black text-slate-800">Smart<span className="text-indigo-600">Expense</span></h1>
+                    {/* Header */}
+                    <header className="bg-white/90 backdrop-blur-lg border-b border-slate-100 h-16 flex items-center px-4 lg:px-8 justify-between sticky top-0 z-40">
+                        <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-indigo-700 rounded-xl flex items-center justify-center text-white font-black shadow-lg text-sm">S</div>
+                            <h1 className="text-lg font-black text-slate-800">Smart<span className="text-indigo-600">Expense</span></h1>
                         </div>
-                        <div className="flex gap-2 lg:gap-3">
-                            <button onClick={exportCSV} className="bg-slate-100 text-slate-600 px-3 lg:px-5 py-2 lg:py-3 rounded-xl font-bold text-xs lg:text-sm hover:bg-slate-200 transition-all">
+                        <div className="flex gap-2">
+                            <button onClick={exportCSV} className="bg-slate-100 text-slate-600 px-3 py-2 rounded-xl font-bold text-xs hover:bg-slate-200">
                                 📥 Export
                             </button>
-                            <label className="bg-indigo-600 text-white px-3 lg:px-6 py-2 lg:py-3 rounded-xl font-black text-xs lg:text-sm cursor-pointer hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200">
+                            <label className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-black text-xs cursor-pointer hover:bg-indigo-700 shadow-lg">
                                 📤 Import
                                 <input type="file" className="hidden" accept=".csv" onChange={handleFileUpload} />
                             </label>
                         </div>
                     </header>
 
-                    <main className="max-w-6xl mx-auto px-4 lg:px-6 mt-6 lg:mt-12 space-y-6 lg:space-y-10">
-                        <ErrorBanner errors={loadErrors} onDismiss={() => setLoadErrors([])} />
-                        <ErrorBanner errors={importErrors} onDismiss={() => setImportErrors([])} />
+                    {/* Tabs */}
+                    <div className="max-w-6xl mx-auto px-4 mt-4">
+                        <div className="flex gap-2 bg-slate-100 p-1 rounded-xl w-fit">
+                            <button onClick={() => setActiveTab('dashboard')} 
+                                className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'dashboard' ? 'bg-white text-indigo-600 shadow' : 'text-slate-500'}`}>
+                                📊 Dashboard
+                            </button>
+                            <button onClick={() => setActiveTab('transactions')} 
+                                className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'transactions' ? 'bg-white text-indigo-600 shadow' : 'text-slate-500'}`}>
+                                📋 Transactions
+                            </button>
+                        </div>
+                    </div>
 
+                    <main className="max-w-6xl mx-auto px-4 mt-6 space-y-6">
                         {message && (
                             <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-green-700 font-medium text-sm">
                                 {message}
                             </div>
                         )}
 
-                        <Dashboard expenses={expenses} />
-                        
-                        <div className="bg-white rounded-2xl lg:rounded-3xl border border-slate-100 shadow-xl overflow-hidden">
-                            <div className="p-4 lg:p-6 border-b border-slate-50 flex justify-between items-center">
-                                <h2 className="font-black text-slate-800">Transactions</h2>
-                                <button onClick={() => { if(confirm("Delete all?")) setExpenses([]); }} 
-                                        className="text-[10px] lg:text-xs font-bold text-red-500 hover:text-red-700 uppercase tracking-wider bg-red-50 px-3 py-1.5 rounded-lg">
-                                    Clear All
-                                </button>
-                            </div>
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-left text-sm">
-                                    <thead className="bg-slate-50 text-slate-400 uppercase text-[10px] font-bold tracking-wider border-b border-slate-100">
-                                        <tr>
-                                            <th className="p-3 lg:p-4">Date</th>
-                                            <th className="p-3 lg:p-4">Description</th>
-                                            <th className="p-3 lg:p-4">Account</th>
-                                            <th className="p-3 lg:p-4">Category</th>
-                                            <th className="p-3 lg:p-4 text-right">Amount</th>
-                                            <th className="p-3 lg:p-4 w-10"></th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-50">
-                                        {expenses.length === 0 ? (
+                        {activeTab === 'dashboard' && (
+                            <>
+                                <SummaryStats expenses={expenses} />
+                                
+                                {/* Charts Grid */}
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                    {/* 1. Pareto Chart */}
+                                    <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-lg">
+                                        <h3 className="text-sm font-black text-slate-800 mb-4">📊 Where Does It All Go?</h3>
+                                        <div className="h-64">
+                                            <ParetoChart expenses={expenses} />
+                                        </div>
+                                    </div>
+
+                                    {/* 2. Monthly Trend */}
+                                    <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-lg">
+                                        <h3 className="text-sm font-black text-slate-800 mb-4">📈 Am I Getting Worse?</h3>
+                                        <div className="h-64">
+                                            <MonthlyTrendChart expenses={expenses} />
+                                        </div>
+                                    </div>
+
+                                    {/* 3. Lifestyle Creep */}
+                                    <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-lg">
+                                        <h3 className="text-sm font-black text-slate-800 mb-4">🏠 Lifestyle Creep</h3>
+                                        <div className="h-64">
+                                            <LifestyleCreepChart expenses={expenses} />
+                                        </div>
+                                    </div>
+
+                                    {/* 4. Scatter Plot */}
+                                    <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-lg">
+                                        <h3 className="text-sm font-black text-slate-800 mb-4">💸 Death by a Thousand Cuts</h3>
+                                        <div className="h-64">
+                                            <ScatterPlot expenses={expenses} />
+                                        </div>
+                                    </div>
+                                </div>
+                            </>
+                        )}
+
+                        {activeTab === 'transactions' && (
+                            <div className="bg-white rounded-2xl border border-slate-100 shadow-lg overflow-hidden">
+                                <div className="p-4 border-b border-slate-50 flex justify-between items-center">
+                                    <h2 className="font-black text-slate-800">Transactions</h2>
+                                    <button onClick={() => { if(confirm("Delete all?")) setExpenses([]); }} 
+                                            className="text-xs font-bold text-red-500 bg-red-50 px-3 py-1.5 rounded-lg">
+                                        Clear All
+                                    </button>
+                                </div>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-left text-sm">
+                                        <thead className="bg-slate-50 text-slate-400 uppercase text-[10px] font-bold tracking-wider">
                                             <tr>
-                                                <td colSpan={6} className="p-12 lg:p-20 text-center">
-                                                    <div className="text-4xl mb-3">📁</div>
-                                                    <p className="font-bold text-slate-700">No Transactions</p>
-                                                    <p className="text-slate-400 text-sm">Import a CSV to get started</p>
-                                                </td>
+                                                <th className="p-3">Date</th>
+                                                <th className="p-3">Description</th>
+                                                <th className="p-3">Account</th>
+                                                <th className="p-3">Category</th>
+                                                <th className="p-3 text-right">Amount</th>
+                                                <th className="p-3 w-10"></th>
                                             </tr>
-                                        ) : (
-                                            [...expenses].reverse().map(e => (
-                                                <tr key={e.id} className="hover:bg-slate-50 group">
-                                                    <td className="p-3 lg:p-4 text-slate-500 font-medium whitespace-nowrap text-xs lg:text-sm">{e.date}</td>
-                                                    <td className="p-3 lg:p-4 font-semibold text-slate-700 max-w-[150px] lg:max-w-[250px]">
-                                                        <div className="truncate text-xs lg:text-sm" title={e.description}>{e.description}</div>
-                                                    </td>
-                                                    <td className="p-3 lg:p-4 text-slate-500 text-xs lg:text-sm whitespace-nowrap">{e.account}</td>
-                                                    <td className="p-3 lg:p-4">
-                                                        <select 
-                                                            value={e.category}
-                                                            onChange={(ev) => updateCategory(e.id, ev.target.value)}
-                                                            className={`px-2 lg:px-3 py-1 rounded-full text-[10px] lg:text-xs font-bold border-0 cursor-pointer outline-none ${
-                                                                e.category === 'Uncategorized' 
-                                                                    ? 'bg-amber-100 text-amber-700' 
-                                                                    : 'bg-indigo-100 text-indigo-700'
-                                                            }`}
-                                                        >
-                                                            <option value="Uncategorized">Uncategorized</option>
-                                                            {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                                                        </select>
-                                                    </td>
-                                                    <td className="p-3 lg:p-4 text-right font-bold text-slate-900 whitespace-nowrap text-sm lg:text-base">
-                                                        ${safeAmount(e.amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                                    </td>
-                                                    <td className="p-3 lg:p-4">
-                                                        <button 
-                                                            onClick={() => deleteExpense(e.id)}
-                                                            className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-all text-sm"
-                                                        >
-                                                            🗑️
-                                                        </button>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-50">
+                                            {expenses.length === 0 ? (
+                                                <tr>
+                                                    <td colSpan={6} className="p-12 text-center text-slate-400">
+                                                        No transactions yet. Import a CSV to get started.
                                                     </td>
                                                 </tr>
-                                            ))
-                                        )}
-                                    </tbody>
-                                </table>
+                                            ) : (
+                                                [...expenses].reverse().map(e => (
+                                                    <tr key={e.id} className="hover:bg-slate-50 group">
+                                                        <td className="p-3 text-slate-500 text-xs">{e.date}</td>
+                                                        <td className="p-3 font-semibold text-slate-700 max-w-[200px]">
+                                                            <div className="truncate text-xs" title={e.description}>{e.description}</div>
+                                                        </td>
+                                                        <td className="p-3 text-slate-500 text-xs">{e.account}</td>
+                                                        <td className="p-3">
+                                                            <select value={e.category} onChange={(ev) => updateCategory(e.id, ev.target.value)}
+                                                                className={`px-2 py-1 rounded-full text-[10px] font-bold border-0 cursor-pointer outline-none ${
+                                                                    e.category === 'Uncategorized' ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700'
+                                                                }`}>
+                                                                <option value="Uncategorized">Uncategorized</option>
+                                                                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                                                            </select>
+                                                        </td>
+                                                        <td className="p-3 text-right font-bold text-slate-900 text-sm">
+                                                            ${safeAmount(e.amount).toFixed(2)}
+                                                        </td>
+                                                        <td className="p-3">
+                                                            <button onClick={() => deleteExpense(e.id)}
+                                                                className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 text-sm">
+                                                                🗑️
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
-                        </div>
+                        )}
                     </main>
                     
                     {importData && (
