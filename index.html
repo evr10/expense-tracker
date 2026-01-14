@@ -66,12 +66,27 @@ const fuzzy = v => {
     const l = v.toLowerCase();
     const e = CATEGORIES.find(c => c.toLowerCase() === l);
     if (e) return e;
-    for (const p of l.split('-')) {
-        if (p.includes('restaurant')||p.includes('food')) return 'Dining';
-        if (p.includes('taxi')||p.includes('transport')) return 'Transportation';
-        if (p.includes('airline')||p.includes('travel')) return 'Travel';
-        const m = CATEGORIES.find(c => p.includes(c.toLowerCase()));
+    
+    // Check all parts split by common separators
+    for (const p of l.split(/[-&,]/)) {
+        const part = p.trim();
+        if (!part) continue;
+        
+        // Direct category match
+        const m = CATEGORIES.find(c => part.includes(c.toLowerCase()) || c.toLowerCase().includes(part));
         if (m) return m;
+        
+        // Keyword mappings
+        if (part.includes('restaurant') || part.includes('food') || part.includes('dining')) return 'Dining';
+        if (part.includes('taxi') || part.includes('transport') || part.includes('uber') || part.includes('lyft') || part.includes('parking')) return 'Transportation';
+        if (part.includes('airline') || part.includes('travel') || part.includes('hotel') || part.includes('lodging') || part.includes('flight')) return 'Travel';
+        if (part.includes('pharmac') || part.includes('medical') || part.includes('health') || part.includes('doctor') || part.includes('hospital')) return 'Healthcare';
+        if (part.includes('grocer') || part.includes('supermarket') || part.includes('food store')) return 'Groceries';
+        if (part.includes('gas') || part.includes('fuel') || part.includes('petrol')) return 'Transportation';
+        if (part.includes('entertain') || part.includes('movie') || part.includes('theatre') || part.includes('theater')) return 'Entertainment';
+        if (part.includes('merchan') || part.includes('retail') || part.includes('store') || part.includes('shop')) return 'Shopping';
+        if (part.includes('util') || part.includes('electric') || part.includes('water') || part.includes('internet') || part.includes('phone')) return 'Utilities';
+        if (part.includes('subscription') || part.includes('member')) return 'Subscriptions';
     }
     return 'Uncategorized';
 };
