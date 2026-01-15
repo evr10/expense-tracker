@@ -1976,12 +1976,18 @@ const IncomeFlowDashboard = ({ expenses, merchantRules }) => {
     
     // Income categories to look for
     const INCOME_CATEGORIES = ['Income', 'TaxIncome'];
-    const INCOME_KEYWORDS = {
-        'Salary': ['payroll', 'salary', 'direct deposit', 'paycheck', 'employer'],
-        'Interest & Dividends': ['interest', 'dividend', 'yield', 'apy'],
-        'Tax Refunds': ['irs', 'treasury', 'tax refund', 'state tax', 'federal tax'],
-        'Wire/Transfers In': ['wire in', 'wire deposit', 'incoming wire', 'ach credit']
-    };
+    
+    // Income source keywords - checked in ORDER (first match wins)
+    // More specific sources should come before generic ones
+    const INCOME_KEYWORDS = [
+        { name: 'Microsoft', keywords: ['microsoft', 'msft'] },
+        { name: 'Salary/Payroll', keywords: ['payroll', 'salary', 'direct deposit', 'paycheck', 'employer', 'wage'] },
+        { name: 'Interest & Dividends', keywords: ['interest', 'dividend', 'yield', 'apy', 'capital gain'] },
+        { name: 'Tax Refunds', keywords: ['irs', 'treasury', 'tax refund', 'state tax', 'federal tax'] },
+        { name: 'Wire/Transfers In', keywords: ['wire in', 'wire deposit', 'incoming wire', 'ach credit', 'external deposit'] },
+        { name: 'Reimbursements', keywords: ['reimburse', 'refund', 'rebate', 'cashback', 'cash back'] },
+        { name: 'Gifts/Other', keywords: ['gift', 'bonus', 'award'] }
+    ];
     
     // Expense categories to exclude
     const EXCLUDED_FROM_EXPENSES = ['Income', 'TaxIncome', 'Transfer', 'Excluded', 'Venmo'];
@@ -2002,11 +2008,11 @@ const IncomeFlowDashboard = ({ expenses, merchantRules }) => {
             const descLower = (e.description || '').toLowerCase();
             
             if (INCOME_CATEGORIES.includes(category)) {
-                // Determine income source type
+                // Determine income source type - check in order, first match wins
                 let sourceType = 'Other Income';
-                for (const [source, keywords] of Object.entries(INCOME_KEYWORDS)) {
-                    if (keywords.some(kw => descLower.includes(kw))) {
-                        sourceType = source;
+                for (const source of INCOME_KEYWORDS) {
+                    if (source.keywords.some(kw => descLower.includes(kw))) {
+                        sourceType = source.name;
                         break;
                     }
                 }
@@ -2026,11 +2032,17 @@ const IncomeFlowDashboard = ({ expenses, merchantRules }) => {
         const nodeIndices = {};
         let nodeIndex = 0;
         
-        // Add income source nodes (left side)
+        // Add income source nodes (left side) - sorted by amount
         const incomeSources = Object.keys(incomeBySource).sort((a, b) => incomeBySource[b] - incomeBySource[a]);
         incomeSources.forEach(source => {
             nodeIndices[source] = nodeIndex++;
-            nodes.push({ name: source, color: '#22c55e' }); // Green for income
+            // Use different green shades for different income sources
+            const color = source === 'Microsoft' ? '#0078d4' : // Microsoft blue
+                         source === 'Salary/Payroll' ? '#22c55e' : // Green
+                         source === 'Tax Refunds' ? '#10b981' : // Teal
+                         source === 'Interest & Dividends' ? '#059669' : // Emerald
+                         '#16a34a'; // Default green
+            nodes.push({ name: source, color });
         });
         
         // Add "Budget" middle node
@@ -2038,31 +2050,43 @@ const IncomeFlowDashboard = ({ expenses, merchantRules }) => {
         nodes.push({ name: 'Total Budget', color: '#6366f1' }); // Indigo for budget
         nodeIndices['Budget'] = budgetIndex;
         
-        // Add expense category nodes (right side)
+        // IMPORTANT: Add Savings FIRST (before expenses) so it appears at top of right column
+        if (savings > 0) {
+            nodeIndices['Savings'] = nodeIndex++;
+            nodes.push({ name: '💰 SAVINGS', color: '#3b82f6' }); // Blue for savings - prominent
+        }
+        
+        // Add expense category nodes (right side) - sorted by amount
         const expenseCategories = Object.keys(expenseByCategory).sort((a, b) => expenseByCategory[b] - expenseByCategory[a]);
         expenseCategories.forEach(cat => {
             nodeIndices[cat] = nodeIndex++;
             nodes.push({ name: cat, color: CAT_COLORS[cat] || '#ef4444' });
         });
         
-        // Add savings node if positive
-        if (savings > 0) {
-            nodeIndices['Savings'] = nodeIndex++;
-            nodes.push({ name: 'Savings / Unallocated', color: '#3b82f6' }); // Blue for savings
-        }
-        
         // Build links
         const links = [];
         
-        // Income sources -> Budget
+        // Income sources -> Budget (use source-specific colors)
         incomeSources.forEach(source => {
+            const sourceColor = source === 'Microsoft' ? 'rgba(0, 120, 212, 0.5)' : // Microsoft blue
+                               'rgba(34, 197, 94, 0.4)'; // Default green
             links.push({
                 source: nodeIndices[source],
                 target: budgetIndex,
                 value: incomeBySource[source],
-                color: 'rgba(34, 197, 94, 0.4)' // Green with transparency
+                color: sourceColor
             });
         });
+        
+        // Budget -> Savings FIRST (so it renders at top)
+        if (savings > 0) {
+            links.push({
+                source: budgetIndex,
+                target: nodeIndices['Savings'],
+                value: savings,
+                color: 'rgba(59, 130, 246, 0.6)' // Blue with more opacity - more prominent
+            });
+        }
         
         // Budget -> Expense categories
         expenseCategories.forEach(cat => {
@@ -2073,16 +2097,6 @@ const IncomeFlowDashboard = ({ expenses, merchantRules }) => {
                 color: `${CAT_COLORS[cat] || '#ef4444'}66` // Category color with transparency
             });
         });
-        
-        // Budget -> Savings (if positive)
-        if (savings > 0) {
-            links.push({
-                source: budgetIndex,
-                target: nodeIndices['Savings'],
-                value: savings,
-                color: 'rgba(59, 130, 246, 0.4)' // Blue with transparency
-            });
-        }
         
         return {
             nodes,
@@ -2234,20 +2248,29 @@ const IncomeFlowDashboard = ({ expenses, merchantRules }) => {
                             <div className="space-y-3">
                                 {Object.entries(sankeyData.incomeBySource)
                                     .sort((a, b) => b[1] - a[1])
-                                    .map(([source, amount]) => (
-                                        <div key={source} className="flex items-center gap-3">
-                                            <div className="w-3 h-3 rounded-full bg-green-500" />
-                                            <div className="flex-1">
-                                                <div className="flex justify-between items-center">
-                                                    <span className="font-semibold text-sm text-slate-700">{source}</span>
-                                                    <span className="font-bold text-green-600">${amount.toLocaleString(undefined, {maximumFractionDigits: 0})}</span>
-                                                </div>
-                                                <div className="h-1.5 bg-slate-100 rounded-full mt-1 overflow-hidden">
-                                                    <div className="h-full bg-green-500 rounded-full" style={{ width: `${(amount / sankeyData.totalIncome) * 100}%` }} />
+                                    .map(([source, amount]) => {
+                                        const color = source === 'Microsoft' ? '#0078d4' : 
+                                                     source === 'Salary/Payroll' ? '#22c55e' : 
+                                                     source === 'Tax Refunds' ? '#10b981' : 
+                                                     source === 'Interest & Dividends' ? '#059669' : 
+                                                     '#16a34a';
+                                        return (
+                                            <div key={source} className="flex items-center gap-3">
+                                                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
+                                                <div className="flex-1">
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="font-semibold text-sm text-slate-700">
+                                                            {source === 'Microsoft' && '🏢 '}{source}
+                                                        </span>
+                                                        <span className="font-bold" style={{ color }}>${amount.toLocaleString(undefined, {maximumFractionDigits: 0})}</span>
+                                                    </div>
+                                                    <div className="h-1.5 bg-slate-100 rounded-full mt-1 overflow-hidden">
+                                                        <div className="h-full rounded-full" style={{ backgroundColor: color, width: `${(amount / sankeyData.totalIncome) * 100}%` }} />
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                             </div>
                         )}
                     </div>
