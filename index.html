@@ -10,6 +10,7 @@
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <style>
         body { font-family: 'Inter', sans-serif; }
         ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -38,10 +39,10 @@ class ErrorBoundary extends Component {
 }
 
 // ============== CONFIGURATION ==============
-const CATEGORIES = ['Groceries','Rent','Daycare','Utilities','Transportation','Entertainment','Healthcare','Shopping','Dining','Travel','Subscriptions','Stylecom','Venmo','Income','TaxIncome','Transfer','Other','Excluded'];
+const CATEGORIES = ['Groceries','Rent','Daycare','Household','Transportation','Entertainment','Health & Wellness','Shopping','Dining','Travel','Subscriptions','Stylecom','Venmo','Income','TaxIncome','Transfer','Other','Excluded'];
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const YEAR_COLORS = { 2021:'#94a3b8', 2022:'#f59e0b', 2023:'#3b82f6', 2024:'#ef4444', 2025:'#10b981', 2026:'#8b5cf6' };
-const CAT_COLORS = { Groceries:'#22c55e', Rent:'#f59e0b', Daycare:'#a855f7', Utilities:'#3b82f6', Transportation:'#8b5cf6', Entertainment:'#ec4899', Healthcare:'#14b8a6', Shopping:'#f43f5e', Dining:'#f97316', Travel:'#06b6d4', Subscriptions:'#6366f1', Stylecom:'#db2777', Venmo:'#008CFF', Other:'#94a3b8', Uncategorized:'#fbbf24', Excluded:'#cbd5e1', Income:'#10b981', TaxIncome:'#059669', Transfer:'#64748b' };
+const CAT_COLORS = { Groceries:'#22c55e', Rent:'#f59e0b', Daycare:'#a855f7', Household:'#3b82f6', Transportation:'#8b5cf6', Entertainment:'#ec4899', 'Health & Wellness':'#14b8a6', Shopping:'#f43f5e', Dining:'#f97316', Travel:'#06b6d4', Subscriptions:'#6366f1', Stylecom:'#db2777', Venmo:'#008CFF', Other:'#94a3b8', Uncategorized:'#fbbf24', Excluded:'#cbd5e1', Income:'#10b981', TaxIncome:'#059669', Transfer:'#64748b' };
 
 // HIGH PRIORITY specific expense rules (checked FIRST in autoRuleMatch)
 const PRIORITY_RULES = {
@@ -58,10 +59,12 @@ const AUTO_RULES = {
     Groceries:['walmart','kroger','safeway','trader joe','whole foods','aldi','costco','publix','grocery','supermarket','wegmans','heb','albertsons','sprouts'],
     Dining:['sweetgreen','mcdonald','starbucks','chipotle','subway','restaurant','cafe','coffee','doordash','uber eats','pizza','grubhub','seamless','postmates'],
     Transportation:['uber','lyft','taxi','shell','exxon','chevron','gas','fuel','parking','metro','transit','mobil','bp','sunoco'],
-    Shopping:['amazon','ebay','best buy','apple store','home depot','lowes','ikea','nike','nordstrom','target','macys','tjmaxx','marshalls'],
+    Shopping:['amazon','ebay','best buy','apple store','ikea','nike','nordstrom','target','macys','tjmaxx','marshalls','kohls','gap','old navy','zara','h&m','uniqlo','sephora','ulta','bath body'],
     Entertainment:['netflix','hulu','disney','hbo','spotify','movie','cinema','xbox','steam','playstation','nintendo','amc'],
-    Utilities:['electric','power','water bill','comcast','xfinity','spectrum','internet','verizon','at&t','t-mobile','con ed','pge','national grid'],
-    Healthcare:['pharmacy','cvs','walgreens','doctor','hospital','medical','dentist','optum','cigna','aetna','united health'],
+    // Household - utilities, home services, maintenance, cleaning, home supplies
+    Household:['electric','power','water bill','comcast','xfinity','spectrum','internet','verizon','at&t','t-mobile','con ed','pge','national grid','cable','phone bill','trash','waste','sewer','gas bill','heating','cooling','hvac','plumber','plumbing','electrician','handyman','lawn','landscaping','pest control','cleaning','maid','housekeeping','home depot','lowes','ace hardware','menards','bed bath','container store','pottery barn','crate barrel','williams sonoma','wayfair','overstock','furniture','mattress','appliance','repair','maintenance','security','adt','ring','nest','thermostat'],
+    // Health & Wellness - medical, pharmacy, fitness, mental health, personal care
+    'Health & Wellness':['pharmacy','cvs','walgreens','doctor','hospital','medical','dentist','optum','cigna','aetna','united health','clinic','urgent care','emergency','lab','blood','xray','mri','therapy','therapist','counseling','psychiatrist','psychologist','mental health','gym','fitness','yoga','pilates','peloton','crossfit','equinox','planet fitness','orange theory','soulcycle','massage','spa','chiropractor','physical therapy','vision','eye','optical','glasses','contacts','lenscrafters','warby parker','vitamins','supplements','gnc','vitamin shoppe'],
     Travel:['airline','delta','united','southwest','flight','airbnb','hotel','marriott','hilton','hyatt','expedia','booking.com'],
     Subscriptions:['subscription','membership','adobe','dropbox','linkedin','patreon','github','notion'],
     // Venmo - special category, NOT excluded (allows netting)
@@ -1958,6 +1961,330 @@ const StylecomReimbursement = ({ expenses, merchantRules, paidIds, onTogglePaid 
     );
 };
 
+// ============== INCOME VS SPEND FLOW (SANKEY) ==============
+const IncomeFlowDashboard = ({ expenses, merchantRules }) => {
+    const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+    const chartRef = React.useRef(null);
+    
+    // Income categories to look for
+    const INCOME_CATEGORIES = ['Income', 'TaxIncome'];
+    const INCOME_KEYWORDS = {
+        'Salary': ['payroll', 'salary', 'direct deposit', 'paycheck', 'employer'],
+        'Interest & Dividends': ['interest', 'dividend', 'yield', 'apy'],
+        'Tax Refunds': ['irs', 'treasury', 'tax refund', 'state tax', 'federal tax'],
+        'Wire/Transfers In': ['wire in', 'wire deposit', 'incoming wire', 'ach credit']
+    };
+    
+    // Expense categories to exclude
+    const EXCLUDED_FROM_EXPENSES = ['Income', 'TaxIncome', 'Transfer', 'Excluded', 'Venmo'];
+    
+    // Prepare data for Sankey
+    const sankeyData = useMemo(() => {
+        // Filter by year
+        const yearExpenses = expenses.filter(e => getY(e.date) === selectedYear);
+        
+        // Separate income and expenses
+        const incomeBySource = {};
+        const expenseByCategory = {};
+        
+        yearExpenses.forEach(e => {
+            const effective = getEffectiveCategory(e, merchantRules);
+            const category = effective.category;
+            const amount = Math.abs(safe(e.amount));
+            const descLower = (e.description || '').toLowerCase();
+            
+            if (INCOME_CATEGORIES.includes(category)) {
+                // Determine income source type
+                let sourceType = 'Other Income';
+                for (const [source, keywords] of Object.entries(INCOME_KEYWORDS)) {
+                    if (keywords.some(kw => descLower.includes(kw))) {
+                        sourceType = source;
+                        break;
+                    }
+                }
+                incomeBySource[sourceType] = (incomeBySource[sourceType] || 0) + amount;
+            } else if (!EXCLUDED_FROM_EXPENSES.includes(category) && category !== 'Uncategorized') {
+                expenseByCategory[category] = (expenseByCategory[category] || 0) + amount;
+            }
+        });
+        
+        // Calculate totals
+        const totalIncome = Object.values(incomeBySource).reduce((a, b) => a + b, 0);
+        const totalExpenses = Object.values(expenseByCategory).reduce((a, b) => a + b, 0);
+        const savings = totalIncome - totalExpenses;
+        
+        // Build nodes and links
+        const nodes = [];
+        const nodeIndices = {};
+        let nodeIndex = 0;
+        
+        // Add income source nodes (left side)
+        const incomeSources = Object.keys(incomeBySource).sort((a, b) => incomeBySource[b] - incomeBySource[a]);
+        incomeSources.forEach(source => {
+            nodeIndices[source] = nodeIndex++;
+            nodes.push({ name: source, color: '#22c55e' }); // Green for income
+        });
+        
+        // Add "Budget" middle node
+        const budgetIndex = nodeIndex++;
+        nodes.push({ name: 'Total Budget', color: '#6366f1' }); // Indigo for budget
+        nodeIndices['Budget'] = budgetIndex;
+        
+        // Add expense category nodes (right side)
+        const expenseCategories = Object.keys(expenseByCategory).sort((a, b) => expenseByCategory[b] - expenseByCategory[a]);
+        expenseCategories.forEach(cat => {
+            nodeIndices[cat] = nodeIndex++;
+            nodes.push({ name: cat, color: CAT_COLORS[cat] || '#ef4444' });
+        });
+        
+        // Add savings node if positive
+        if (savings > 0) {
+            nodeIndices['Savings'] = nodeIndex++;
+            nodes.push({ name: 'Savings / Unallocated', color: '#3b82f6' }); // Blue for savings
+        }
+        
+        // Build links
+        const links = [];
+        
+        // Income sources -> Budget
+        incomeSources.forEach(source => {
+            links.push({
+                source: nodeIndices[source],
+                target: budgetIndex,
+                value: incomeBySource[source],
+                color: 'rgba(34, 197, 94, 0.4)' // Green with transparency
+            });
+        });
+        
+        // Budget -> Expense categories
+        expenseCategories.forEach(cat => {
+            links.push({
+                source: budgetIndex,
+                target: nodeIndices[cat],
+                value: expenseByCategory[cat],
+                color: `${CAT_COLORS[cat] || '#ef4444'}66` // Category color with transparency
+            });
+        });
+        
+        // Budget -> Savings (if positive)
+        if (savings > 0) {
+            links.push({
+                source: budgetIndex,
+                target: nodeIndices['Savings'],
+                value: savings,
+                color: 'rgba(59, 130, 246, 0.4)' // Blue with transparency
+            });
+        }
+        
+        return {
+            nodes,
+            links,
+            totalIncome,
+            totalExpenses,
+            savings,
+            incomeBySource,
+            expenseByCategory
+        };
+    }, [expenses, merchantRules, selectedYear]);
+    
+    // Render Plotly chart
+    useEffect(() => {
+        if (!chartRef.current || sankeyData.nodes.length === 0) return;
+        
+        const data = [{
+            type: 'sankey',
+            orientation: 'h',
+            node: {
+                pad: 20,
+                thickness: 30,
+                line: { color: 'white', width: 2 },
+                label: sankeyData.nodes.map(n => n.name),
+                color: sankeyData.nodes.map(n => n.color),
+                hovertemplate: '%{label}<br>$%{value:,.0f}<extra></extra>'
+            },
+            link: {
+                source: sankeyData.links.map(l => l.source),
+                target: sankeyData.links.map(l => l.target),
+                value: sankeyData.links.map(l => l.value),
+                color: sankeyData.links.map(l => l.color),
+                hovertemplate: '%{source.label} → %{target.label}<br>$%{value:,.0f}<extra></extra>'
+            }
+        }];
+        
+        const layout = {
+            font: { family: 'Inter, sans-serif', size: 12 },
+            margin: { l: 20, r: 20, t: 20, b: 20 },
+            paper_bgcolor: 'transparent',
+            plot_bgcolor: 'transparent'
+        };
+        
+        const config = {
+            responsive: true,
+            displayModeBar: false
+        };
+        
+        Plotly.newPlot(chartRef.current, data, layout, config);
+        
+        return () => {
+            if (chartRef.current) {
+                Plotly.purge(chartRef.current);
+            }
+        };
+    }, [sankeyData]);
+    
+    // Get available years
+    const availableYears = useMemo(() => {
+        const years = new Set();
+        expenses.forEach(e => {
+            const year = getY(e.date);
+            if (year >= MIN_YEAR) years.add(year);
+        });
+        return [...years].sort((a, b) => b - a);
+    }, [expenses]);
+    
+    const hasData = sankeyData.totalIncome > 0 || sankeyData.totalExpenses > 0;
+    
+    return (
+        <div className="space-y-6">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white p-6 rounded-2xl flex justify-between items-center">
+                <div>
+                    <h2 className="text-xl font-black">💰 Income vs Spend Flow</h2>
+                    <p className="text-emerald-100 text-sm mt-1">Visualize how your money flows from income to expenses</p>
+                </div>
+                <select 
+                    value={selectedYear} 
+                    onChange={e => setSelectedYear(Number(e.target.value))}
+                    className="bg-white/20 text-white border border-white/30 rounded-xl px-4 py-2 font-bold outline-none">
+                    {availableYears.map(y => <option key={y} value={y} className="text-slate-800">{y}</option>)}
+                </select>
+            </div>
+            
+            {/* KPI Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="bg-white p-5 rounded-2xl border border-green-200 shadow-lg">
+                    <h3 className="text-[10px] font-bold text-green-600 uppercase">Total Income</h3>
+                    <p className="text-2xl font-black text-green-600">${sankeyData.totalIncome.toLocaleString(undefined, {maximumFractionDigits: 0})}</p>
+                    <p className="text-xs text-green-500 mt-1">{Object.keys(sankeyData.incomeBySource).length} sources</p>
+                </div>
+                <div className="bg-white p-5 rounded-2xl border border-red-200 shadow-lg">
+                    <h3 className="text-[10px] font-bold text-red-600 uppercase">Total Expenses</h3>
+                    <p className="text-2xl font-black text-red-600">${sankeyData.totalExpenses.toLocaleString(undefined, {maximumFractionDigits: 0})}</p>
+                    <p className="text-xs text-red-500 mt-1">{Object.keys(sankeyData.expenseByCategory).length} categories</p>
+                </div>
+                <div className={`bg-white p-5 rounded-2xl border shadow-lg ${sankeyData.savings >= 0 ? 'border-blue-200' : 'border-amber-200'}`}>
+                    <h3 className={`text-[10px] font-bold uppercase ${sankeyData.savings >= 0 ? 'text-blue-600' : 'text-amber-600'}`}>
+                        {sankeyData.savings >= 0 ? 'Savings' : 'Deficit'}
+                    </h3>
+                    <p className={`text-2xl font-black ${sankeyData.savings >= 0 ? 'text-blue-600' : 'text-amber-600'}`}>
+                        ${Math.abs(sankeyData.savings).toLocaleString(undefined, {maximumFractionDigits: 0})}
+                    </p>
+                    <p className={`text-xs mt-1 ${sankeyData.savings >= 0 ? 'text-blue-500' : 'text-amber-500'}`}>
+                        {sankeyData.totalIncome > 0 ? `${Math.abs(sankeyData.savings / sankeyData.totalIncome * 100).toFixed(1)}% of income` : 'N/A'}
+                    </p>
+                </div>
+                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-lg">
+                    <h3 className="text-[10px] font-bold text-slate-500 uppercase">Burn Rate</h3>
+                    <p className="text-2xl font-black text-slate-700">
+                        {sankeyData.totalIncome > 0 ? `${(sankeyData.totalExpenses / sankeyData.totalIncome * 100).toFixed(0)}%` : 'N/A'}
+                    </p>
+                    <p className="text-xs text-slate-500 mt-1">of income spent</p>
+                </div>
+            </div>
+            
+            {/* Sankey Chart */}
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-lg overflow-hidden">
+                <div className="p-5 border-b border-slate-100">
+                    <h3 className="text-sm font-black text-slate-800">📊 Money Flow Diagram</h3>
+                    <p className="text-xs text-slate-500 mt-1">Income sources → Budget → Expense categories</p>
+                </div>
+                <div className="p-4">
+                    {hasData ? (
+                        <div ref={chartRef} style={{ width: '100%', height: '500px' }} />
+                    ) : (
+                        <div className="h-64 flex items-center justify-center text-slate-400">
+                            <div className="text-center">
+                                <div className="text-4xl mb-2">📊</div>
+                                <p>No income or expense data for {selectedYear}</p>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+            
+            {/* Breakdown Tables */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Income Breakdown */}
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-lg overflow-hidden">
+                    <div className="p-5 border-b border-slate-100 bg-green-50">
+                        <h3 className="text-sm font-black text-green-800">💵 Income Sources</h3>
+                    </div>
+                    <div className="p-4">
+                        {Object.keys(sankeyData.incomeBySource).length === 0 ? (
+                            <p className="text-slate-400 text-center py-8">No income recorded</p>
+                        ) : (
+                            <div className="space-y-3">
+                                {Object.entries(sankeyData.incomeBySource)
+                                    .sort((a, b) => b[1] - a[1])
+                                    .map(([source, amount]) => (
+                                        <div key={source} className="flex items-center gap-3">
+                                            <div className="w-3 h-3 rounded-full bg-green-500" />
+                                            <div className="flex-1">
+                                                <div className="flex justify-between items-center">
+                                                    <span className="font-semibold text-sm text-slate-700">{source}</span>
+                                                    <span className="font-bold text-green-600">${amount.toLocaleString(undefined, {maximumFractionDigits: 0})}</span>
+                                                </div>
+                                                <div className="h-1.5 bg-slate-100 rounded-full mt-1 overflow-hidden">
+                                                    <div className="h-full bg-green-500 rounded-full" style={{ width: `${(amount / sankeyData.totalIncome) * 100}%` }} />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+                
+                {/* Expense Breakdown */}
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-lg overflow-hidden">
+                    <div className="p-5 border-b border-slate-100 bg-red-50">
+                        <h3 className="text-sm font-black text-red-800">💸 Expense Categories</h3>
+                    </div>
+                    <div className="p-4 max-h-80 overflow-y-auto">
+                        {Object.keys(sankeyData.expenseByCategory).length === 0 ? (
+                            <p className="text-slate-400 text-center py-8">No expenses recorded</p>
+                        ) : (
+                            <div className="space-y-3">
+                                {Object.entries(sankeyData.expenseByCategory)
+                                    .sort((a, b) => b[1] - a[1])
+                                    .map(([cat, amount]) => (
+                                        <div key={cat} className="flex items-center gap-3">
+                                            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: CAT_COLORS[cat] || '#ef4444' }} />
+                                            <div className="flex-1">
+                                                <div className="flex justify-between items-center">
+                                                    <span className="font-semibold text-sm text-slate-700">{cat}</span>
+                                                    <span className="font-bold" style={{ color: CAT_COLORS[cat] || '#ef4444' }}>
+                                                        ${amount.toLocaleString(undefined, {maximumFractionDigits: 0})}
+                                                    </span>
+                                                </div>
+                                                <div className="h-1.5 bg-slate-100 rounded-full mt-1 overflow-hidden">
+                                                    <div className="h-full rounded-full" style={{ 
+                                                        backgroundColor: CAT_COLORS[cat] || '#ef4444',
+                                                        width: `${(amount / sankeyData.totalExpenses) * 100}%` 
+                                                    }} />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 // ============== IMPORT DIALOG ==============
 const ImportDialog = ({ headers, onClose, onConfirm, defaultAccountName = '' }) => {
     const [map, setMap] = useState({ date: headers.find(h=>/date/i.test(h))||headers[0], amount: headers.find(h=>/amount|debit/i.test(h))||headers[1], desc: headers.find(h=>/desc|memo/i.test(h))||headers[2], cat: headers.find(h=>/cat/i.test(h))||'' });
@@ -2207,9 +2534,9 @@ const App = () => {
 
         <div className="max-w-7xl mx-auto px-4 mt-4">
             <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit text-xs overflow-x-auto">
-                {['dashboard','evolution','categories','stylecom','transactions'].map(t => (
+                {['dashboard','evolution','flow','categories','stylecom','transactions'].map(t => (
                     <button key={t} onClick={()=>setTab(t)} className={`px-4 py-2 rounded-lg font-bold capitalize whitespace-nowrap ${tab===t?'bg-white text-indigo-600 shadow':'text-slate-500'}`}>
-                        {t==='dashboard'?'📊 ':t==='evolution'?'📈 ':t==='categories'?'🏷️ ':t==='stylecom'?'👗 ':'📋 '}{t}
+                        {t==='dashboard'?'📊 ':t==='evolution'?'📈 ':t==='flow'?'💰 ':t==='categories'?'🏷️ ':t==='stylecom'?'👗 ':'📋 '}{t}
                     </button>
                 ))}
             </div>
@@ -2244,6 +2571,10 @@ const App = () => {
                     <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">💳 Account Totals by Year</h3><div className="h-64"><AccountTotalsChart expenses={expenses} merchantRules={merchantRules}/></div></div>
                 </div>
             </>)}
+
+            {tab === 'flow' && (
+                <IncomeFlowDashboard expenses={expenses} merchantRules={merchantRules} />
+            )}
 
             {tab === 'categories' && (
                 <CategoryManagement 
