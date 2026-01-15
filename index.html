@@ -888,9 +888,10 @@ const HighImpactView = ({ expenses, merchantRules, onUpdateRule }) => {
             // Track accounts for this merchant
             if (e.account) byMerchant[merchant].accounts.add(e.account);
             
-            // Check for account-specific rules
-            const accountKey = getAccountRuleKey(merchant, e.account);
-            if (merchantRules[accountKey]) {
+            // Check for account-specific rules (new multi-account format or legacy)
+            const accountsKey = getAccountsRuleKey(merchant);
+            const legacyAccountKey = `${merchant}|||${e.account}`;
+            if (merchantRules[accountsKey] || merchantRules[legacyAccountKey]) {
                 byMerchant[merchant].hasAccountRules = true;
             }
             
