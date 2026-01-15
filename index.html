@@ -211,6 +211,13 @@ const autoRuleMatch = (desc, transactionType = 'expense') => {
         return 'Transfer';
     }
     
+    // PRIORITY 2.5: Generic Withdrawals → Transfer (EXCLUDED)
+    // Catches ATM withdrawals, transfers to savings, unrecognized bill payments
+    // This runs AFTER specific overrides (Venmo, Wells Fargo, CC payoffs)
+    if (rawLower.includes('withdrawal') || d.includes('withdrawal')) {
+        return 'Transfer';
+    }
+    
     // PRIORITY 3: If it's an income transaction type AND doesn't match above
     if (transactionType === 'income') {
         // Check TaxIncome first (more specific)
