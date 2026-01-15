@@ -86,10 +86,64 @@ const getM = d => pDate(d).getMonth();
 const getDoY = d => { const x = pDate(d), s = new Date(x.getFullYear(),0,0); return Math.floor((x-s)/864e5); };
 const isValidYear = d => getY(d) >= MIN_YEAR;
 
-// Clean merchant name for matching
+// Payment processor prefixes to strip from descriptions
+// These prefixes obscure the actual merchant name
+const PROCESSOR_PREFIXES = [
+    // Apple Pay variations
+    /^APLPAY\s*\*?\s*/i,
+    /^APL\s*\*?\s*/i,
+    /^APPLE PAY\s*\*?\s*/i,
+    // Toast POS variations
+    /^TST\s*\*?\s*/i,
+    /^TOAST\s*\*?\s*/i,
+    // Square variations
+    /^SQ\s*\*?\s*/i,
+    /^SQU\s*\*?\s*/i,
+    /^SQUARE\s*\*?\s*/i,
+    /^GOSQ\s*\*?\s*/i,
+    // PayPal variations
+    /^PAYPAL\s*\*?\s*/i,
+    /^PP\s*\*?\s*/i,
+    // Google Pay
+    /^GOOGLEPAY\s*\*?\s*/i,
+    /^GOOGLE\s*\*?\s*/i,
+    // Stripe
+    /^STRIPE\s*\*?\s*/i,
+    // Clover
+    /^CLOVER\s*\*?\s*/i,
+    /^CLV\s*\*?\s*/i,
+    // Generic POS prefixes
+    /^POS\s*(PURCHASE\s*)?\*?\s*/i,
+    /^DEBIT\s*(CARD\s*)?(PURCHASE\s*)?\*?\s*/i,
+    /^CHECK\s*CARD\s*\*?\s*/i,
+    // Recurring/subscription prefixes
+    /^RECURRING\s*\*?\s*/i,
+    /^RECUR\s*\*?\s*/i
+];
+
+// Clean description by stripping payment processor prefixes
+// Returns the cleaned description for categorization
+const cleanDescription = (rawDesc) => {
+    if (!rawDesc) return '';
+    let cleaned = rawDesc.trim();
+    
+    // Apply each prefix pattern
+    for (const pattern of PROCESSOR_PREFIXES) {
+        cleaned = cleaned.replace(pattern, '');
+    }
+    
+    // Also strip any leading asterisks or spaces left over
+    cleaned = cleaned.replace(/^\*+\s*/, '').trim();
+    
+    return cleaned;
+};
+
+// Clean merchant name for matching (uses cleanDescription internally)
 const cleanMerchant = (desc) => {
     if (!desc) return 'Unknown';
-    let name = desc.trim();
+    // First clean any processor prefixes
+    let name = cleanDescription(desc);
+    // Then apply merchant name extraction
     name = name.split(/\s{2,}|\t|\*|#|\d{10,}/)[0].trim();
     name = name.substring(0, 40).toUpperCase();
     return name || 'Unknown';
@@ -123,23 +177,27 @@ const fuzzyMatchCSV = v => {
 // Auto-categorize by description keywords
 const autoRuleMatch = (desc, transactionType = 'expense') => {
     if (!desc) return null;
-    const d = desc.toLowerCase();
+    
+    // Clean description first to strip payment processor prefixes
+    const cleaned = cleanDescription(desc);
+    const d = cleaned.toLowerCase();
+    const rawLower = desc.toLowerCase(); // Keep raw for checking prefixes like withdrawal/deposit
     
     // ============ PRIORITY HIERARCHY ============
     
     // PRIORITY 0: Venmo transactions always go to Venmo category
     // This prevents Venmo from being caught by other rules
-    if (d.includes('venmo')) {
+    if (rawLower.includes('venmo') || d.includes('venmo')) {
         return 'Venmo';
     }
     
     // PRIORITY 1: Specific Expense Overrides (HIGH PRIORITY)
     // Check PRIORITY_RULES first - these are specific merchants/payees
     for (const [cat, kws] of Object.entries(PRIORITY_RULES)) {
-        if (kws.some(k => d.includes(k))) {
+        if (kws.some(k => d.includes(k) || rawLower.includes(k))) {
             // BUT: If this is a CC payoff, it should be Transfer instead
             // Example: "WELLS FARGO CARD CCPYMT" = CC payoff, not Rent
-            if (CC_PAYOFF_KEYWORDS.some(k => d.includes(k))) {
+            if (CC_PAYOFF_KEYWORDS.some(k => d.includes(k) || rawLower.includes(k))) {
                 return 'Transfer';
             }
             return cat;
@@ -148,7 +206,7 @@ const autoRuleMatch = (desc, transactionType = 'expense') => {
     
     // PRIORITY 2: Credit Card Payoffs → Transfer (EXCLUDED)
     // Check for CC payoff patterns - these are transfers, not expenses
-    if (CC_PAYOFF_KEYWORDS.some(k => d.includes(k))) {
+    if (CC_PAYOFF_KEYWORDS.some(k => d.includes(k) || rawLower.includes(k))) {
         return 'Transfer';
     }
     
@@ -164,7 +222,7 @@ const autoRuleMatch = (desc, transactionType = 'expense') => {
         return 'Income';
     }
     
-    // PRIORITY 4: Regular AUTO_RULES for expenses
+    // PRIORITY 4: Regular AUTO_RULES for expenses (use cleaned description)
     for (const [cat, kws] of Object.entries(AUTO_RULES)) {
         if (kws.some(k => d.includes(k))) return cat;
     }
@@ -1443,11 +1501,16 @@ const TransactionsTable = ({ expenses, merchantRules, onDelete, onClearAll }) =>
                                     <tr key={e.id} className={`group ${isExcluded ? 'bg-slate-50 opacity-50' : isVenmoReimbursement ? 'bg-green-50/50' : isVenmo ? 'bg-blue-50/30' : 'hover:bg-slate-50'}`}>
                                         <td className="p-3 text-slate-500 text-xs whitespace-nowrap">{e.date}</td>
                                         <td className={`p-3 font-semibold max-w-[250px] ${isExcluded ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
-                                            <div className="truncate text-xs" title={e.description}>
+                                            <div className="truncate text-xs" title={e.rawDescription || e.description}>
                                                 {isVenmoReimbursement && <span className="text-green-600 mr-1">↩</span>}
                                                 {isVenmo && !isVenmoReimbursement && <span className="text-blue-500 mr-1">💸</span>}
                                                 {e.description}
                                             </div>
+                                            {e.rawDescription && e.rawDescription !== e.description && (
+                                                <div className="text-[9px] text-slate-400 truncate" title={e.rawDescription}>
+                                                    Raw: {e.rawDescription}
+                                                </div>
+                                            )}
                                         </td>
                                         <td className="p-3 text-slate-500 text-xs">{e.account}</td>
                                         <td className="p-3">
@@ -1719,10 +1782,14 @@ const App = () => {
             // Store original CSV category
             const csvCategory = map.cat && row[map.cat] ? fuzzyMatchCSV(row[map.cat]) : 'Uncategorized';
             
+            // Clean the description by stripping payment processor prefixes
+            const cleanedDesc = cleanDescription(desc);
+            
             return { 
                 id: `e-${Date.now()}-${i}`, 
                 date: row[map.date] || new Date().toISOString().split('T')[0], 
-                description: desc, 
+                description: cleanedDesc,  // Use cleaned description for display and categorization
+                rawDescription: desc,      // Keep original for auditing
                 amount: finalAmount,
                 rawAmount: rawAmount,  // Keep original signed amount for reference
                 transactionType: transactionType,  // expense, income, venmo-payment, venmo-reimbursement
@@ -1770,10 +1837,10 @@ const App = () => {
     const del = id => setExpenses(expenses.filter(e => e.id !== id));
     
     const exportCSV = () => { 
-        const csv = ['date,amount,raw_amount,transaction_type,category,source,account,account_type,description,csv_category', 
+        const csv = ['date,amount,raw_amount,transaction_type,category,source,account,account_type,description,raw_description,csv_category', 
             ...expenses.map(e => {
                 const eff = getEffectiveCategory(e, merchantRules);
-                return `${e.date},${e.amount},${e.rawAmount || e.amount},${e.transactionType || 'expense'},${eff.category},${eff.source},${e.account},${e.accountType || 'credit'},"${(e.description||'').replace(/"/g,'""')}",${e.csvCategory || ''}`;
+                return `${e.date},${e.amount},${e.rawAmount || e.amount},${e.transactionType || 'expense'},${eff.category},${eff.source},${e.account},${e.accountType || 'credit'},"${(e.description||'').replace(/"/g,'""')}","${(e.rawDescription || e.description||'').replace(/"/g,'""')}",${e.csvCategory || ''}`;
             })
         ].join('\n'); 
         const a = document.createElement('a'); 
