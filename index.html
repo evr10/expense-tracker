@@ -1638,14 +1638,17 @@ const TransactionsTable = ({ expenses, merchantRules, onDelete, onClearAll }) =>
 };
 
 // ============== IMPORT DIALOG ==============
-const ImportDialog = ({ headers, onClose, onConfirm }) => {
+const ImportDialog = ({ headers, onClose, onConfirm, defaultAccountName = '' }) => {
     const [map, setMap] = useState({ date: headers.find(h=>/date/i.test(h))||headers[0], amount: headers.find(h=>/amount|debit/i.test(h))||headers[1], desc: headers.find(h=>/desc|memo/i.test(h))||headers[2], cat: headers.find(h=>/cat/i.test(h))||'' });
-    const [acc, setAcc] = useState('');
+    const [acc, setAcc] = useState(defaultAccountName);
     const [accType, setAccType] = useState('credit'); // credit or checking
     
     return (<div className="fixed inset-0 z-50 flex items-center justify-center p-4"><div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={onClose}/>
         <div className="relative bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden">
-            <div className="p-6 border-b border-slate-100"><h2 className="text-xl font-black text-slate-800">Import CSV</h2></div>
+            <div className="p-6 border-b border-slate-100">
+                <h2 className="text-xl font-black text-slate-800">Import CSV</h2>
+                <p className="text-sm text-slate-500 mt-1">📄 {defaultAccountName || 'Unknown file'}</p>
+            </div>
             <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
                 {/* Account Type Selection */}
                 <div>
@@ -1669,7 +1672,7 @@ const ImportDialog = ({ headers, onClose, onConfirm }) => {
                 </div>
                 <div><label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Description</label><select className="w-full p-3 bg-slate-50 rounded-xl text-sm font-semibold outline-none" value={map.desc} onChange={e=>setMap({...map,desc:e.target.value})}>{headers.map(h=><option key={h}>{h}</option>)}</select></div>
                 <div><label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Category Column (optional)</label><select className="w-full p-3 bg-slate-50 rounded-xl text-sm font-semibold outline-none" value={map.cat} onChange={e=>setMap({...map,cat:e.target.value})}><option value="">-- None --</option>{headers.map(h=><option key={h}>{h}</option>)}</select></div>
-                <div><label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Account Name</label><input type="text" placeholder="e.g., Chase Checking, Amex Gold" value={acc} onChange={e=>setAcc(e.target.value)} className="w-full p-3 bg-slate-50 rounded-xl text-sm font-semibold outline-none"/></div>
+                <div><label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Account Name (from filename)</label><input type="text" placeholder="e.g., Chase Checking, Amex Gold" value={acc} onChange={e=>setAcc(e.target.value)} className="w-full p-3 bg-slate-50 rounded-xl text-sm font-semibold outline-none border-2 border-transparent focus:border-indigo-500"/></div>
                 
                 {/* Info box for checking accounts */}
                 {accType === 'checking' && (
@@ -1694,6 +1697,7 @@ const App = () => {
     const [expenses, setExpenses] = useState([]);
     const [merchantRules, setMerchantRules] = useState({});
     const [importData, setImportData] = useState(null);
+    const [importFileName, setImportFileName] = useState('');
     const [msg, setMsg] = useState('');
     const [tab, setTab] = useState('dashboard');
 
@@ -1708,6 +1712,9 @@ const App = () => {
     const handleFile = e => { 
         const f = e.target.files[0]; 
         if (!f) return; 
+        // Extract filename without extension for default account name
+        const fileName = f.name.replace(/\.[^/.]+$/, ''); // Remove extension
+        setImportFileName(fileName);
         Papa.parse(f, { header:true, skipEmptyLines:true, complete:r => { if (r.data.length) setImportData(r); } }); 
         e.target.value = ''; 
     };
@@ -1915,7 +1922,7 @@ const App = () => {
             )}
         </main>
         
-        {importData && <ImportDialog headers={importData.meta.fields} onClose={()=>setImportData(null)} onConfirm={processImport}/>}
+        {importData && <ImportDialog headers={importData.meta.fields} onClose={()=>{setImportData(null); setImportFileName('');}} onConfirm={processImport} defaultAccountName={importFileName}/>}
     </div>);
 };
 
