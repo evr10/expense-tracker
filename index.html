@@ -38,26 +38,36 @@ class ErrorBoundary extends Component {
 }
 
 // ============== CONFIGURATION ==============
-const CATEGORIES = ['Groceries','Rent','Utilities','Transportation','Entertainment','Healthcare','Shopping','Dining','Travel','Subscriptions','Stylecom','Income','Transfer','Other','Excluded'];
-const EXCLUDED_CATEGORIES = ['Income', 'Transfer', 'Excluded'];
+const CATEGORIES = ['Groceries','Rent','Utilities','Transportation','Entertainment','Healthcare','Shopping','Dining','Travel','Subscriptions','Stylecom','Income','TaxIncome','Transfer','Other','Excluded'];
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const YEAR_COLORS = { 2021:'#94a3b8', 2022:'#f59e0b', 2023:'#3b82f6', 2024:'#ef4444', 2025:'#10b981', 2026:'#8b5cf6' };
-const CAT_COLORS = { Groceries:'#22c55e', Rent:'#f59e0b', Utilities:'#3b82f6', Transportation:'#8b5cf6', Entertainment:'#ec4899', Healthcare:'#14b8a6', Shopping:'#f43f5e', Dining:'#f97316', Travel:'#06b6d4', Subscriptions:'#6366f1', Stylecom:'#db2777', Other:'#94a3b8', Uncategorized:'#fbbf24', Excluded:'#cbd5e1', Income:'#10b981', Transfer:'#64748b' };
+const CAT_COLORS = { Groceries:'#22c55e', Rent:'#f59e0b', Utilities:'#3b82f6', Transportation:'#8b5cf6', Entertainment:'#ec4899', Healthcare:'#14b8a6', Shopping:'#f43f5e', Dining:'#f97316', Travel:'#06b6d4', Subscriptions:'#6366f1', Stylecom:'#db2777', Other:'#94a3b8', Uncategorized:'#fbbf24', Excluded:'#cbd5e1', Income:'#10b981', TaxIncome:'#059669', Transfer:'#64748b' };
 
 const AUTO_RULES = {
-    Excluded:['payment','autopay','auto pay','thank you','credit card payment','card payment','online payment','bill pay','paying','paid in full','minimum payment','statement balance','balance payment','ach payment','electronic payment','pymt'],
-    Groceries:['walmart','kroger','safeway','trader joe','whole foods','aldi','costco','publix','grocery','supermarket'],
-    Dining:['sweetgreen','mcdonald','starbucks','chipotle','subway','restaurant','cafe','coffee','doordash','uber eats','pizza'],
-    Transportation:['uber','lyft','taxi','shell','exxon','chevron','gas','fuel','parking','metro','transit'],
-    Shopping:['amazon','ebay','best buy','apple store','home depot','lowes','ikea','nike','nordstrom'],
-    Entertainment:['netflix','hulu','disney','hbo','spotify','movie','cinema','xbox','steam'],
-    Utilities:['electric','power','water bill','comcast','xfinity','spectrum','internet','verizon'],
-    Healthcare:['pharmacy','cvs','walgreens','doctor','hospital','medical','dentist'],
-    Travel:['airline','delta','united','southwest','flight','airbnb','hotel','marriott','hilton'],
-    Subscriptions:['subscription','membership','adobe','dropbox','linkedin','patreon'],
-    Income:['payroll','salary','direct deposit','paycheck','dividend'],
-    Transfer:['transfer','ach','wire','zelle','venmo','paypal','atm']
+    // Credit Card Payments - transfers not expenses
+    Excluded:['payment','autopay','auto pay','thank you','credit card payment','card payment','online payment','bill pay','paying','paid in full','minimum payment','statement balance','balance payment','ach payment','electronic payment','pymt','payment to chase','payment to amex','payment to citi','payment to capital one','payment to discover','payment to wells','amex transfer','chase transfer'],
+    Groceries:['walmart','kroger','safeway','trader joe','whole foods','aldi','costco','publix','grocery','supermarket','wegmans','heb','albertsons','sprouts'],
+    Dining:['sweetgreen','mcdonald','starbucks','chipotle','subway','restaurant','cafe','coffee','doordash','uber eats','pizza','grubhub','seamless','postmates'],
+    Transportation:['uber','lyft','taxi','shell','exxon','chevron','gas','fuel','parking','metro','transit','mobil','bp','sunoco'],
+    Shopping:['amazon','ebay','best buy','apple store','home depot','lowes','ikea','nike','nordstrom','target','macys','tjmaxx','marshalls'],
+    Entertainment:['netflix','hulu','disney','hbo','spotify','movie','cinema','xbox','steam','playstation','nintendo','amc'],
+    Utilities:['electric','power','water bill','comcast','xfinity','spectrum','internet','verizon','at&t','t-mobile','con ed','pge','national grid'],
+    Healthcare:['pharmacy','cvs','walgreens','doctor','hospital','medical','dentist','optum','cigna','aetna','united health'],
+    Travel:['airline','delta','united','southwest','flight','airbnb','hotel','marriott','hilton','hyatt','expedia','booking.com'],
+    Subscriptions:['subscription','membership','adobe','dropbox','linkedin','patreon','github','notion'],
+    // Income categories - will be auto-excluded from expense views
+    Income:['payroll','salary','direct deposit','paycheck','dividend','interest income','deposit','wire in','ach credit','employer','bonus','commission'],
+    // Tax refunds/income - auto-excluded
+    TaxIncome:['irs','treasury','tax refund','state tax','federal tax','tax credit'],
+    // Transfer category - internal moves, excluded from expense totals
+    Transfer:['transfer','wire','zelle to','zelle from','atm withdrawal','atm deposit','internal transfer','external transfer']
 };
+
+// Venmo special handling - NOT in AUTO_RULES because it needs amount-based logic
+const VENMO_KEYWORDS = ['venmo', 'cashout'];
+
+// Categories to exclude from expense calculations
+const EXCLUDED_CATEGORIES = ['Income', 'Transfer', 'Excluded', 'TaxIncome'];
 
 // ============== HELPERS ==============
 const MIN_YEAR = 2024; // Only show data from 2024 onwards
@@ -103,9 +113,23 @@ const fuzzyMatchCSV = v => {
 };
 
 // Auto-categorize by description keywords
-const autoRuleMatch = desc => {
+const autoRuleMatch = (desc, transactionType = 'expense') => {
     if (!desc) return null;
     const d = desc.toLowerCase();
+    
+    // If it's an income transaction type, check income categories first
+    if (transactionType === 'income') {
+        // Check TaxIncome first (more specific)
+        if (AUTO_RULES.TaxIncome.some(k => d.includes(k))) return 'TaxIncome';
+        // Then general Income
+        if (AUTO_RULES.Income.some(k => d.includes(k))) return 'Income';
+        // Then Transfer
+        if (AUTO_RULES.Transfer.some(k => d.includes(k))) return 'Transfer';
+        // Default income to Income category
+        return 'Income';
+    }
+    
+    // For expenses, check all categories
     for (const [cat, kws] of Object.entries(AUTO_RULES)) {
         if (kws.some(k => d.includes(k))) return cat;
     }
@@ -151,6 +175,7 @@ const getAccountRuleKey = (merchant, account) => `${merchant}|||${account}`;
 const getEffectiveCategory = (expense, merchantRules) => {
     const merchant = cleanMerchant(expense.description);
     const account = expense.account || '';
+    const transactionType = expense.transactionType || 'expense';
     
     // Priority 1: Account-Specific Rule (highest priority)
     const accountKey = getAccountRuleKey(merchant, account);
@@ -169,8 +194,8 @@ const getEffectiveCategory = (expense, merchantRules) => {
         return { category: expense.manualCategory, source: 'manual' };
     }
     
-    // Priority 4: Auto-detected rule
-    const autoCategory = autoRuleMatch(expense.description);
+    // Priority 4: Auto-detected rule (with transaction type awareness)
+    const autoCategory = autoRuleMatch(expense.description, transactionType);
     if (autoCategory) {
         return { category: autoCategory, source: 'auto' };
     }
@@ -1368,23 +1393,28 @@ const TransactionsTable = ({ expenses, merchantRules, onDelete, onClearAll }) =>
                             ) : [...filteredExpenses].reverse().map(e => {
                                 const effective = getEffectiveCategory(e, merchantRules);
                                 const isExcluded = EXCLUDED_CATEGORIES.includes(effective.category);
+                                const isNegative = e.amount < 0;
+                                const isVenmoReimbursement = e.transactionType === 'venmo-reimbursement';
                                 return (
-                                    <tr key={e.id} className={`group ${isExcluded ? 'bg-slate-50 opacity-50' : 'hover:bg-slate-50'}`}>
+                                    <tr key={e.id} className={`group ${isExcluded ? 'bg-slate-50 opacity-50' : isVenmoReimbursement ? 'bg-green-50/50' : 'hover:bg-slate-50'}`}>
                                         <td className="p-3 text-slate-500 text-xs whitespace-nowrap">{e.date}</td>
                                         <td className={`p-3 font-semibold max-w-[250px] ${isExcluded ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
-                                            <div className="truncate text-xs" title={e.description}>{e.description}</div>
+                                            <div className="truncate text-xs" title={e.description}>
+                                                {isVenmoReimbursement && <span className="text-green-600 mr-1">↩</span>}
+                                                {e.description}
+                                            </div>
                                         </td>
                                         <td className="p-3 text-slate-500 text-xs">{e.account}</td>
                                         <td className="p-3">
                                             <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${
                                                 isExcluded ? 'bg-slate-200 text-slate-500' : 
                                                 effective.category === 'Uncategorized' ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700'
-                                            }`} title={`Source: ${effective.source} | CSV: ${e.csvCategory}`}>
+                                            }`} title={`Source: ${effective.source} | CSV: ${e.csvCategory} | Type: ${e.transactionType || 'expense'}`}>
                                                 {effective.category}
                                             </span>
                                         </td>
-                                        <td className={`p-3 text-right font-bold ${isExcluded ? 'text-slate-400' : 'text-slate-900'}`}>
-                                            ${safe(e.amount).toFixed(2)}
+                                        <td className={`p-3 text-right font-bold ${isExcluded ? 'text-slate-400' : isNegative ? 'text-green-600' : 'text-slate-900'}`}>
+                                            {isNegative ? `-$${Math.abs(e.amount).toFixed(2)}` : `$${e.amount.toFixed(2)}`}
                                         </td>
                                         <td className="p-3">
                                             <button onClick={() => onDelete(e.id)} className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600">🗑️</button>
@@ -1502,10 +1532,28 @@ const TransactionsTable = ({ expenses, merchantRules, onDelete, onClearAll }) =>
 const ImportDialog = ({ headers, onClose, onConfirm }) => {
     const [map, setMap] = useState({ date: headers.find(h=>/date/i.test(h))||headers[0], amount: headers.find(h=>/amount|debit/i.test(h))||headers[1], desc: headers.find(h=>/desc|memo/i.test(h))||headers[2], cat: headers.find(h=>/cat/i.test(h))||'' });
     const [acc, setAcc] = useState('');
+    const [accType, setAccType] = useState('credit'); // credit or checking
+    
     return (<div className="fixed inset-0 z-50 flex items-center justify-center p-4"><div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={onClose}/>
         <div className="relative bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden">
             <div className="p-6 border-b border-slate-100"><h2 className="text-xl font-black text-slate-800">Import CSV</h2></div>
             <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
+                {/* Account Type Selection */}
+                <div>
+                    <label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Account Type</label>
+                    <div className="grid grid-cols-2 gap-2">
+                        <button onClick={() => setAccType('credit')} className={`p-3 rounded-xl text-sm font-bold border-2 transition-colors ${accType === 'credit' ? 'bg-indigo-50 border-indigo-500 text-indigo-700' : 'bg-slate-50 border-slate-200 text-slate-600'}`}>
+                            💳 Credit Card
+                        </button>
+                        <button onClick={() => setAccType('checking')} className={`p-3 rounded-xl text-sm font-bold border-2 transition-colors ${accType === 'checking' ? 'bg-indigo-50 border-indigo-500 text-indigo-700' : 'bg-slate-50 border-slate-200 text-slate-600'}`}>
+                            🏦 Checking/Debit
+                        </button>
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-2">
+                        {accType === 'credit' ? 'All transactions treated as expenses' : 'Handles income, transfers, and Venmo reimbursements'}
+                    </p>
+                </div>
+                
                 <div className="grid grid-cols-2 gap-4">
                     <div><label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Date</label><select className="w-full p-3 bg-slate-50 rounded-xl text-sm font-semibold outline-none" value={map.date} onChange={e=>setMap({...map,date:e.target.value})}>{headers.map(h=><option key={h}>{h}</option>)}</select></div>
                     <div><label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Amount</label><select className="w-full p-3 bg-slate-50 rounded-xl text-sm font-semibold outline-none" value={map.amount} onChange={e=>setMap({...map,amount:e.target.value})}>{headers.map(h=><option key={h}>{h}</option>)}</select></div>
@@ -1513,8 +1561,21 @@ const ImportDialog = ({ headers, onClose, onConfirm }) => {
                 <div><label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Description</label><select className="w-full p-3 bg-slate-50 rounded-xl text-sm font-semibold outline-none" value={map.desc} onChange={e=>setMap({...map,desc:e.target.value})}>{headers.map(h=><option key={h}>{h}</option>)}</select></div>
                 <div><label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Category Column (optional)</label><select className="w-full p-3 bg-slate-50 rounded-xl text-sm font-semibold outline-none" value={map.cat} onChange={e=>setMap({...map,cat:e.target.value})}><option value="">-- None --</option>{headers.map(h=><option key={h}>{h}</option>)}</select></div>
                 <div><label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Account Name</label><input type="text" placeholder="e.g., Chase Checking, Amex Gold" value={acc} onChange={e=>setAcc(e.target.value)} className="w-full p-3 bg-slate-50 rounded-xl text-sm font-semibold outline-none"/></div>
+                
+                {/* Info box for checking accounts */}
+                {accType === 'checking' && (
+                    <div className="p-3 bg-blue-50 rounded-xl border border-blue-200">
+                        <p className="text-xs text-blue-700 font-semibold">💡 Checking Account Import</p>
+                        <ul className="text-[10px] text-blue-600 mt-1 space-y-0.5">
+                            <li>• Negative amounts = expenses (kept positive)</li>
+                            <li>• Positive amounts = income/deposits (auto-categorized)</li>
+                            <li>• Venmo incoming = reimbursement (shown as credit)</li>
+                            <li>• Credit card payments auto-excluded</li>
+                        </ul>
+                    </div>
+                )}
             </div>
-            <div className="p-6 bg-slate-50 flex gap-4"><button onClick={onClose} className="flex-1 py-3 font-bold text-slate-500 rounded-xl hover:bg-slate-200">Cancel</button><button onClick={()=>onConfirm({...map,acc})} className="flex-1 py-3 bg-indigo-600 text-white font-black rounded-xl hover:bg-indigo-700">Import</button></div>
+            <div className="p-6 bg-slate-50 flex gap-4"><button onClick={onClose} className="flex-1 py-3 font-bold text-slate-500 rounded-xl hover:bg-slate-200">Cancel</button><button onClick={()=>onConfirm({...map, acc, accType})} className="flex-1 py-3 bg-indigo-600 text-white font-black rounded-xl hover:bg-indigo-700">Import</button></div>
         </div>
     </div>);
 };
@@ -1543,11 +1604,50 @@ const App = () => {
     };
     
     const processImport = (map) => {
+        const isCheckingAccount = map.accType === 'checking';
+        
         const newExp = importData.data.map((row, i) => {
             const desc = row[map.desc] || '';
+            const descLower = desc.toLowerCase();
             const raw = String(row[map.amount]||'0').replace(/[^\d.-]/g,'');
-            const amt = Math.abs(parseFloat(raw)) || 0;
-            if (!amt) return null;
+            const rawAmount = parseFloat(raw) || 0;
+            if (rawAmount === 0) return null;
+            
+            // Determine transaction type and final amount
+            let transactionType = 'expense';
+            let finalAmount = Math.abs(rawAmount);
+            
+            if (isCheckingAccount) {
+                // Checking/Debit account: signed amounts matter
+                // Bank convention: negative = money out, positive = money in
+                const isIncoming = rawAmount > 0;
+                const isVenmo = VENMO_KEYWORDS.some(kw => descLower.includes(kw));
+                
+                if (isVenmo) {
+                    // Venmo special handling:
+                    // - Outgoing (negative raw) = expense, keep positive amount
+                    // - Incoming (positive raw) = reimbursement, keep as NEGATIVE expense (credit)
+                    if (isIncoming) {
+                        transactionType = 'venmo-reimbursement';
+                        finalAmount = -Math.abs(rawAmount); // Negative = credit against expenses
+                    } else {
+                        transactionType = 'venmo-payment';
+                        finalAmount = Math.abs(rawAmount); // Positive = expense
+                    }
+                } else if (isIncoming) {
+                    // Non-Venmo incoming money = income/transfer (will be auto-categorized)
+                    transactionType = 'income';
+                    finalAmount = Math.abs(rawAmount);
+                } else {
+                    // Outgoing money = expense
+                    transactionType = 'expense';
+                    finalAmount = Math.abs(rawAmount);
+                }
+            } else {
+                // Credit card: all transactions are expenses (positive amounts)
+                transactionType = 'expense';
+                finalAmount = Math.abs(rawAmount);
+            }
             
             // Store original CSV category
             const csvCategory = map.cat && row[map.cat] ? fuzzyMatchCSV(row[map.cat]) : 'Uncategorized';
@@ -1556,9 +1656,12 @@ const App = () => {
                 id: `e-${Date.now()}-${i}`, 
                 date: row[map.date] || new Date().toISOString().split('T')[0], 
                 description: desc, 
-                amount: amt, 
-                csvCategory: csvCategory,  // Original from CSV
-                manualCategory: null,      // Single-transaction override
+                amount: finalAmount,
+                rawAmount: rawAmount,  // Keep original signed amount for reference
+                transactionType: transactionType,  // expense, income, venmo-payment, venmo-reimbursement
+                accountType: map.accType || 'credit',  // credit or checking
+                csvCategory: csvCategory,
+                manualCategory: null,
                 account: map.acc || 'Imported' 
             };
         }).filter(Boolean);
@@ -1600,10 +1703,10 @@ const App = () => {
     const del = id => setExpenses(expenses.filter(e => e.id !== id));
     
     const exportCSV = () => { 
-        const csv = ['date,amount,category,source,account,description,csv_category', 
+        const csv = ['date,amount,raw_amount,transaction_type,category,source,account,account_type,description,csv_category', 
             ...expenses.map(e => {
                 const eff = getEffectiveCategory(e, merchantRules);
-                return `${e.date},${e.amount},${eff.category},${eff.source},${e.account},"${(e.description||'').replace(/"/g,'""')}",${e.csvCategory || ''}`;
+                return `${e.date},${e.amount},${e.rawAmount || e.amount},${e.transactionType || 'expense'},${eff.category},${eff.source},${e.account},${e.accountType || 'credit'},"${(e.description||'').replace(/"/g,'""')}",${e.csvCategory || ''}`;
             })
         ].join('\n'); 
         const a = document.createElement('a'); 
