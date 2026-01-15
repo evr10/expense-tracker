@@ -38,14 +38,23 @@ class ErrorBoundary extends Component {
 }
 
 // ============== CONFIGURATION ==============
-const CATEGORIES = ['Groceries','Rent','Utilities','Transportation','Entertainment','Healthcare','Shopping','Dining','Travel','Subscriptions','Stylecom','Venmo','Income','TaxIncome','Transfer','Other','Excluded'];
+const CATEGORIES = ['Groceries','Rent','Daycare','Utilities','Transportation','Entertainment','Healthcare','Shopping','Dining','Travel','Subscriptions','Stylecom','Venmo','Income','TaxIncome','Transfer','Other','Excluded'];
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const YEAR_COLORS = { 2021:'#94a3b8', 2022:'#f59e0b', 2023:'#3b82f6', 2024:'#ef4444', 2025:'#10b981', 2026:'#8b5cf6' };
-const CAT_COLORS = { Groceries:'#22c55e', Rent:'#f59e0b', Utilities:'#3b82f6', Transportation:'#8b5cf6', Entertainment:'#ec4899', Healthcare:'#14b8a6', Shopping:'#f43f5e', Dining:'#f97316', Travel:'#06b6d4', Subscriptions:'#6366f1', Stylecom:'#db2777', Venmo:'#008CFF', Other:'#94a3b8', Uncategorized:'#fbbf24', Excluded:'#cbd5e1', Income:'#10b981', TaxIncome:'#059669', Transfer:'#64748b' };
+const CAT_COLORS = { Groceries:'#22c55e', Rent:'#f59e0b', Daycare:'#a855f7', Utilities:'#3b82f6', Transportation:'#8b5cf6', Entertainment:'#ec4899', Healthcare:'#14b8a6', Shopping:'#f43f5e', Dining:'#f97316', Travel:'#06b6d4', Subscriptions:'#6366f1', Stylecom:'#db2777', Venmo:'#008CFF', Other:'#94a3b8', Uncategorized:'#fbbf24', Excluded:'#cbd5e1', Income:'#10b981', TaxIncome:'#059669', Transfer:'#64748b' };
+
+// HIGH PRIORITY specific expense rules (checked FIRST in autoRuleMatch)
+const PRIORITY_RULES = {
+    Daycare: ['msh'],  // MSH = Daycare provider
+    Rent: ['wells fargo card', 'wells fargo']  // Wells Fargo withdrawals = Rent
+};
+
+// Credit Card Payoff keywords (these become Transfer, excluded from expense totals)
+const CC_PAYOFF_KEYWORDS = ['amex', 'chase card', 'capital one', 'citi card', 'discover card', 'cc payment', 'card ccpymt', 'card autopay', 'credit card auto pay', 'wf credit card'];
 
 const AUTO_RULES = {
-    // Credit Card Payments - transfers not expenses
-    Excluded:['autopay','auto pay','thank you','credit card payment','card payment','online payment','bill pay','paying','paid in full','minimum payment','statement balance','balance payment','ach payment','electronic payment','pymt','payment to chase','payment to amex','payment to citi','payment to capital one','payment to discover','payment to wells','amex transfer','chase transfer'],
+    // Credit Card Payments from checking - transfers not expenses (EXCLUDED)
+    Excluded:['autopay','auto pay','thank you','credit card payment','card payment','online payment','bill pay','paying','paid in full','minimum payment','statement balance','balance payment','ach payment','electronic payment','pymt','payment to chase','payment to amex','payment to citi','payment to capital one','payment to discover','amex transfer','chase transfer'],
     Groceries:['walmart','kroger','safeway','trader joe','whole foods','aldi','costco','publix','grocery','supermarket','wegmans','heb','albertsons','sprouts'],
     Dining:['sweetgreen','mcdonald','starbucks','chipotle','subway','restaurant','cafe','coffee','doordash','uber eats','pizza','grubhub','seamless','postmates'],
     Transportation:['uber','lyft','taxi','shell','exxon','chevron','gas','fuel','parking','metro','transit','mobil','bp','sunoco'],
@@ -62,7 +71,7 @@ const AUTO_RULES = {
     // Tax refunds/income - auto-excluded
     TaxIncome:['irs','treasury','tax refund','state tax','federal tax','tax credit'],
     // Transfer category - internal moves, excluded from expense totals
-    Transfer:['transfer','wire','zelle to','zelle from','atm withdrawal','atm deposit','internal transfer','external transfer']
+    Transfer:['zelle to','zelle from','internal transfer','external transfer']
 };
 
 // Categories to exclude from expense calculations (Venmo is NOT excluded - it nets out)
@@ -116,13 +125,34 @@ const autoRuleMatch = (desc, transactionType = 'expense') => {
     if (!desc) return null;
     const d = desc.toLowerCase();
     
-    // PRIORITY 1: Venmo transactions always go to Venmo category (regardless of transaction type)
-    // This prevents Venmo from being caught by "payment" in Excluded or "deposit" in Income
+    // ============ PRIORITY HIERARCHY ============
+    
+    // PRIORITY 0: Venmo transactions always go to Venmo category
+    // This prevents Venmo from being caught by other rules
     if (d.includes('venmo')) {
         return 'Venmo';
     }
     
-    // If it's an income transaction type, check income categories first
+    // PRIORITY 1: Specific Expense Overrides (HIGH PRIORITY)
+    // Check PRIORITY_RULES first - these are specific merchants/payees
+    for (const [cat, kws] of Object.entries(PRIORITY_RULES)) {
+        if (kws.some(k => d.includes(k))) {
+            // BUT: If this is a CC payoff, it should be Transfer instead
+            // Example: "WELLS FARGO CARD CCPYMT" = CC payoff, not Rent
+            if (CC_PAYOFF_KEYWORDS.some(k => d.includes(k))) {
+                return 'Transfer';
+            }
+            return cat;
+        }
+    }
+    
+    // PRIORITY 2: Credit Card Payoffs → Transfer (EXCLUDED)
+    // Check for CC payoff patterns - these are transfers, not expenses
+    if (CC_PAYOFF_KEYWORDS.some(k => d.includes(k))) {
+        return 'Transfer';
+    }
+    
+    // PRIORITY 3: If it's an income transaction type AND doesn't match above
     if (transactionType === 'income') {
         // Check TaxIncome first (more specific)
         if (AUTO_RULES.TaxIncome.some(k => d.includes(k))) return 'TaxIncome';
@@ -134,10 +164,12 @@ const autoRuleMatch = (desc, transactionType = 'expense') => {
         return 'Income';
     }
     
-    // For expenses, check all categories (Venmo already handled above)
+    // PRIORITY 4: Regular AUTO_RULES for expenses
     for (const [cat, kws] of Object.entries(AUTO_RULES)) {
         if (kws.some(k => d.includes(k))) return cat;
     }
+    
+    // PRIORITY 5: Default - return null (will become Uncategorized)
     return null;
 };
 
@@ -1634,12 +1666,16 @@ const App = () => {
             // Check if this is a Venmo transaction (by description, not amount sign)
             const isVenmo = descLower.includes('venmo');
             
+            // CRITICAL: Check if description indicates a WITHDRAWAL (money going OUT)
+            // This overrides the raw amount sign for checking accounts
+            const isWithdrawal = descLower.includes('withdrawal');
+            const isDeposit = descLower.includes('deposit') && !isWithdrawal;
+            
             if (isVenmo) {
                 // Venmo: Use description keywords to determine direction
                 // "Withdrawal" = money going OUT = expense (positive)
                 // "Deposit" or "Cashout" = money coming IN = reimbursement (negative)
                 const isVenmoDeposit = descLower.includes('deposit') || descLower.includes('cashout');
-                const isVenmoWithdrawal = descLower.includes('withdrawal') || descLower.includes('payment');
                 
                 if (isVenmoDeposit) {
                     // Venmo deposit/cashout = reimbursement = NEGATIVE expense
@@ -1651,18 +1687,28 @@ const App = () => {
                     finalAmount = Math.abs(rawAmount);
                 }
             } else if (isCheckingAccount) {
-                // Non-Venmo checking account transactions
-                // Bank convention: negative = money out, positive = money in
-                const isIncoming = rawAmount > 0;
+                // Checking account: Use DESCRIPTION to determine direction, not amount sign
+                // "Withdrawal" = money OUT = expense (regardless of sign in CSV)
+                // "Deposit" = money IN = income
                 
-                if (isIncoming) {
-                    // Non-Venmo incoming money = income/transfer (will be auto-categorized)
+                if (isWithdrawal) {
+                    // ALL withdrawals are EXPENSES (money leaving account)
+                    transactionType = 'expense';
+                    finalAmount = Math.abs(rawAmount);
+                } else if (isDeposit) {
+                    // Deposits are income
                     transactionType = 'income';
                     finalAmount = Math.abs(rawAmount);
                 } else {
-                    // Outgoing money = expense
-                    transactionType = 'expense';
-                    finalAmount = Math.abs(rawAmount);
+                    // Fallback: use raw amount sign
+                    const isIncoming = rawAmount > 0;
+                    if (isIncoming) {
+                        transactionType = 'income';
+                        finalAmount = Math.abs(rawAmount);
+                    } else {
+                        transactionType = 'expense';
+                        finalAmount = Math.abs(rawAmount);
+                    }
                 }
             } else {
                 // Credit card: all transactions are expenses (positive amounts)
