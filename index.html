@@ -37,11 +37,13 @@ class ErrorBoundary extends Component {
     }
 }
 
-const CATEGORIES = ['Groceries','Rent','Utilities','Transportation','Entertainment','Healthcare','Shopping','Dining','Travel','Subscriptions','Income','Transfer','Other'];
+const CATEGORIES = ['Groceries','Rent','Utilities','Transportation','Entertainment','Healthcare','Shopping','Dining','Travel','Subscriptions','Income','Transfer','Other','Excluded'];
+const EXCLUDED_CATEGORIES = ['Income', 'Transfer', 'Excluded']; // Categories to exclude from spending analytics
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const YEAR_COLORS = { 2021:'#94a3b8', 2022:'#f59e0b', 2023:'#3b82f6', 2024:'#ef4444', 2025:'#10b981', 2026:'#8b5cf6' };
-const CAT_COLORS = { Groceries:'#22c55e', Rent:'#f59e0b', Utilities:'#3b82f6', Transportation:'#8b5cf6', Entertainment:'#ec4899', Healthcare:'#14b8a6', Shopping:'#f43f5e', Dining:'#f97316', Travel:'#06b6d4', Subscriptions:'#6366f1', Other:'#94a3b8', Uncategorized:'#fbbf24' };
+const CAT_COLORS = { Groceries:'#22c55e', Rent:'#f59e0b', Utilities:'#3b82f6', Transportation:'#8b5cf6', Entertainment:'#ec4899', Healthcare:'#14b8a6', Shopping:'#f43f5e', Dining:'#f97316', Travel:'#06b6d4', Subscriptions:'#6366f1', Other:'#94a3b8', Uncategorized:'#fbbf24', Excluded:'#cbd5e1', Income:'#10b981', Transfer:'#64748b' };
 const RULES = {
+    Excluded:['payment','autopay','auto pay','thank you','credit card payment','card payment','online payment','bill pay','paying','paid in full','minimum payment','statement balance','balance payment','ach payment','electronic payment','pymt'],
     Groceries:['walmart','kroger','safeway','trader joe','whole foods','aldi','costco','publix','grocery','supermarket'],
     Dining:['sweetgreen','mcdonald','starbucks','chipotle','subway','restaurant','cafe','coffee','doordash','uber eats','pizza'],
     Transportation:['uber','lyft','taxi','shell','exxon','chevron','gas','fuel','parking','metro','transit'],
@@ -51,7 +53,7 @@ const RULES = {
     Healthcare:['pharmacy','cvs','walgreens','doctor','hospital','medical','dentist'],
     Travel:['airline','delta','united','southwest','flight','airbnb','hotel','marriott','hilton'],
     Subscriptions:['subscription','membership','adobe','dropbox','linkedin','patreon'],
-    Income:['payroll','salary','direct deposit','paycheck','dividend','autopay payment'],
+    Income:['payroll','salary','direct deposit','paycheck','dividend'],
     Transfer:['transfer','ach','wire','zelle','venmo','paypal','atm']
 };
 
@@ -125,7 +127,7 @@ const Legend = ({ years }) => <div className="flex flex-wrap gap-3 justify-cente
 // 1. Seasonality Chart
 const SeasonalityChart = ({ expenses }) => {
     const { data, years } = useMemo(() => {
-        const sp = expenses.filter(e => e.category !== 'Income' && e.category !== 'Transfer');
+        const sp = expenses.filter(e => !EXCLUDED_CATEGORIES.includes(e.category));
         const yrs = [...new Set(sp.map(e => getY(e.date)))].sort();
         const data = yrs.map(y => {
             const mt = Array(12).fill(0);
@@ -141,7 +143,7 @@ const SeasonalityChart = ({ expenses }) => {
 // 2. Pace of Spending
 const PaceChart = ({ expenses }) => {
     const { data, years } = useMemo(() => {
-        const sp = expenses.filter(e => e.category !== 'Income' && e.category !== 'Transfer');
+        const sp = expenses.filter(e => !EXCLUDED_CATEGORIES.includes(e.category));
         const yrs = [...new Set(sp.map(e => getY(e.date)))].sort();
         const data = yrs.map(y => {
             const ye = sp.filter(e => getY(e.date) === y).sort((a,b) => pDate(a.date) - pDate(b.date));
@@ -162,7 +164,7 @@ const PaceChart = ({ expenses }) => {
 // 3. Clustered Category Chart
 const ClusteredChart = ({ expenses }) => {
     const { data, years } = useMemo(() => {
-        const sp = expenses.filter(e => !['Income','Transfer','Uncategorized'].includes(e.category));
+        const sp = expenses.filter(e => !EXCLUDED_CATEGORIES.includes(e.category) && e.category !== 'Uncategorized');
         const yrs = [...new Set(sp.map(e => getY(e.date)))].sort().slice(-3);
         const cyt = {};
         sp.forEach(e => { const y = getY(e.date); if (!yrs.includes(y)) return; if (!cyt[e.category]) cyt[e.category] = {}; cyt[e.category][y] = (cyt[e.category][y]||0) + safe(e.amount); });
@@ -183,7 +185,7 @@ const ClusteredChart = ({ expenses }) => {
 // 4. Heatmap
 const Heatmap = ({ expenses }) => {
     const { data, years, min, max } = useMemo(() => {
-        const sp = expenses.filter(e => e.category !== 'Income' && e.category !== 'Transfer');
+        const sp = expenses.filter(e => !EXCLUDED_CATEGORIES.includes(e.category));
         const yrs = [...new Set(sp.map(e => getY(e.date)))].sort();
         const data = {};
         sp.forEach(e => { const y = getY(e.date), m = getM(e.date); if (!data[y]) data[y] = Array(12).fill(0); data[y][m] += safe(e.amount); });
@@ -200,7 +202,7 @@ const Heatmap = ({ expenses }) => {
 // Account Totals by Year
 const AccountTotalsChart = ({ expenses }) => {
     const { data, years, maxVal } = useMemo(() => {
-        const sp = expenses.filter(e => e.category !== 'Income' && e.category !== 'Transfer');
+        const sp = expenses.filter(e => !EXCLUDED_CATEGORIES.includes(e.category));
         
         // Group by account and year
         const byAccount = {};
@@ -270,7 +272,7 @@ const AccountTotalsChart = ({ expenses }) => {
 // Pareto Chart (2025 only)
 const Pareto = ({ expenses }) => {
     const data = useMemo(() => {
-        const sp = expenses.filter(e => e.category !== 'Income' && e.category !== 'Transfer' && getY(e.date) === 2025);
+        const sp = expenses.filter(e => !EXCLUDED_CATEGORIES.includes(e.category) && getY(e.date) === 2025);
         const bc = {}; sp.forEach(e => bc[e.category] = (bc[e.category]||0) + safe(e.amount));
         const sorted = Object.entries(bc).map(([n,v]) => ({name:n,value:v})).sort((a,b) => b.value - a.value);
         const tot = sorted.reduce((s,i) => s + i.value, 0);
@@ -294,7 +296,7 @@ const Pareto = ({ expenses }) => {
 // Scatter Plot (2025 only)
 const Scatter = ({ expenses }) => {
     const { pts, minD, maxD, maxA } = useMemo(() => {
-        const sp = expenses.filter(e => e.category !== 'Income' && e.category !== 'Transfer' && getY(e.date) === 2025);
+        const sp = expenses.filter(e => !EXCLUDED_CATEGORIES.includes(e.category) && getY(e.date) === 2025);
         if (!sp.length) return { pts:[], minD:0, maxD:1, maxA:100 };
         const pts = sp.map(e => ({ d:pDate(e.date).getTime(), a:safe(e.amount), desc:e.description }));
         const ds = pts.map(p => p.d), as = pts.map(p => p.a);
@@ -313,7 +315,7 @@ const Scatter = ({ expenses }) => {
 // Top 10 Merchants (2025 only)
 const TopMerchants = ({ expenses }) => {
     const { data, total } = useMemo(() => {
-        const sp = expenses.filter(e => e.category !== 'Income' && e.category !== 'Transfer' && getY(e.date) === 2025);
+        const sp = expenses.filter(e => !EXCLUDED_CATEGORIES.includes(e.category) && getY(e.date) === 2025);
         const total = sp.reduce((s, e) => s + safe(e.amount), 0);
         const byMerchant = {};
         sp.forEach(e => {
@@ -358,7 +360,7 @@ const TopMerchants = ({ expenses }) => {
 // Recurring Costs / Subscriptions (2025)
 const RecurringCosts = ({ expenses }) => {
     const { recurring, totalMonthly, totalYearly } = useMemo(() => {
-        const sp2025 = expenses.filter(e => e.category !== 'Income' && e.category !== 'Transfer' && getY(e.date) === 2025);
+        const sp2025 = expenses.filter(e => !EXCLUDED_CATEGORIES.includes(e.category) && getY(e.date) === 2025);
         
         // Group by merchant and analyze frequency
         const byMerchant = {};
@@ -447,7 +449,7 @@ const RecurringCosts = ({ expenses }) => {
 // Small Purchase Merchants (avg < $20) - 2025
 const SmallPurchaseMerchants = ({ expenses }) => {
     const { data, grandTotal } = useMemo(() => {
-        const sp2025 = expenses.filter(e => e.category !== 'Income' && e.category !== 'Transfer' && getY(e.date) === 2025);
+        const sp2025 = expenses.filter(e => !EXCLUDED_CATEGORIES.includes(e.category) && getY(e.date) === 2025);
         
         if (!sp2025.length) return { data: [], grandTotal: 0 };
         
@@ -513,7 +515,7 @@ const SmallPurchaseMerchants = ({ expenses }) => {
 // Stats (2025 only)
 const Stats = ({ expenses }) => {
     const { tot, cnt, avg } = useMemo(() => {
-        const sp = expenses.filter(e => e.category !== 'Income' && e.category !== 'Transfer' && getY(e.date) === 2025);
+        const sp = expenses.filter(e => !EXCLUDED_CATEGORIES.includes(e.category) && getY(e.date) === 2025);
         const tot = sp.reduce((s,e) => s + safe(e.amount), 0);
         return { tot, cnt: sp.length, avg: sp.length ? tot/sp.length : 0 };
     }, [expenses]);
@@ -626,14 +628,17 @@ const App = () => {
                 <div className="p-4 border-b border-slate-50 flex justify-between items-center"><h2 className="font-black text-slate-800">Transactions ({expenses.length})</h2><button onClick={()=>{if(confirm("Delete all?"))setExpenses([]);}} className="text-xs font-bold text-red-500 bg-red-50 px-3 py-1.5 rounded-lg">Clear All</button></div>
                 <div className="overflow-x-auto max-h-[70vh]"><table className="w-full text-left text-sm"><thead className="bg-slate-50 text-slate-400 uppercase text-[10px] font-bold sticky top-0"><tr><th className="p-3">Date</th><th className="p-3">Description</th><th className="p-3">Account</th><th className="p-3">Category</th><th className="p-3 text-right">Amount</th><th className="p-3 w-10"></th></tr></thead>
                 <tbody className="divide-y divide-slate-50">
-                    {!expenses.length ? <tr><td colSpan={6} className="p-12 text-center text-slate-400">No transactions</td></tr> : [...expenses].reverse().map(e => <tr key={e.id} className="hover:bg-slate-50 group">
+                    {!expenses.length ? <tr><td colSpan={6} className="p-12 text-center text-slate-400">No transactions</td></tr> : [...expenses].reverse().map(e => {
+                        const isExcluded = EXCLUDED_CATEGORIES.includes(e.category);
+                        return (<tr key={e.id} className={`group ${isExcluded ? 'bg-slate-50 opacity-50' : 'hover:bg-slate-50'}`}>
                         <td className="p-3 text-slate-500 text-xs">{e.date}</td>
-                        <td className="p-3 font-semibold text-slate-700 max-w-[200px]"><div className="truncate text-xs">{e.description}</div></td>
+                        <td className={`p-3 font-semibold max-w-[200px] ${isExcluded ? 'text-slate-400 line-through' : 'text-slate-700'}`}><div className="truncate text-xs">{e.description}</div></td>
                         <td className="p-3 text-slate-500 text-xs">{e.account}</td>
-                        <td className="p-3"><select value={e.category} onChange={ev=>updateCat(e.id,ev.target.value)} className={`px-2 py-1 rounded-full text-[10px] font-bold border-0 cursor-pointer ${e.category==='Uncategorized'?'bg-amber-100 text-amber-700':'bg-indigo-100 text-indigo-700'}`}><option value="Uncategorized">Uncategorized</option>{CATEGORIES.map(c=><option key={c}>{c}</option>)}</select></td>
-                        <td className="p-3 text-right font-bold text-slate-900">${safe(e.amount).toFixed(2)}</td>
+                        <td className="p-3"><select value={e.category} onChange={ev=>updateCat(e.id,ev.target.value)} className={`px-2 py-1 rounded-full text-[10px] font-bold border-0 cursor-pointer ${isExcluded ? 'bg-slate-200 text-slate-500' : e.category==='Uncategorized'?'bg-amber-100 text-amber-700':'bg-indigo-100 text-indigo-700'}`}><option value="Uncategorized">Uncategorized</option>{CATEGORIES.map(c=><option key={c}>{c}</option>)}</select></td>
+                        <td className={`p-3 text-right font-bold ${isExcluded ? 'text-slate-400' : 'text-slate-900'}`}>${safe(e.amount).toFixed(2)}</td>
                         <td className="p-3"><button onClick={()=>del(e.id)} className="opacity-0 group-hover:opacity-100 text-red-400">🗑️</button></td>
-                    </tr>)}
+                    </tr>);
+                    })}
                 </tbody></table></div>
             </div>)}
         </main>
