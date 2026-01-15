@@ -899,6 +899,349 @@ const CategoryManagement = ({ expenses, merchantRules, onUpdateExpense, onUpdate
     );
 };
 
+// ============== TRANSACTIONS TABLE WITH FILTERS ==============
+const FilterDropdown = ({ isOpen, onClose, children, style }) => {
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 z-50" onClick={onClose}>
+            <div className="absolute bg-white rounded-xl shadow-2xl border border-slate-200 p-3 min-w-[200px] max-h-[300px] overflow-auto"
+                style={style} onClick={e => e.stopPropagation()}>
+                {children}
+            </div>
+        </div>
+    );
+};
+
+const TransactionsTable = ({ expenses, merchantRules, onDelete, onClearAll }) => {
+    // Filter state
+    const [dateFilter, setDateFilter] = useState([]); // Array of "Month Year" strings
+    const [categoryFilter, setCategoryFilter] = useState([]); // Array of category strings
+    const [accountFilter, setAccountFilter] = useState([]); // Array of account strings
+    const [amountMin, setAmountMin] = useState('');
+    const [amountMax, setAmountMax] = useState('');
+    const [descSearch, setDescSearch] = useState('');
+    
+    // Dropdown open state
+    const [openFilter, setOpenFilter] = useState(null); // 'date', 'category', 'account', 'amount', 'desc'
+    const [filterPos, setFilterPos] = useState({ top: 0, left: 0 });
+
+    // Get unique filter options
+    const filterOptions = useMemo(() => {
+        const months = new Set();
+        const categories = new Set();
+        const accounts = new Set();
+        
+        expenses.forEach(e => {
+            const d = pDate(e.date);
+            const monthYear = `${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+            months.add(monthYear);
+            
+            const cat = getEffectiveCategory(e, merchantRules).category;
+            categories.add(cat);
+            
+            if (e.account) accounts.add(e.account);
+        });
+        
+        // Sort months chronologically
+        const sortedMonths = [...months].sort((a, b) => {
+            const [aMonth, aYear] = a.split(' ');
+            const [bMonth, bYear] = b.split(' ');
+            const aDate = new Date(`${aMonth} 1, ${aYear}`);
+            const bDate = new Date(`${bMonth} 1, ${bYear}`);
+            return bDate - aDate; // Most recent first
+        });
+        
+        return {
+            months: sortedMonths,
+            categories: [...categories].sort(),
+            accounts: [...accounts].sort()
+        };
+    }, [expenses, merchantRules]);
+
+    // Apply filters
+    const filteredExpenses = useMemo(() => {
+        return expenses.filter(e => {
+            // Date filter (Month Year)
+            if (dateFilter.length > 0) {
+                const d = pDate(e.date);
+                const monthYear = `${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+                if (!dateFilter.includes(monthYear)) return false;
+            }
+            
+            // Category filter
+            if (categoryFilter.length > 0) {
+                const cat = getEffectiveCategory(e, merchantRules).category;
+                if (!categoryFilter.includes(cat)) return false;
+            }
+            
+            // Account filter
+            if (accountFilter.length > 0) {
+                if (!accountFilter.includes(e.account)) return false;
+            }
+            
+            // Amount range filter
+            const amt = safe(e.amount);
+            if (amountMin !== '' && amt < parseFloat(amountMin)) return false;
+            if (amountMax !== '' && amt > parseFloat(amountMax)) return false;
+            
+            // Description search
+            if (descSearch) {
+                const term = descSearch.toLowerCase();
+                if (!e.description?.toLowerCase().includes(term)) return false;
+            }
+            
+            return true;
+        });
+    }, [expenses, merchantRules, dateFilter, categoryFilter, accountFilter, amountMin, amountMax, descSearch]);
+
+    // Summary stats for filtered data
+    const summary = useMemo(() => {
+        const spending = filteredExpenses.filter(e => !EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category));
+        const total = spending.reduce((s, e) => s + safe(e.amount), 0);
+        return { count: filteredExpenses.length, total, spendingCount: spending.length };
+    }, [filteredExpenses, merchantRules]);
+
+    // Check if any filters are active
+    const hasActiveFilters = dateFilter.length > 0 || categoryFilter.length > 0 || accountFilter.length > 0 || 
+        amountMin !== '' || amountMax !== '' || descSearch !== '';
+
+    const clearAllFilters = () => {
+        setDateFilter([]);
+        setCategoryFilter([]);
+        setAccountFilter([]);
+        setAmountMin('');
+        setAmountMax('');
+        setDescSearch('');
+    };
+
+    const openFilterDropdown = (filterType, event) => {
+        const rect = event.currentTarget.getBoundingClientRect();
+        setFilterPos({ top: rect.bottom + 4, left: Math.min(rect.left, window.innerWidth - 220) });
+        setOpenFilter(filterType);
+    };
+
+    const toggleFilterItem = (filterType, value) => {
+        const setters = { date: setDateFilter, category: setCategoryFilter, account: setAccountFilter };
+        const current = { date: dateFilter, category: categoryFilter, account: accountFilter }[filterType];
+        const setter = setters[filterType];
+        
+        if (current.includes(value)) {
+            setter(current.filter(v => v !== value));
+        } else {
+            setter([...current, value]);
+        }
+    };
+
+    const FilterButton = ({ type, label, activeCount, onClick }) => (
+        <button onClick={onClick}
+            className={`flex items-center gap-1 px-1 py-0.5 rounded transition-colors ${activeCount > 0 ? 'bg-indigo-100 text-indigo-700' : 'hover:bg-slate-200 text-slate-400'}`}>
+            <span className="text-[10px] font-bold uppercase">{label}</span>
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+            </svg>
+            {activeCount > 0 && <span className="text-[9px] bg-indigo-600 text-white px-1 rounded-full">{activeCount}</span>}
+        </button>
+    );
+
+    return (
+        <div className="space-y-4">
+            {/* Header with summary */}
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-lg p-4">
+                <div className="flex flex-wrap justify-between items-center gap-4">
+                    <div>
+                        <h2 className="font-black text-slate-800">Transactions</h2>
+                        <p className="text-sm text-slate-500">
+                            {hasActiveFilters ? (
+                                <span>Showing <span className="font-bold text-indigo-600">{summary.count}</span> of {expenses.length} transactions</span>
+                            ) : (
+                                <span>{expenses.length} total transactions</span>
+                            )}
+                        </p>
+                    </div>
+                    <div className="flex items-center gap-4">
+                        {hasActiveFilters && (
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm font-bold text-slate-600">
+                                    Filtered Total: <span className="text-indigo-600">${summary.total.toLocaleString(undefined, {maximumFractionDigits: 0})}</span>
+                                </span>
+                                <button onClick={clearAllFilters} className="text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-lg hover:bg-indigo-100">
+                                    Clear Filters
+                                </button>
+                            </div>
+                        )}
+                        <button onClick={onClearAll} className="text-xs font-bold text-red-500 bg-red-50 px-3 py-1.5 rounded-lg hover:bg-red-100">
+                            Clear All Data
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            {/* Table */}
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-lg overflow-hidden">
+                <div className="overflow-x-auto max-h-[65vh]">
+                    <table className="w-full text-left text-sm">
+                        <thead className="bg-slate-50 sticky top-0 z-10">
+                            <tr>
+                                <th className="p-3">
+                                    <FilterButton type="date" label="Date" activeCount={dateFilter.length} onClick={e => openFilterDropdown('date', e)} />
+                                </th>
+                                <th className="p-3">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-[10px] font-bold uppercase text-slate-400">Description</span>
+                                        <input type="text" placeholder="🔍" value={descSearch} onChange={e => setDescSearch(e.target.value)}
+                                            className={`w-20 px-2 py-1 text-xs rounded border outline-none ${descSearch ? 'border-indigo-400 bg-indigo-50' : 'border-slate-200 bg-white'}`}/>
+                                    </div>
+                                </th>
+                                <th className="p-3">
+                                    <FilterButton type="account" label="Account" activeCount={accountFilter.length} onClick={e => openFilterDropdown('account', e)} />
+                                </th>
+                                <th className="p-3">
+                                    <FilterButton type="category" label="Category" activeCount={categoryFilter.length} onClick={e => openFilterDropdown('category', e)} />
+                                </th>
+                                <th className="p-3 text-right">
+                                    <FilterButton type="amount" label="Amount" activeCount={(amountMin || amountMax) ? 1 : 0} onClick={e => openFilterDropdown('amount', e)} />
+                                </th>
+                                <th className="p-3 w-10"></th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50">
+                            {filteredExpenses.length === 0 ? (
+                                <tr><td colSpan={6} className="p-12 text-center text-slate-400">
+                                    {expenses.length === 0 ? 'No transactions' : 'No transactions match filters'}
+                                </td></tr>
+                            ) : [...filteredExpenses].reverse().map(e => {
+                                const effective = getEffectiveCategory(e, merchantRules);
+                                const isExcluded = EXCLUDED_CATEGORIES.includes(effective.category);
+                                return (
+                                    <tr key={e.id} className={`group ${isExcluded ? 'bg-slate-50 opacity-50' : 'hover:bg-slate-50'}`}>
+                                        <td className="p-3 text-slate-500 text-xs whitespace-nowrap">{e.date}</td>
+                                        <td className={`p-3 font-semibold max-w-[250px] ${isExcluded ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
+                                            <div className="truncate text-xs" title={e.description}>{e.description}</div>
+                                        </td>
+                                        <td className="p-3 text-slate-500 text-xs">{e.account}</td>
+                                        <td className="p-3">
+                                            <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${
+                                                isExcluded ? 'bg-slate-200 text-slate-500' : 
+                                                effective.category === 'Uncategorized' ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700'
+                                            }`} title={`Source: ${effective.source} | CSV: ${e.csvCategory}`}>
+                                                {effective.category}
+                                            </span>
+                                        </td>
+                                        <td className={`p-3 text-right font-bold ${isExcluded ? 'text-slate-400' : 'text-slate-900'}`}>
+                                            ${safe(e.amount).toFixed(2)}
+                                        </td>
+                                        <td className="p-3">
+                                            <button onClick={() => onDelete(e.id)} className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600">🗑️</button>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+
+                {/* Footer Summary */}
+                {filteredExpenses.length > 0 && (
+                    <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-between items-center">
+                        <span className="text-sm text-slate-500">
+                            {summary.spendingCount} spending transactions (excluding Income/Transfer/Excluded)
+                        </span>
+                        <div className="text-right">
+                            <div className="text-xs text-slate-400 uppercase font-bold">Filtered Total (Spending)</div>
+                            <div className="text-2xl font-black text-indigo-600">${summary.total.toLocaleString(undefined, {maximumFractionDigits: 2})}</div>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* Filter Dropdowns */}
+            <FilterDropdown isOpen={openFilter === 'date'} onClose={() => setOpenFilter(null)} style={filterPos}>
+                <div className="space-y-2">
+                    <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                        <span className="font-bold text-sm text-slate-700">Filter by Month</span>
+                        {dateFilter.length > 0 && (
+                            <button onClick={() => setDateFilter([])} className="text-xs text-indigo-600 hover:underline">Clear</button>
+                        )}
+                    </div>
+                    <div className="space-y-1 max-h-[200px] overflow-auto">
+                        {filterOptions.months.map(month => (
+                            <label key={month} className="flex items-center gap-2 p-1.5 rounded hover:bg-slate-50 cursor-pointer">
+                                <input type="checkbox" checked={dateFilter.includes(month)} onChange={() => toggleFilterItem('date', month)}
+                                    className="w-4 h-4 rounded border-slate-300 text-indigo-600"/>
+                                <span className="text-sm text-slate-700">{month}</span>
+                            </label>
+                        ))}
+                    </div>
+                </div>
+            </FilterDropdown>
+
+            <FilterDropdown isOpen={openFilter === 'category'} onClose={() => setOpenFilter(null)} style={filterPos}>
+                <div className="space-y-2">
+                    <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                        <span className="font-bold text-sm text-slate-700">Filter by Category</span>
+                        {categoryFilter.length > 0 && (
+                            <button onClick={() => setCategoryFilter([])} className="text-xs text-indigo-600 hover:underline">Clear</button>
+                        )}
+                    </div>
+                    <div className="space-y-1 max-h-[200px] overflow-auto">
+                        {filterOptions.categories.map(cat => (
+                            <label key={cat} className="flex items-center gap-2 p-1.5 rounded hover:bg-slate-50 cursor-pointer">
+                                <input type="checkbox" checked={categoryFilter.includes(cat)} onChange={() => toggleFilterItem('category', cat)}
+                                    className="w-4 h-4 rounded border-slate-300 text-indigo-600"/>
+                                <span className="text-sm text-slate-700">{cat}</span>
+                                <span className="w-3 h-3 rounded-full ml-auto" style={{backgroundColor: CAT_COLORS[cat] || '#6366f1'}}/>
+                            </label>
+                        ))}
+                    </div>
+                </div>
+            </FilterDropdown>
+
+            <FilterDropdown isOpen={openFilter === 'account'} onClose={() => setOpenFilter(null)} style={filterPos}>
+                <div className="space-y-2">
+                    <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                        <span className="font-bold text-sm text-slate-700">Filter by Account</span>
+                        {accountFilter.length > 0 && (
+                            <button onClick={() => setAccountFilter([])} className="text-xs text-indigo-600 hover:underline">Clear</button>
+                        )}
+                    </div>
+                    <div className="space-y-1 max-h-[200px] overflow-auto">
+                        {filterOptions.accounts.map(acc => (
+                            <label key={acc} className="flex items-center gap-2 p-1.5 rounded hover:bg-slate-50 cursor-pointer">
+                                <input type="checkbox" checked={accountFilter.includes(acc)} onChange={() => toggleFilterItem('account', acc)}
+                                    className="w-4 h-4 rounded border-slate-300 text-indigo-600"/>
+                                <span className="text-sm text-slate-700">{acc}</span>
+                            </label>
+                        ))}
+                    </div>
+                </div>
+            </FilterDropdown>
+
+            <FilterDropdown isOpen={openFilter === 'amount'} onClose={() => setOpenFilter(null)} style={filterPos}>
+                <div className="space-y-3">
+                    <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                        <span className="font-bold text-sm text-slate-700">Filter by Amount</span>
+                        {(amountMin || amountMax) && (
+                            <button onClick={() => { setAmountMin(''); setAmountMax(''); }} className="text-xs text-indigo-600 hover:underline">Clear</button>
+                        )}
+                    </div>
+                    <div className="space-y-2">
+                        <div>
+                            <label className="text-xs font-bold text-slate-500 block mb-1">Minimum ($)</label>
+                            <input type="number" value={amountMin} onChange={e => setAmountMin(e.target.value)} placeholder="0"
+                                className="w-full p-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500"/>
+                        </div>
+                        <div>
+                            <label className="text-xs font-bold text-slate-500 block mb-1">Maximum ($)</label>
+                            <input type="number" value={amountMax} onChange={e => setAmountMax(e.target.value)} placeholder="∞"
+                                className="w-full p-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-indigo-500"/>
+                        </div>
+                    </div>
+                </div>
+            </FilterDropdown>
+        </div>
+    );
+};
+
 // ============== IMPORT DIALOG ==============
 const ImportDialog = ({ headers, onClose, onConfirm }) => {
     const [map, setMap] = useState({ date: headers.find(h=>/date/i.test(h))||headers[0], amount: headers.find(h=>/amount|debit/i.test(h))||headers[1], desc: headers.find(h=>/desc|memo/i.test(h))||headers[2], cat: headers.find(h=>/cat/i.test(h))||'' });
@@ -1056,28 +1399,14 @@ const App = () => {
                 />
             )}
 
-            {tab === 'transactions' && (<div className="bg-white rounded-2xl border border-slate-100 shadow-lg overflow-hidden">
-                <div className="p-4 border-b border-slate-50 flex justify-between items-center"><h2 className="font-black text-slate-800">Transactions ({expenses.length})</h2><button onClick={()=>{if(confirm("Delete all data?"))setExpenses([]);}} className="text-xs font-bold text-red-500 bg-red-50 px-3 py-1.5 rounded-lg">Clear All</button></div>
-                <div className="overflow-x-auto max-h-[70vh]"><table className="w-full text-left text-sm"><thead className="bg-slate-50 text-slate-400 uppercase text-[10px] font-bold sticky top-0"><tr><th className="p-3">Date</th><th className="p-3">Description</th><th className="p-3">Account</th><th className="p-3">Category</th><th className="p-3 text-right">Amount</th><th className="p-3 w-10"></th></tr></thead>
-                <tbody className="divide-y divide-slate-50">
-                    {!expenses.length ? <tr><td colSpan={6} className="p-12 text-center text-slate-400">No transactions</td></tr> : [...expenses].reverse().map(e => {
-                        const effective = getEffectiveCategory(e, merchantRules);
-                        const isExcluded = EXCLUDED_CATEGORIES.includes(effective.category);
-                        return (<tr key={e.id} className={`group ${isExcluded ? 'bg-slate-50 opacity-50' : 'hover:bg-slate-50'}`}>
-                            <td className="p-3 text-slate-500 text-xs">{e.date}</td>
-                            <td className={`p-3 font-semibold max-w-[200px] ${isExcluded ? 'text-slate-400 line-through' : 'text-slate-700'}`}><div className="truncate text-xs">{e.description}</div></td>
-                            <td className="p-3 text-slate-500 text-xs">{e.account}</td>
-                            <td className="p-3">
-                                <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${isExcluded ? 'bg-slate-200 text-slate-500' : effective.category==='Uncategorized'?'bg-amber-100 text-amber-700':'bg-indigo-100 text-indigo-700'}`} title={`Source: ${effective.source} | CSV: ${e.csvCategory}`}>
-                                    {effective.category}
-                                </span>
-                            </td>
-                            <td className={`p-3 text-right font-bold ${isExcluded ? 'text-slate-400' : 'text-slate-900'}`}>${safe(e.amount).toFixed(2)}</td>
-                            <td className="p-3"><button onClick={()=>del(e.id)} className="opacity-0 group-hover:opacity-100 text-red-400">🗑️</button></td>
-                        </tr>);
-                    })}
-                </tbody></table></div>
-            </div>)}
+            {tab === 'transactions' && (
+                <TransactionsTable 
+                    expenses={expenses} 
+                    merchantRules={merchantRules} 
+                    onDelete={del}
+                    onClearAll={() => { if(confirm("Delete all data?")) setExpenses([]); }}
+                />
+            )}
         </main>
         
         {importData && <ImportDialog headers={importData.meta.fields} onClose={()=>setImportData(null)} onConfirm={processImport}/>}
