@@ -60,11 +60,13 @@ const AUTO_RULES = {
 };
 
 // ============== HELPERS ==============
+const MIN_YEAR = 2024; // Only show data from 2024 onwards
 const safe = v => (v == null || isNaN(v)) ? 0 : Number(v);
 const pDate = d => { const x = new Date(d); return isNaN(x) ? new Date() : x; };
 const getY = d => pDate(d).getFullYear();
 const getM = d => pDate(d).getMonth();
 const getDoY = d => { const x = pDate(d), s = new Date(x.getFullYear(),0,0); return Math.floor((x-s)/864e5); };
+const isValidYear = d => getY(d) >= MIN_YEAR;
 
 // Clean merchant name for matching
 const cleanMerchant = (desc) => {
@@ -205,7 +207,7 @@ const Legend = ({ years }) => <div className="flex flex-wrap gap-3 justify-cente
 
 const SeasonalityChart = ({ expenses, merchantRules }) => {
     const { data, years } = useMemo(() => {
-        const sp = expenses.filter(e => !EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category));
+        const sp = expenses.filter(e => !EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category) && isValidYear(e.date));
         const yrs = [...new Set(sp.map(e => getY(e.date)))].sort();
         const data = yrs.map(y => {
             const mt = Array(12).fill(0);
@@ -215,12 +217,15 @@ const SeasonalityChart = ({ expenses, merchantRules }) => {
         return { data, years: yrs };
     }, [expenses, merchantRules]);
     if (!data.length) return <Empty msg="Import data to see seasonality" />;
-    return <div className="h-full flex flex-col"><div className="flex-1"><SVGLine data={data} xLabels={MONTHS} h={220}/></div><Legend years={years}/></div>;
+    return (<div className="h-full flex flex-col">
+        <div className="flex-1 min-h-0 overflow-hidden"><SVGLine data={data} xLabels={MONTHS} h={220}/></div>
+        <div className="flex-shrink-0"><Legend years={years}/></div>
+    </div>);
 };
 
 const PaceChart = ({ expenses, merchantRules }) => {
     const { data, years } = useMemo(() => {
-        const sp = expenses.filter(e => !EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category));
+        const sp = expenses.filter(e => !EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category) && isValidYear(e.date));
         const yrs = [...new Set(sp.map(e => getY(e.date)))].sort();
         const data = yrs.map(y => {
             const ye = sp.filter(e => getY(e.date) === y).sort((a,b) => pDate(a.date) - pDate(b.date));
@@ -235,16 +240,20 @@ const PaceChart = ({ expenses, merchantRules }) => {
         return { data, years: yrs };
     }, [expenses, merchantRules]);
     if (!data.length) return <Empty msg="Import data to see pace" />;
-    return <div className="h-full flex flex-col"><div className="flex-1"><SVGLine data={data} xLabels={MONTHS} h={220} dots={false}/></div><Legend years={years}/></div>;
+    return (<div className="h-full flex flex-col">
+        <div className="flex-1 min-h-0 overflow-hidden"><SVGLine data={data} xLabels={MONTHS} h={220} dots={false}/></div>
+        <div className="flex-shrink-0"><Legend years={years}/></div>
+    </div>);
 };
 
-const ClusteredChart = ({ expenses, merchantRules }) => {
+// Category Evolution - vertical year layout, two columns
+const CategoryEvolution = ({ expenses, merchantRules }) => {
     const { data, years } = useMemo(() => {
         const sp = expenses.filter(e => {
             const cat = getEffectiveCategory(e, merchantRules).category;
-            return !EXCLUDED_CATEGORIES.includes(cat) && cat !== 'Uncategorized';
+            return !EXCLUDED_CATEGORIES.includes(cat) && cat !== 'Uncategorized' && isValidYear(e.date);
         });
-        const yrs = [...new Set(sp.map(e => getY(e.date)))].sort().slice(-3);
+        const yrs = [...new Set(sp.map(e => getY(e.date)))].sort().slice(-2);
         const cyt = {};
         sp.forEach(e => { 
             const y = getY(e.date); 
@@ -254,22 +263,69 @@ const ClusteredChart = ({ expenses, merchantRules }) => {
             cyt[cat][y] = (cyt[cat][y]||0) + safe(e.amount); 
         });
         const cy = yrs[yrs.length-1];
-        const data = Object.entries(cyt).map(([c,yt]) => ({ category:c, years:yrs.map(y=>yt[y]||0), cur:yt[cy]||0 })).sort((a,b) => b.cur - a.cur).slice(0,8);
+        const data = Object.entries(cyt).map(([c,yt]) => ({ 
+            category: c, 
+            yearData: yrs.map(y => ({ year: y, value: yt[y] || 0 })),
+            cur: yt[cy] || 0 
+        })).sort((a,b) => b.cur - a.cur).slice(0, 10);
         return { data, years: yrs };
     }, [expenses, merchantRules]);
+    
     if (!data.length) return <Empty msg="Import data to compare" />;
-    const mx = Math.max(...data.flatMap(d => d.years));
-    return (<div className="h-full flex flex-col"><div className="flex-1 space-y-2 overflow-auto pr-2">
-        {data.map(item => <div key={item.category} className="flex items-center gap-2">
-            <div className="w-24 text-[10px] font-semibold text-slate-500 truncate text-right">{item.category}</div>
-            <div className="flex-1 flex gap-1">{item.years.map((v,i) => <div key={i} className="flex-1 flex items-center gap-1"><div className="flex-1 h-5 bg-slate-100 rounded overflow-hidden"><div className="h-full rounded" style={{width:`${Math.max(v/mx*100,0)}%`,backgroundColor:YEAR_COLORS[years[i]]||'#6366f1'}}/></div><span className="text-[9px] font-semibold text-slate-500 w-12 text-right">{v>0?`$${(v/1000).toFixed(1)}k`:'-'}</span></div>)}</div>
-        </div>)}
-    </div><Legend years={years}/></div>);
+    const mx = Math.max(...data.flatMap(d => d.yearData.map(y => y.value)));
+    
+    // Split into two columns
+    const midpoint = Math.ceil(data.length / 2);
+    const leftColumn = data.slice(0, midpoint);
+    const rightColumn = data.slice(midpoint);
+    
+    const CategoryBlock = ({ item }) => (
+        <div className="bg-slate-50 rounded-lg p-2">
+            <div className="text-[11px] font-bold text-slate-700 mb-2 truncate" title={item.category}>
+                {item.category}
+            </div>
+            <div className="space-y-1.5">
+                {item.yearData.map(({ year, value }) => (
+                    <div key={year} className="flex items-center gap-2">
+                        <div className="w-10 text-[9px] font-bold text-slate-400">{year}</div>
+                        <div className="flex-1 h-5 bg-slate-200 rounded overflow-hidden relative">
+                            <div 
+                                className="h-full rounded transition-all" 
+                                style={{
+                                    width: `${mx > 0 ? Math.max((value / mx) * 100, 0) : 0}%`,
+                                    backgroundColor: YEAR_COLORS[year] || '#6366f1'
+                                }}
+                            />
+                        </div>
+                        <div className="w-16 text-[10px] font-bold text-slate-600 text-right">
+                            {value > 0 ? `$${(value / 1000).toFixed(1)}k` : '$0'}
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+    
+    return (
+        <div className="h-full flex flex-col">
+            <div className="flex-1 min-h-0 overflow-auto">
+                <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-3">
+                        {leftColumn.map(item => <CategoryBlock key={item.category} item={item} />)}
+                    </div>
+                    <div className="space-y-3">
+                        {rightColumn.map(item => <CategoryBlock key={item.category} item={item} />)}
+                    </div>
+                </div>
+            </div>
+            <div className="flex-shrink-0"><Legend years={years}/></div>
+        </div>
+    );
 };
 
 const Heatmap = ({ expenses, merchantRules }) => {
     const { data, years, min, max } = useMemo(() => {
-        const sp = expenses.filter(e => !EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category));
+        const sp = expenses.filter(e => !EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category) && isValidYear(e.date));
         const yrs = [...new Set(sp.map(e => getY(e.date)))].sort();
         const data = {};
         sp.forEach(e => { const y = getY(e.date), m = getM(e.date); if (!data[y]) data[y] = Array(12).fill(0); data[y][m] += safe(e.amount); });
@@ -278,14 +334,14 @@ const Heatmap = ({ expenses, merchantRules }) => {
     }, [expenses, merchantRules]);
     if (!years.length) return <Empty msg="Import data for heatmap" />;
     const getCol = v => { if (!v) return '#f8fafc'; const r = (v-min)/(max-min||1); return r<.5 ? `rgb(${34+r*2*216},${197+r*2*7},${94-r*2*94})` : `rgb(${250-(r-.5)*2*11},${204-(r-.5)*2*136},${(r-.5)*2*68})`; };
-    return (<div className="h-full flex flex-col"><div className="flex-1 overflow-auto"><table className="w-full text-[10px]"><thead><tr><th className="p-1 text-slate-400 text-left">Year</th>{MONTHS.map(m=><th key={m} className="p-1 text-slate-400 text-center">{m}</th>)}<th className="p-1 text-slate-400 text-right">Total</th></tr></thead><tbody>
+    return (<div className="h-full flex flex-col"><div className="flex-1 min-h-0 overflow-auto"><table className="w-full text-[10px]"><thead><tr><th className="p-1 text-slate-400 text-left">Year</th>{MONTHS.map(m=><th key={m} className="p-1 text-slate-400 text-center">{m}</th>)}<th className="p-1 text-slate-400 text-right">Total</th></tr></thead><tbody>
         {years.map(y => { const yd = data[y]||Array(12).fill(0), tot = yd.reduce((a,b)=>a+b,0); return (<tr key={y}><td className="p-1 font-bold text-slate-700">{y}</td>{yd.map((v,i)=><td key={i} className="p-0.5"><div className="rounded p-1 text-center font-bold" style={{backgroundColor:getCol(v),color:v>max*.6?'white':'#334155'}}>{v>0?`${(v/1000).toFixed(1)}k`:'-'}</div></td>)}<td className="p-1 font-black text-slate-900 text-right">${tot.toLocaleString(undefined,{maximumFractionDigits:0})}</td></tr>); })}
-    </tbody></table></div><div className="flex items-center justify-center gap-2 pt-2 border-t border-slate-100 mt-2"><span className="text-[10px] text-slate-400">Low</span><div className="flex h-3 rounded overflow-hidden">{[0,.25,.5,.75,1].map(r=><div key={r} className="w-6 h-full" style={{backgroundColor:getCol(min+r*(max-min))}}/>)}</div><span className="text-[10px] text-slate-400">High</span></div></div>);
+    </tbody></table></div><div className="flex-shrink-0 flex items-center justify-center gap-2 pt-2 border-t border-slate-100 mt-2"><span className="text-[10px] text-slate-400">Low</span><div className="flex h-3 rounded overflow-hidden">{[0,.25,.5,.75,1].map(r=><div key={r} className="w-6 h-full" style={{backgroundColor:getCol(min+r*(max-min))}}/>)}</div><span className="text-[10px] text-slate-400">High</span></div></div>);
 };
 
 const AccountTotalsChart = ({ expenses, merchantRules }) => {
     const { data, years, maxVal } = useMemo(() => {
-        const sp = expenses.filter(e => !EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category));
+        const sp = expenses.filter(e => !EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category) && isValidYear(e.date));
         const byAccount = {};
         sp.forEach(e => { const acc = e.account || 'Unknown', year = getY(e.date); if (!byAccount[acc]) byAccount[acc] = {}; byAccount[acc][year] = (byAccount[acc][year] || 0) + safe(e.amount); });
         const yearsSet = new Set(sp.map(e => getY(e.date)));
@@ -295,9 +351,12 @@ const AccountTotalsChart = ({ expenses, merchantRules }) => {
         return { data, years, maxVal };
     }, [expenses, merchantRules]);
     if (!data.length) return <Empty msg="Import data to see account totals" />;
-    return (<div className="h-full flex flex-col"><div className="flex-1 overflow-auto space-y-2">
-        {data.map(item => (<div key={item.account} className="space-y-1"><div className="text-[10px] font-bold text-slate-700 truncate">{item.account}</div><div className="flex gap-1">{item.years.map((val, yi) => (<div key={yi} className="flex-1 flex items-center gap-1"><div className="flex-1 h-5 bg-slate-100 rounded overflow-hidden"><div className="h-full rounded" style={{width: `${maxVal > 0 ? (val / maxVal) * 100 : 0}%`, backgroundColor: YEAR_COLORS[years[yi]] || '#6366f1'}}/></div><span className="text-[9px] font-semibold text-slate-500 w-14 text-right">{val > 0 ? `$${(val/1000).toFixed(1)}k` : '-'}</span></div>))}</div></div>))}
-    </div><Legend years={years}/></div>);
+    return (<div className="h-full flex flex-col">
+        <div className="flex-1 min-h-0 overflow-auto space-y-2">
+            {data.map(item => (<div key={item.account} className="space-y-1"><div className="text-[10px] font-bold text-slate-700 truncate">{item.account}</div><div className="flex gap-1">{item.years.map((val, yi) => (<div key={yi} className="flex-1 flex items-center gap-1"><div className="flex-1 h-5 bg-slate-100 rounded overflow-hidden"><div className="h-full rounded" style={{width: `${maxVal > 0 ? (val / maxVal) * 100 : 0}%`, backgroundColor: YEAR_COLORS[years[yi]] || '#6366f1'}}/></div><span className="text-[9px] font-semibold text-slate-500 w-14 text-right">{val > 0 ? `$${(val/1000).toFixed(1)}k` : '-'}</span></div>))}</div></div>))}
+        </div>
+        <div className="flex-shrink-0"><Legend years={years}/></div>
+    </div>);
 };
 
 // Dashboard Charts (2025 filtered)
@@ -621,7 +680,8 @@ const HighImpactView = ({ expenses, merchantRules, onUpdateRule }) => {
     const merchantData = useMemo(() => {
         const byMerchant = {};
         
-        expenses.forEach(e => {
+        // Only process 2024+ expenses
+        expenses.filter(e => isValidYear(e.date)).forEach(e => {
             const merchant = cleanMerchant(e.description);
             const effective = getEffectiveCategory(e, merchantRules);
             
@@ -866,7 +926,8 @@ const CategoryManagement = ({ expenses, merchantRules, onUpdateExpense, onUpdate
     const [editingExpense, setEditingExpense] = useState(null);
     
     const filteredExpenses = useMemo(() => {
-        let filtered = [...expenses];
+        // Start with 2024+ expenses only
+        let filtered = expenses.filter(e => isValidYear(e.date));
         if (filter === 'uncategorized') {
             filtered = filtered.filter(e => getEffectiveCategory(e, merchantRules).category === 'Uncategorized');
         } else if (filter === 'rules') {
@@ -894,13 +955,14 @@ const CategoryManagement = ({ expenses, merchantRules, onUpdateExpense, onUpdate
     };
 
     const stats = useMemo(() => {
-        const uncategorized = expenses.filter(e => getEffectiveCategory(e, merchantRules).category === 'Uncategorized').length;
-        const withRules = expenses.filter(e => {
+        const validExpenses = expenses.filter(e => isValidYear(e.date));
+        const uncategorized = validExpenses.filter(e => getEffectiveCategory(e, merchantRules).category === 'Uncategorized').length;
+        const withRules = validExpenses.filter(e => {
             const src = getEffectiveCategory(e, merchantRules).source;
             return src === 'rule-global' || src === 'rule-account';
         }).length;
-        const excluded = expenses.filter(e => EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category)).length;
-        return { uncategorized, withRules, excluded, total: expenses.length, rulesCount: Object.keys(merchantRules).length };
+        const excluded = validExpenses.filter(e => EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category)).length;
+        return { uncategorized, withRules, excluded, total: validExpenses.length, rulesCount: Object.keys(merchantRules).length };
     }, [expenses, merchantRules]);
 
     const getCategoryBadge = (source) => {
@@ -1122,7 +1184,7 @@ const TransactionsTable = ({ expenses, merchantRules, onDelete, onClearAll }) =>
         const categories = new Set();
         const accounts = new Set();
         
-        expenses.forEach(e => {
+        expenses.filter(e => isValidYear(e.date)).forEach(e => {
             const d = pDate(e.date);
             const monthYear = `${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
             months.add(monthYear);
@@ -1152,6 +1214,9 @@ const TransactionsTable = ({ expenses, merchantRules, onDelete, onClearAll }) =>
     // Apply filters
     const filteredExpenses = useMemo(() => {
         return expenses.filter(e => {
+            // Year filter - only 2024+
+            if (!isValidYear(e.date)) return false;
+            
             // Date filter (Month Year)
             if (dateFilter.length > 0) {
                 const d = pDate(e.date);
@@ -1586,7 +1651,7 @@ const App = () => {
                     <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">🗓️ Seasonality (Jan-Dec)</h3><div className="h-64"><SeasonalityChart expenses={expenses} merchantRules={merchantRules}/></div></div>
                     <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">🏃 Pace of Spending</h3><div className="h-64"><PaceChart expenses={expenses} merchantRules={merchantRules}/></div></div>
                 </div>
-                <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">📊 Inflation vs Habit (by Category)</h3><div className="h-72"><ClusteredChart expenses={expenses} merchantRules={merchantRules}/></div></div>
+                <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">📊 Category Evolution (YoY)</h3><div className="h-80"><CategoryEvolution expenses={expenses} merchantRules={merchantRules}/></div></div>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">🔥 Spending Heatmap</h3><div className="h-64"><Heatmap expenses={expenses} merchantRules={merchantRules}/></div></div>
                     <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">💳 Account Totals by Year</h3><div className="h-64"><AccountTotalsChart expenses={expenses} merchantRules={merchantRules}/></div></div>
