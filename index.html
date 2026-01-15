@@ -261,8 +261,8 @@ const loadMerchantRules = () => {
     } catch { return {}; }
 };
 
-// Get the rule key for account-specific rules
-const getAccountRuleKey = (merchant, account) => `${merchant}|||${account}`;
+// Get the rule key for account-specific rules (now uses merchant only, accounts stored in rule)
+const getAccountsRuleKey = (merchant) => `${merchant}|||accounts`;
 
 // Get effective category for a transaction
 const getEffectiveCategory = (expense, merchantRules) => {
@@ -270,10 +270,20 @@ const getEffectiveCategory = (expense, merchantRules) => {
     const account = expense.account || '';
     const transactionType = expense.transactionType || 'expense';
     
-    // Priority 1: Account-Specific Rule (highest priority)
-    const accountKey = getAccountRuleKey(merchant, account);
-    if (merchantRules[accountKey]) {
-        const rule = merchantRules[accountKey];
+    // Priority 1: Multi-Account Rule (check if this account is in the rule's accounts list)
+    const accountsKey = getAccountsRuleKey(merchant);
+    if (merchantRules[accountsKey]) {
+        const rule = merchantRules[accountsKey];
+        // Check if transaction's account is in the rule's accounts array
+        if (rule.accounts && Array.isArray(rule.accounts) && rule.accounts.includes(account)) {
+            return { category: rule.category, source: 'rule-accounts', accounts: rule.accounts };
+        }
+    }
+    
+    // Priority 1b: Legacy single-account rule (for backward compatibility)
+    const legacyAccountKey = `${merchant}|||${account}`;
+    if (merchantRules[legacyAccountKey]) {
+        const rule = merchantRules[legacyAccountKey];
         return { category: rule.category, source: 'rule-account', account: account };
     }
     
@@ -704,13 +714,28 @@ const Scatter = ({ expenses, merchantRules }) => {
 };
 
 // ============== CATEGORY MANAGEMENT PAGE ==============
-const CategoryEditModal = ({ expense, merchantRules, onSave, onClose }) => {
+const CategoryEditModal = ({ expense, merchantRules, allAccounts, onSave, onClose }) => {
     const merchant = cleanMerchant(expense.description);
     const account = expense.account || 'Unknown';
     const currentEffective = getEffectiveCategory(expense, merchantRules);
     const [selectedCategory, setSelectedCategory] = useState(currentEffective.category);
     const [applyToAll, setApplyToAll] = useState(true);
-    const [scope, setScope] = useState('global'); // 'global' or 'account'
+    const [scope, setScope] = useState('global'); // 'global' or 'accounts'
+    const [selectedAccounts, setSelectedAccounts] = useState([account]); // Default to current account
+
+    const toggleAccount = (acc) => {
+        if (selectedAccounts.includes(acc)) {
+            // Don't allow deselecting all - must have at least one
+            if (selectedAccounts.length > 1) {
+                setSelectedAccounts(selectedAccounts.filter(a => a !== acc));
+            }
+        } else {
+            setSelectedAccounts([...selectedAccounts, acc]);
+        }
+    };
+
+    const selectAllAccounts = () => setSelectedAccounts([...allAccounts]);
+    const clearAccountSelection = () => setSelectedAccounts([account]); // Reset to current
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -720,7 +745,7 @@ const CategoryEditModal = ({ expense, merchantRules, onSave, onClose }) => {
                     <h2 className="text-lg font-black text-slate-800">Edit Category</h2>
                     <p className="text-sm text-slate-500 mt-1 truncate" title={expense.description}>{expense.description}</p>
                 </div>
-                <div className="p-6 space-y-4">
+                <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Merchant</label>
@@ -770,20 +795,55 @@ const CategoryEditModal = ({ expense, merchantRules, onSave, onClose }) => {
                                     </div>
                                 </label>
                                 <label className="flex items-center gap-3 cursor-pointer p-2 rounded-lg hover:bg-indigo-100 transition-colors">
-                                    <input type="radio" name="scope" value="account" checked={scope === 'account'} onChange={() => setScope('account')}
+                                    <input type="radio" name="scope" value="accounts" checked={scope === 'accounts'} onChange={() => setScope('accounts')}
                                         className="w-4 h-4 text-indigo-600"/>
                                     <div>
-                                        <div className="font-bold text-slate-800 text-sm">💳 Account-Specific</div>
-                                        <div className="text-xs text-slate-500">Apply only for "{account}"</div>
+                                        <div className="font-bold text-slate-800 text-sm">💳 Specific Accounts</div>
+                                        <div className="text-xs text-slate-500">Apply only for selected accounts</div>
                                     </div>
                                 </label>
                             </div>
+                            
+                            {/* Multi-select accounts - only show when accounts scope selected */}
+                            {scope === 'accounts' && (
+                                <div className="mt-3 p-3 bg-white rounded-xl border border-indigo-200">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <span className="text-[10px] font-black uppercase text-slate-500">Select Accounts ({selectedAccounts.length})</span>
+                                        <div className="flex gap-2">
+                                            <button onClick={selectAllAccounts} className="text-[10px] text-indigo-600 font-bold hover:underline">All</button>
+                                            <button onClick={clearAccountSelection} className="text-[10px] text-slate-500 font-bold hover:underline">Reset</button>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-1 max-h-32 overflow-y-auto">
+                                        {allAccounts.map(acc => (
+                                            <label key={acc} className="flex items-center gap-2 p-2 rounded-lg hover:bg-slate-50 cursor-pointer">
+                                                <input 
+                                                    type="checkbox" 
+                                                    checked={selectedAccounts.includes(acc)} 
+                                                    onChange={() => toggleAccount(acc)}
+                                                    className="w-4 h-4 rounded border-slate-300 text-indigo-600"
+                                                />
+                                                <span className={`text-sm ${acc === account ? 'font-bold text-indigo-700' : 'text-slate-700'}`}>
+                                                    {acc} {acc === account && '(current)'}
+                                                </span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                    {selectedAccounts.length > 0 && (
+                                        <div className="mt-2 pt-2 border-t border-slate-100">
+                                            <div className="text-[10px] text-slate-500">
+                                                Selected: {selectedAccounts.join(', ')}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
                 <div className="p-6 bg-slate-50 flex gap-4">
                     <button onClick={onClose} className="flex-1 py-3 font-bold text-slate-500 rounded-xl hover:bg-slate-200">Cancel</button>
-                    <button onClick={() => onSave(selectedCategory, applyToAll, merchant, scope, account)} className="flex-1 py-3 bg-indigo-600 text-white font-black rounded-xl hover:bg-indigo-700">Save</button>
+                    <button onClick={() => onSave(selectedCategory, applyToAll, merchant, scope, selectedAccounts)} className="flex-1 py-3 bg-indigo-600 text-white font-black rounded-xl hover:bg-indigo-700">Save</button>
                 </div>
             </div>
         </div>
@@ -1043,6 +1103,15 @@ const CategoryManagement = ({ expenses, merchantRules, onUpdateExpense, onUpdate
     const [searchTerm, setSearchTerm] = useState('');
     const [editingExpense, setEditingExpense] = useState(null);
     
+    // Get all unique account names from expenses
+    const allAccounts = useMemo(() => {
+        const accounts = new Set();
+        expenses.forEach(e => {
+            if (e.account) accounts.add(e.account);
+        });
+        return [...accounts].sort();
+    }, [expenses]);
+    
     const filteredExpenses = useMemo(() => {
         // Start with 2024+ expenses only
         let filtered = expenses.filter(e => isValidYear(e.date));
@@ -1051,7 +1120,7 @@ const CategoryManagement = ({ expenses, merchantRules, onUpdateExpense, onUpdate
         } else if (filter === 'rules') {
             filtered = filtered.filter(e => {
                 const src = getEffectiveCategory(e, merchantRules).source;
-                return src === 'rule-global' || src === 'rule-account';
+                return src === 'rule-global' || src === 'rule-account' || src === 'rule-accounts';
             });
         } else if (filter === 'excluded') {
             filtered = filtered.filter(e => EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category));
@@ -1063,9 +1132,9 @@ const CategoryManagement = ({ expenses, merchantRules, onUpdateExpense, onUpdate
         return filtered.sort((a, b) => new Date(b.date) - new Date(a.date));
     }, [expenses, merchantRules, filter, searchTerm]);
 
-    const handleSaveCategory = (category, applyToAll, merchant, scope, account) => {
+    const handleSaveCategory = (category, applyToAll, merchant, scope, accounts) => {
         if (applyToAll) {
-            onUpdateRule(merchant, category, scope, account);
+            onUpdateRule(merchant, category, scope, accounts);
         } else {
             onUpdateExpense(editingExpense.id, category);
         }
@@ -1077,7 +1146,7 @@ const CategoryManagement = ({ expenses, merchantRules, onUpdateExpense, onUpdate
         const uncategorized = validExpenses.filter(e => getEffectiveCategory(e, merchantRules).category === 'Uncategorized').length;
         const withRules = validExpenses.filter(e => {
             const src = getEffectiveCategory(e, merchantRules).source;
-            return src === 'rule-global' || src === 'rule-account';
+            return src === 'rule-global' || src === 'rule-account' || src === 'rule-accounts';
         }).length;
         const excluded = validExpenses.filter(e => EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category)).length;
         return { uncategorized, withRules, excluded, total: validExpenses.length, rulesCount: Object.keys(merchantRules).length };
@@ -1087,6 +1156,7 @@ const CategoryManagement = ({ expenses, merchantRules, onUpdateExpense, onUpdate
         switch(source) {
             case 'rule-global': return <span className="ml-1 px-1.5 py-0.5 bg-purple-100 text-purple-600 text-[8px] font-bold rounded">🌍 GLOBAL</span>;
             case 'rule-account': return <span className="ml-1 px-1.5 py-0.5 bg-cyan-100 text-cyan-600 text-[8px] font-bold rounded">💳 ACCOUNT</span>;
+            case 'rule-accounts': return <span className="ml-1 px-1.5 py-0.5 bg-cyan-100 text-cyan-600 text-[8px] font-bold rounded">💳 ACCOUNTS</span>;
             case 'rule': return <span className="ml-1 px-1.5 py-0.5 bg-purple-100 text-purple-600 text-[8px] font-bold rounded">RULE</span>;
             case 'manual': return <span className="ml-1 px-1.5 py-0.5 bg-blue-100 text-blue-600 text-[8px] font-bold rounded">EDITED</span>;
             case 'auto': return <span className="ml-1 px-1.5 py-0.5 bg-green-100 text-green-600 text-[8px] font-bold rounded">AUTO</span>;
@@ -1166,10 +1236,19 @@ const CategoryManagement = ({ expenses, merchantRules, onUpdateExpense, onUpdate
                     <div className="p-4 flex flex-wrap gap-2 max-h-40 overflow-auto">
                         {Object.entries(merchantRules).map(([ruleKey, ruleData]) => {
                             const isAccountRule = ruleKey.includes('|||');
+                            const isMultiAccountRule = ruleData?.scope === 'accounts';
                             const displayName = isAccountRule ? ruleKey.split('|||')[0] : ruleKey;
-                            const accountName = isAccountRule ? ruleKey.split('|||')[1] : null;
+                            const accountName = isAccountRule && !isMultiAccountRule ? ruleKey.split('|||')[1] : null;
+                            const accountsList = isMultiAccountRule && ruleData?.accounts ? ruleData.accounts : null;
                             const category = ruleData?.category || ruleData;
                             const scope = ruleData?.scope || 'global';
+                            
+                            // Format accounts display
+                            const accountsDisplay = accountsList 
+                                ? (accountsList.length > 2 
+                                    ? `${accountsList.slice(0, 2).join(', ')} +${accountsList.length - 2}` 
+                                    : accountsList.join(', '))
+                                : accountName;
                             
                             return (
                                 <div key={ruleKey} className={`flex items-center gap-2 rounded-lg px-3 py-2 group ${isAccountRule ? 'bg-cyan-50' : 'bg-purple-50'}`}>
@@ -1177,7 +1256,11 @@ const CategoryManagement = ({ expenses, merchantRules, onUpdateExpense, onUpdate
                                         {isAccountRule ? '💳' : '🌍'}
                                     </span>
                                     <span className="text-xs font-semibold text-slate-600 max-w-[120px] truncate" title={displayName}>{displayName}</span>
-                                    {isAccountRule && <span className="text-[9px] text-slate-400 max-w-[80px] truncate" title={accountName}>({accountName})</span>}
+                                    {isAccountRule && accountsDisplay && (
+                                        <span className="text-[9px] text-slate-400 max-w-[100px] truncate" title={accountsList ? accountsList.join(', ') : accountName}>
+                                            ({accountsDisplay})
+                                        </span>
+                                    )}
                                     <span className="text-[10px] font-bold text-white px-2 py-0.5 rounded" style={{backgroundColor: CAT_COLORS[category] || '#6366f1'}}>{category}</span>
                                     <button onClick={() => onDeleteRule(ruleKey)} className="text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 text-xs">✕</button>
                                 </div>
@@ -1268,6 +1351,7 @@ const CategoryManagement = ({ expenses, merchantRules, onUpdateExpense, onUpdate
                 <CategoryEditModal
                     expense={editingExpense}
                     merchantRules={merchantRules}
+                    allAccounts={allAccounts}
                     onSave={handleSaveCategory}
                     onClose={() => setEditingExpense(null)}
                 />
@@ -1815,15 +1899,18 @@ const App = () => {
         setExpenses(expenses.map(e => e.id === id ? {...e, manualCategory: category} : e));
     };
 
-    const updateMerchantRule = (merchant, category, scope = 'global', account = null) => {
+    const updateMerchantRule = (merchant, category, scope = 'global', accounts = []) => {
         const newRules = {...merchantRules};
         
-        if (scope === 'account' && account) {
-            // Account-specific rule - use special key format
-            const accountKey = getAccountRuleKey(merchant, account);
-            newRules[accountKey] = { category, scope: 'account', account };
+        if (scope === 'accounts' && accounts.length > 0) {
+            // Multi-account rule - use special key format
+            const accountsKey = getAccountsRuleKey(merchant);
+            newRules[accountsKey] = { category, scope: 'accounts', accounts: accounts };
             setMerchantRules(newRules);
-            setMsg(`✅ Account rule: "${merchant}" → ${category} (for ${account})`);
+            const accountsList = accounts.length > 2 
+                ? `${accounts.slice(0, 2).join(', ')} +${accounts.length - 2} more`
+                : accounts.join(', ');
+            setMsg(`✅ Account rule: "${merchant}" → ${category} (for ${accountsList})`);
         } else {
             // Global rule
             newRules[merchant] = { category, scope: 'global' };
