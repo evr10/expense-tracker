@@ -38,14 +38,14 @@ class ErrorBoundary extends Component {
 }
 
 // ============== CONFIGURATION ==============
-const CATEGORIES = ['Groceries','Rent','Utilities','Transportation','Entertainment','Healthcare','Shopping','Dining','Travel','Subscriptions','Stylecom','Income','TaxIncome','Transfer','Other','Excluded'];
+const CATEGORIES = ['Groceries','Rent','Utilities','Transportation','Entertainment','Healthcare','Shopping','Dining','Travel','Subscriptions','Stylecom','Venmo','Income','TaxIncome','Transfer','Other','Excluded'];
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const YEAR_COLORS = { 2021:'#94a3b8', 2022:'#f59e0b', 2023:'#3b82f6', 2024:'#ef4444', 2025:'#10b981', 2026:'#8b5cf6' };
-const CAT_COLORS = { Groceries:'#22c55e', Rent:'#f59e0b', Utilities:'#3b82f6', Transportation:'#8b5cf6', Entertainment:'#ec4899', Healthcare:'#14b8a6', Shopping:'#f43f5e', Dining:'#f97316', Travel:'#06b6d4', Subscriptions:'#6366f1', Stylecom:'#db2777', Other:'#94a3b8', Uncategorized:'#fbbf24', Excluded:'#cbd5e1', Income:'#10b981', TaxIncome:'#059669', Transfer:'#64748b' };
+const CAT_COLORS = { Groceries:'#22c55e', Rent:'#f59e0b', Utilities:'#3b82f6', Transportation:'#8b5cf6', Entertainment:'#ec4899', Healthcare:'#14b8a6', Shopping:'#f43f5e', Dining:'#f97316', Travel:'#06b6d4', Subscriptions:'#6366f1', Stylecom:'#db2777', Venmo:'#008CFF', Other:'#94a3b8', Uncategorized:'#fbbf24', Excluded:'#cbd5e1', Income:'#10b981', TaxIncome:'#059669', Transfer:'#64748b' };
 
 const AUTO_RULES = {
     // Credit Card Payments - transfers not expenses
-    Excluded:['payment','autopay','auto pay','thank you','credit card payment','card payment','online payment','bill pay','paying','paid in full','minimum payment','statement balance','balance payment','ach payment','electronic payment','pymt','payment to chase','payment to amex','payment to citi','payment to capital one','payment to discover','payment to wells','amex transfer','chase transfer'],
+    Excluded:['autopay','auto pay','thank you','credit card payment','card payment','online payment','bill pay','paying','paid in full','minimum payment','statement balance','balance payment','ach payment','electronic payment','pymt','payment to chase','payment to amex','payment to citi','payment to capital one','payment to discover','payment to wells','amex transfer','chase transfer'],
     Groceries:['walmart','kroger','safeway','trader joe','whole foods','aldi','costco','publix','grocery','supermarket','wegmans','heb','albertsons','sprouts'],
     Dining:['sweetgreen','mcdonald','starbucks','chipotle','subway','restaurant','cafe','coffee','doordash','uber eats','pizza','grubhub','seamless','postmates'],
     Transportation:['uber','lyft','taxi','shell','exxon','chevron','gas','fuel','parking','metro','transit','mobil','bp','sunoco'],
@@ -55,18 +55,17 @@ const AUTO_RULES = {
     Healthcare:['pharmacy','cvs','walgreens','doctor','hospital','medical','dentist','optum','cigna','aetna','united health'],
     Travel:['airline','delta','united','southwest','flight','airbnb','hotel','marriott','hilton','hyatt','expedia','booking.com'],
     Subscriptions:['subscription','membership','adobe','dropbox','linkedin','patreon','github','notion'],
+    // Venmo - special category, NOT excluded (allows netting)
+    Venmo:['venmo'],
     // Income categories - will be auto-excluded from expense views
-    Income:['payroll','salary','direct deposit','paycheck','dividend','interest income','deposit','wire in','ach credit','employer','bonus','commission'],
+    Income:['payroll','salary','direct deposit','paycheck','dividend','interest income','wire in','ach credit','employer','bonus','commission'],
     // Tax refunds/income - auto-excluded
     TaxIncome:['irs','treasury','tax refund','state tax','federal tax','tax credit'],
     // Transfer category - internal moves, excluded from expense totals
     Transfer:['transfer','wire','zelle to','zelle from','atm withdrawal','atm deposit','internal transfer','external transfer']
 };
 
-// Venmo special handling - NOT in AUTO_RULES because it needs amount-based logic
-const VENMO_KEYWORDS = ['venmo', 'cashout'];
-
-// Categories to exclude from expense calculations
+// Categories to exclude from expense calculations (Venmo is NOT excluded - it nets out)
 const EXCLUDED_CATEGORIES = ['Income', 'Transfer', 'Excluded', 'TaxIncome'];
 
 // ============== HELPERS ==============
@@ -117,6 +116,12 @@ const autoRuleMatch = (desc, transactionType = 'expense') => {
     if (!desc) return null;
     const d = desc.toLowerCase();
     
+    // PRIORITY 1: Venmo transactions always go to Venmo category (regardless of transaction type)
+    // This prevents Venmo from being caught by "payment" in Excluded or "deposit" in Income
+    if (d.includes('venmo')) {
+        return 'Venmo';
+    }
+    
     // If it's an income transaction type, check income categories first
     if (transactionType === 'income') {
         // Check TaxIncome first (more specific)
@@ -129,7 +134,7 @@ const autoRuleMatch = (desc, transactionType = 'expense') => {
         return 'Income';
     }
     
-    // For expenses, check all categories
+    // For expenses, check all categories (Venmo already handled above)
     for (const [cat, kws] of Object.entries(AUTO_RULES)) {
         if (kws.some(k => d.includes(k))) return cat;
     }
@@ -1130,20 +1135,26 @@ const CategoryManagement = ({ expenses, merchantRules, onUpdateExpense, onUpdate
                             ) : filteredExpenses.map(e => {
                                 const effective = getEffectiveCategory(e, merchantRules);
                                 const isExcluded = EXCLUDED_CATEGORIES.includes(effective.category);
+                                const isVenmo = effective.category === 'Venmo';
+                                const isNegative = e.amount < 0;
                                 return (
-                                    <tr key={e.id} className={`group ${isExcluded ? 'bg-slate-50 opacity-60' : 'hover:bg-slate-50'}`}>
+                                    <tr key={e.id} className={`group ${isExcluded ? 'bg-slate-50 opacity-60' : isVenmo ? 'bg-blue-50/30' : 'hover:bg-slate-50'}`}>
                                         <td className="p-3 text-slate-500 text-xs">{e.date}</td>
                                         <td className="p-3">
                                             <div className={`font-semibold text-xs ${isExcluded ? 'text-slate-400 line-through' : 'text-slate-700'}`} title={e.description}>
+                                                {isVenmo && <span className="text-blue-500 mr-1">💸</span>}
                                                 {cleanMerchant(e.description)}
                                             </div>
                                             <div className="text-[10px] text-slate-400 truncate max-w-[200px]">{e.description}</div>
                                         </td>
-                                        <td className={`p-3 font-bold ${isExcluded ? 'text-slate-400' : 'text-slate-900'}`}>${safe(e.amount).toFixed(2)}</td>
+                                        <td className={`p-3 font-bold ${isExcluded ? 'text-slate-400' : isNegative ? 'text-green-600' : isVenmo ? 'text-blue-700' : 'text-slate-900'}`}>
+                                            {isNegative ? `-$${Math.abs(e.amount).toFixed(2)}` : `$${e.amount.toFixed(2)}`}
+                                        </td>
                                         <td className="p-3">
                                             <div className="flex items-center" title={`Original CSV: ${e.csvCategory || 'None'}`}>
                                                 <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${
                                                     isExcluded ? 'bg-slate-200 text-slate-500' :
+                                                    isVenmo ? 'bg-blue-100 text-blue-700' :
                                                     effective.category === 'Uncategorized' ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700'
                                                 }`}>
                                                     {effective.category}
@@ -1395,12 +1406,14 @@ const TransactionsTable = ({ expenses, merchantRules, onDelete, onClearAll }) =>
                                 const isExcluded = EXCLUDED_CATEGORIES.includes(effective.category);
                                 const isNegative = e.amount < 0;
                                 const isVenmoReimbursement = e.transactionType === 'venmo-reimbursement';
+                                const isVenmo = effective.category === 'Venmo';
                                 return (
-                                    <tr key={e.id} className={`group ${isExcluded ? 'bg-slate-50 opacity-50' : isVenmoReimbursement ? 'bg-green-50/50' : 'hover:bg-slate-50'}`}>
+                                    <tr key={e.id} className={`group ${isExcluded ? 'bg-slate-50 opacity-50' : isVenmoReimbursement ? 'bg-green-50/50' : isVenmo ? 'bg-blue-50/30' : 'hover:bg-slate-50'}`}>
                                         <td className="p-3 text-slate-500 text-xs whitespace-nowrap">{e.date}</td>
                                         <td className={`p-3 font-semibold max-w-[250px] ${isExcluded ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
                                             <div className="truncate text-xs" title={e.description}>
                                                 {isVenmoReimbursement && <span className="text-green-600 mr-1">↩</span>}
+                                                {isVenmo && !isVenmoReimbursement && <span className="text-blue-500 mr-1">💸</span>}
                                                 {e.description}
                                             </div>
                                         </td>
@@ -1408,12 +1421,13 @@ const TransactionsTable = ({ expenses, merchantRules, onDelete, onClearAll }) =>
                                         <td className="p-3">
                                             <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${
                                                 isExcluded ? 'bg-slate-200 text-slate-500' : 
+                                                isVenmo ? 'bg-blue-100 text-blue-700' :
                                                 effective.category === 'Uncategorized' ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700'
                                             }`} title={`Source: ${effective.source} | CSV: ${e.csvCategory} | Type: ${e.transactionType || 'expense'}`}>
                                                 {effective.category}
                                             </span>
                                         </td>
-                                        <td className={`p-3 text-right font-bold ${isExcluded ? 'text-slate-400' : isNegative ? 'text-green-600' : 'text-slate-900'}`}>
+                                        <td className={`p-3 text-right font-bold ${isExcluded ? 'text-slate-400' : isNegative ? 'text-green-600' : isVenmo ? 'text-blue-700' : 'text-slate-900'}`}>
                                             {isNegative ? `-$${Math.abs(e.amount).toFixed(2)}` : `$${e.amount.toFixed(2)}`}
                                         </td>
                                         <td className="p-3">
@@ -1617,24 +1631,31 @@ const App = () => {
             let transactionType = 'expense';
             let finalAmount = Math.abs(rawAmount);
             
-            if (isCheckingAccount) {
-                // Checking/Debit account: signed amounts matter
+            // Check if this is a Venmo transaction (by description, not amount sign)
+            const isVenmo = descLower.includes('venmo');
+            
+            if (isVenmo) {
+                // Venmo: Use description keywords to determine direction
+                // "Withdrawal" = money going OUT = expense (positive)
+                // "Deposit" or "Cashout" = money coming IN = reimbursement (negative)
+                const isVenmoDeposit = descLower.includes('deposit') || descLower.includes('cashout');
+                const isVenmoWithdrawal = descLower.includes('withdrawal') || descLower.includes('payment');
+                
+                if (isVenmoDeposit) {
+                    // Venmo deposit/cashout = reimbursement = NEGATIVE expense
+                    transactionType = 'venmo-reimbursement';
+                    finalAmount = -Math.abs(rawAmount);
+                } else {
+                    // Venmo withdrawal/payment or unspecified = expense = POSITIVE
+                    transactionType = 'venmo-payment';
+                    finalAmount = Math.abs(rawAmount);
+                }
+            } else if (isCheckingAccount) {
+                // Non-Venmo checking account transactions
                 // Bank convention: negative = money out, positive = money in
                 const isIncoming = rawAmount > 0;
-                const isVenmo = VENMO_KEYWORDS.some(kw => descLower.includes(kw));
                 
-                if (isVenmo) {
-                    // Venmo special handling:
-                    // - Outgoing (negative raw) = expense, keep positive amount
-                    // - Incoming (positive raw) = reimbursement, keep as NEGATIVE expense (credit)
-                    if (isIncoming) {
-                        transactionType = 'venmo-reimbursement';
-                        finalAmount = -Math.abs(rawAmount); // Negative = credit against expenses
-                    } else {
-                        transactionType = 'venmo-payment';
-                        finalAmount = Math.abs(rawAmount); // Positive = expense
-                    }
-                } else if (isIncoming) {
+                if (isIncoming) {
                     // Non-Venmo incoming money = income/transfer (will be auto-categorized)
                     transactionType = 'income';
                     finalAmount = Math.abs(rawAmount);
