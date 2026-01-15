@@ -191,20 +191,18 @@ const autoRuleMatch = (desc, transactionType = 'expense') => {
         return 'Venmo';
     }
     
-    // PRIORITY 1: Specific Expense Overrides (HIGH PRIORITY)
-    // Check PRIORITY_RULES first - these are specific merchants/payees
+    // PRIORITY 1: HARD EXCEPTIONS - Specific Expense Overrides (HIGHEST PRIORITY)
+    // These rules run BEFORE CC payoff detection to prevent false positives
+    // Example: "WELLS FARGO CARD CCPYMT" should be Rent, NOT Transfer
     for (const [cat, kws] of Object.entries(PRIORITY_RULES)) {
         if (kws.some(k => d.includes(k) || rawLower.includes(k))) {
-            // BUT: If this is a CC payoff, it should be Transfer instead
-            // Example: "WELLS FARGO CARD CCPYMT" = CC payoff, not Rent
-            if (CC_PAYOFF_KEYWORDS.some(k => d.includes(k) || rawLower.includes(k))) {
-                return 'Transfer';
-            }
+            // Hard exception - return immediately, do NOT check CC payoff keywords
             return cat;
         }
     }
     
     // PRIORITY 2: Credit Card Payoffs → Transfer (EXCLUDED)
+    // Only runs if PRIORITY 1 didn't match
     // Check for CC payoff patterns - these are transfers, not expenses
     if (CC_PAYOFF_KEYWORDS.some(k => d.includes(k) || rawLower.includes(k))) {
         return 'Transfer';
