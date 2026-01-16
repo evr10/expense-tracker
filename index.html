@@ -80,6 +80,30 @@ const AUTO_RULES = {
 // Categories to exclude from expense calculations (Venmo is NOT excluded - it nets out)
 const EXCLUDED_CATEGORIES = ['Income', 'Transfer', 'Excluded', 'TaxIncome'];
 
+// Cost Type mappings for budget structure analysis
+const COST_TYPE_RULES = {
+    Fixed: ['Rent', 'Daycare'],
+    'Semi-Fixed': ['Household', 'Groceries', 'Subscriptions'],
+    Variable: [] // Catch-all for everything else
+};
+const COST_TYPE_COLORS = {
+    Fixed: '#ef4444',      // Red - mandatory expenses
+    'Semi-Fixed': '#f59e0b', // Amber - somewhat predictable
+    Variable: '#3b82f6'     // Blue - discretionary
+};
+
+// Helper to get cost type from category
+const getCostType = (category) => {
+    const catLower = (category || '').toLowerCase();
+    for (const [costType, categories] of Object.entries(COST_TYPE_RULES)) {
+        if (costType === 'Variable') continue; // Skip catch-all
+        if (categories.some(c => c.toLowerCase() === catLower)) {
+            return costType;
+        }
+    }
+    return 'Variable'; // Default catch-all
+};
+
 // ============== HELPERS ==============
 const MIN_YEAR = 2024; // Only show data from 2024 onwards
 const safe = v => (v == null || isNaN(v)) ? 0 : Number(v);
@@ -513,6 +537,194 @@ const AccountTotalsChart = ({ expenses, merchantRules }) => {
         </div>
         <div className="flex-shrink-0"><Legend years={years}/></div>
     </div>);
+};
+
+// Cost Structure Chart - Dashboard version (2025 only)
+const CostStructureChart = ({ expenses, merchantRules }) => {
+    const data = useMemo(() => {
+        const sp = expenses.filter(e => {
+            const cat = getEffectiveCategory(e, merchantRules).category;
+            return !EXCLUDED_CATEGORIES.includes(cat) && getY(e.date) === 2025;
+        });
+        
+        // Group by month and cost type
+        const byMonth = {};
+        sp.forEach(e => {
+            const month = getM(e.date);
+            const cat = getEffectiveCategory(e, merchantRules).category;
+            const costType = getCostType(cat);
+            
+            if (!byMonth[month]) byMonth[month] = { Fixed: 0, 'Semi-Fixed': 0, Variable: 0, total: 0 };
+            byMonth[month][costType] += safe(e.amount);
+            byMonth[month].total += safe(e.amount);
+        });
+        
+        // Convert to array format
+        return MONTHS.map((name, i) => ({
+            month: name,
+            monthIndex: i,
+            ...byMonth[i] || { Fixed: 0, 'Semi-Fixed': 0, Variable: 0, total: 0 }
+        }));
+    }, [expenses, merchantRules]);
+    
+    const maxTotal = Math.max(...data.map(d => d.total), 1);
+    const hasData = data.some(d => d.total > 0);
+    
+    if (!hasData) return <Empty msg="No 2025 data for cost structure" />;
+    
+    return (
+        <div className="h-full flex flex-col">
+            <div className="flex-1 min-h-0 flex items-end gap-1 pb-6 relative">
+                {data.map((d, i) => {
+                    const barHeight = d.total > 0 ? (d.total / maxTotal) * 100 : 0;
+                    const fixedPct = d.total > 0 ? (d.Fixed / d.total) * 100 : 0;
+                    const semiPct = d.total > 0 ? (d['Semi-Fixed'] / d.total) * 100 : 0;
+                    const varPct = d.total > 0 ? (d.Variable / d.total) * 100 : 0;
+                    
+                    return (
+                        <div key={i} className="flex-1 flex flex-col items-center group">
+                            <div 
+                                className="w-full rounded-t relative cursor-pointer transition-all hover:opacity-90"
+                                style={{ height: `${barHeight}%`, minHeight: d.total > 0 ? '4px' : '0' }}
+                                title={`${d.month}: $${d.total.toLocaleString()}\nFixed: $${d.Fixed.toLocaleString()}\nSemi-Fixed: $${d['Semi-Fixed'].toLocaleString()}\nVariable: $${d.Variable.toLocaleString()}`}
+                            >
+                                {/* Stacked segments */}
+                                <div className="absolute bottom-0 left-0 right-0 flex flex-col-reverse h-full">
+                                    <div style={{ height: `${fixedPct}%`, backgroundColor: COST_TYPE_COLORS.Fixed }} className="rounded-t-sm" />
+                                    <div style={{ height: `${semiPct}%`, backgroundColor: COST_TYPE_COLORS['Semi-Fixed'] }} />
+                                    <div style={{ height: `${varPct}%`, backgroundColor: COST_TYPE_COLORS.Variable }} className="rounded-t" />
+                                </div>
+                                {/* Total label on hover */}
+                                {d.total > 0 && (
+                                    <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-[8px] font-bold text-slate-600 opacity-0 group-hover:opacity-100 whitespace-nowrap">
+                                        ${(d.total/1000).toFixed(1)}k
+                                    </div>
+                                )}
+                            </div>
+                            <div className="text-[9px] text-slate-400 mt-1 font-semibold">{d.month}</div>
+                        </div>
+                    );
+                })}
+            </div>
+            {/* Legend */}
+            <div className="flex-shrink-0 flex justify-center gap-4 pt-2 border-t border-slate-100">
+                {['Fixed', 'Semi-Fixed', 'Variable'].map(type => (
+                    <div key={type} className="flex items-center gap-1">
+                        <div className="w-3 h-3 rounded" style={{ backgroundColor: COST_TYPE_COLORS[type] }} />
+                        <span className="text-[10px] font-bold text-slate-500">{type}</span>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+// Cost Structure Evolution - 2024 vs 2025 side by side
+const CostStructureEvolution = ({ expenses, merchantRules }) => {
+    const { data, maxTotal } = useMemo(() => {
+        const years = [2024, 2025];
+        const sp = expenses.filter(e => {
+            const cat = getEffectiveCategory(e, merchantRules).category;
+            const year = getY(e.date);
+            return !EXCLUDED_CATEGORIES.includes(cat) && (year === 2024 || year === 2025);
+        });
+        
+        // Group by year, month, and cost type
+        const byYearMonth = {};
+        years.forEach(y => { byYearMonth[y] = {}; });
+        
+        sp.forEach(e => {
+            const year = getY(e.date);
+            const month = getM(e.date);
+            const cat = getEffectiveCategory(e, merchantRules).category;
+            const costType = getCostType(cat);
+            
+            if (!byYearMonth[year][month]) {
+                byYearMonth[year][month] = { Fixed: 0, 'Semi-Fixed': 0, Variable: 0, total: 0 };
+            }
+            byYearMonth[year][month][costType] += safe(e.amount);
+            byYearMonth[year][month].total += safe(e.amount);
+        });
+        
+        // Build data array
+        const data = MONTHS.map((name, i) => ({
+            month: name,
+            monthIndex: i,
+            years: years.map(y => ({
+                year: y,
+                ...(byYearMonth[y][i] || { Fixed: 0, 'Semi-Fixed': 0, Variable: 0, total: 0 })
+            }))
+        }));
+        
+        const maxTotal = Math.max(...data.flatMap(d => d.years.map(y => y.total)), 1);
+        
+        return { data, maxTotal };
+    }, [expenses, merchantRules]);
+    
+    const hasData = data.some(d => d.years.some(y => y.total > 0));
+    
+    if (!hasData) return <Empty msg="No data for cost structure comparison" />;
+    
+    return (
+        <div className="h-full flex flex-col">
+            <div className="flex-1 min-h-0 flex items-end gap-0.5 pb-6">
+                {data.map((d, i) => (
+                    <div key={i} className="flex-1 flex flex-col">
+                        {/* Month bars - 2024 and 2025 side by side */}
+                        <div className="flex gap-0.5 items-end h-full">
+                            {d.years.map((yearData, yi) => {
+                                const barHeight = yearData.total > 0 ? (yearData.total / maxTotal) * 100 : 0;
+                                const fixedPct = yearData.total > 0 ? (yearData.Fixed / yearData.total) * 100 : 0;
+                                const semiPct = yearData.total > 0 ? (yearData['Semi-Fixed'] / yearData.total) * 100 : 0;
+                                const varPct = yearData.total > 0 ? (yearData.Variable / yearData.total) * 100 : 0;
+                                
+                                return (
+                                    <div 
+                                        key={yi}
+                                        className="flex-1 rounded-t cursor-pointer group relative"
+                                        style={{ 
+                                            height: `${barHeight}%`, 
+                                            minHeight: yearData.total > 0 ? '2px' : '0',
+                                            opacity: yi === 0 ? 0.6 : 1 // 2024 slightly faded
+                                        }}
+                                        title={`${d.month} ${yearData.year}: $${yearData.total.toLocaleString()}\nFixed: $${yearData.Fixed.toLocaleString()}\nSemi-Fixed: $${yearData['Semi-Fixed'].toLocaleString()}\nVariable: $${yearData.Variable.toLocaleString()}`}
+                                    >
+                                        <div className="absolute bottom-0 left-0 right-0 flex flex-col-reverse h-full">
+                                            <div style={{ height: `${fixedPct}%`, backgroundColor: COST_TYPE_COLORS.Fixed }} className="rounded-t-sm" />
+                                            <div style={{ height: `${semiPct}%`, backgroundColor: COST_TYPE_COLORS['Semi-Fixed'] }} />
+                                            <div style={{ height: `${varPct}%`, backgroundColor: COST_TYPE_COLORS.Variable }} className="rounded-t" />
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                        <div className="text-[8px] text-slate-400 text-center mt-1 font-semibold">{d.month}</div>
+                    </div>
+                ))}
+            </div>
+            {/* Combined Legend */}
+            <div className="flex-shrink-0 border-t border-slate-100 pt-2">
+                <div className="flex justify-center gap-4 mb-1">
+                    {['Fixed', 'Semi-Fixed', 'Variable'].map(type => (
+                        <div key={type} className="flex items-center gap-1">
+                            <div className="w-2.5 h-2.5 rounded" style={{ backgroundColor: COST_TYPE_COLORS[type] }} />
+                            <span className="text-[9px] font-bold text-slate-500">{type}</span>
+                        </div>
+                    ))}
+                </div>
+                <div className="flex justify-center gap-3">
+                    <div className="flex items-center gap-1">
+                        <div className="w-3 h-2 bg-slate-400 rounded opacity-60" />
+                        <span className="text-[9px] text-slate-400">2024</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                        <div className="w-3 h-2 bg-slate-600 rounded" />
+                        <span className="text-[9px] text-slate-400">2025</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
 };
 
 // Dashboard Charts (2025 filtered)
@@ -3643,6 +3855,7 @@ const App = () => {
                     <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">🏪 Top 20 Merchants (2025)</h3><div className="h-80"><TopMerchants expenses={expenses} merchantRules={merchantRules}/></div></div>
                     <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">🔄 Recurring Costs (2025)</h3><div className="h-56"><RecurringCosts expenses={expenses} merchantRules={merchantRules}/></div></div>
                 </div>
+                <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">📦 Monthly Cost Structure (2025)</h3><div className="h-56"><CostStructureChart expenses={expenses} merchantRules={merchantRules}/></div></div>
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">📺 Subscriptions (2025)</h3><div className="h-56"><Subscriptions expenses={expenses} merchantRules={merchantRules}/></div></div>
                     <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">☕ Small Purchase Leaks (2025)</h3><div className="h-56"><SmallPurchaseMerchants expenses={expenses} merchantRules={merchantRules}/></div></div>
@@ -3651,11 +3864,12 @@ const App = () => {
             </>)}
 
             {tab === 'evolution' && (<>
-                <div className="bg-gradient-to-r from-indigo-500 to-purple-600 text-white p-6 rounded-2xl"><h2 className="text-xl font-black">📈 Year-over-Year Evolution</h2><p className="text-indigo-100 text-sm mt-1">Compare spending across years</p></div>
+                <div className="bg-gradient-to-r from-indigo-500 to-purple-600 text-white p-6 rounded-2xl"><h2 className="text-xl font-black">📈 Year-over-Year Evolution</h2><p className="text-indigo-100 text-sm mt-1">Compare spending across 2024 and 2025</p></div>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">🗓️ Seasonality (Jan-Dec)</h3><div className="h-64"><SeasonalityChart expenses={expenses} merchantRules={merchantRules}/></div></div>
                     <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">🏃 Pace of Spending</h3><div className="h-64"><PaceChart expenses={expenses} merchantRules={merchantRules}/></div></div>
                 </div>
+                <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">📦 Cost Structure Evolution (2024 vs 2025)</h3><div className="h-64"><CostStructureEvolution expenses={expenses} merchantRules={merchantRules}/></div></div>
                 <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">📊 Category Evolution (YoY)</h3><div className="h-80"><CategoryEvolution expenses={expenses} merchantRules={merchantRules}/></div></div>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">🔥 Spending Heatmap</h3><div className="h-64"><Heatmap expenses={expenses} merchantRules={merchantRules}/></div></div>
