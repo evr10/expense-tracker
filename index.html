@@ -70,12 +70,30 @@ const AUTO_RULES = {
     // Venmo - special category, NOT excluded (allows netting)
     Venmo:['venmo'],
     // Income categories - will be auto-excluded from expense views
-    Income:['payroll','salary','direct deposit','paycheck','dividend','interest income','wire in','employer','bonus','commission'],
+    Income:['payroll','salary','direct deposit','paycheck','dividend','interest income','wire in','employer','bonus','commission','stripe'],
     // Tax refunds/income - auto-excluded
     TaxIncome:['irs','treasury','tax refund','state tax','federal tax','tax credit'],
     // Transfer category - internal moves, excluded from expense totals
     Transfer:['zelle to','zelle from','internal transfer','external transfer','online transfer to','online transfer from','ach payment to','transfer to sav','transfer from sav','transfer to chk','transfer from chk']
 };
+
+// INTERNAL TRANSFER SOURCES - these override income keywords
+// If description contains these, it's money moving between your own accounts, NOT real income
+const INTERNAL_TRANSFER_SOURCES = [
+    'hsbc bank usa',
+    'hsbc bank',
+    'preauthorized deposit from hsbc',
+    'preauthorized deposit from wells',
+    'preauthorized deposit from chase',
+    'preauthorized deposit from bank of america',
+    'preauthorized deposit from citi',
+    'from checking',
+    'from savings',
+    'from sav ',
+    'from chk ',
+    'internal xfer',
+    'account transfer'
+];
 
 // Categories to exclude from expense calculations (Venmo is NOT excluded - it nets out)
 const EXCLUDED_CATEGORIES = ['Income', 'Transfer', 'Excluded', 'TaxIncome'];
@@ -249,13 +267,24 @@ const autoRuleMatch = (desc, transactionType = 'expense') => {
     
     // PRIORITY 3: If it's an income transaction type AND doesn't match above
     if (transactionType === 'income') {
+        // PRIORITY 3a: Check for INTERNAL TRANSFERS first (overrides income keywords)
+        // If money is coming from your own bank accounts, it's NOT real income
+        if (INTERNAL_TRANSFER_SOURCES.some(src => rawLower.includes(src) || d.includes(src))) {
+            return 'Transfer';
+        }
+        
+        // PRIORITY 3b: Check for explicit transfer keywords in income transactions
+        if (AUTO_RULES.Transfer.some(k => d.includes(k) || rawLower.includes(k))) {
+            return 'Transfer';
+        }
+        
+        // PRIORITY 3c: Now safe to check for real income
         // Check TaxIncome first (more specific)
         if (AUTO_RULES.TaxIncome.some(k => d.includes(k))) return 'TaxIncome';
         // Then general Income
         if (AUTO_RULES.Income.some(k => d.includes(k))) return 'Income';
-        // Then Transfer
-        if (AUTO_RULES.Transfer.some(k => d.includes(k))) return 'Transfer';
-        // Default income to Income category
+        
+        // Default income to Income category (positive amounts that aren't transfers)
         return 'Income';
     }
     
@@ -569,37 +598,37 @@ const CostStructureChart = ({ expenses, merchantRules }) => {
     
     const maxTotal = Math.max(...data.map(d => d.total), 1);
     const hasData = data.some(d => d.total > 0);
+    const chartHeight = 160; // Fixed pixel height for bars area
     
     if (!hasData) return <Empty msg="No 2025 data for cost structure" />;
     
     return (
         <div className="h-full flex flex-col">
-            <div className="flex-1 min-h-0 flex items-end gap-1 pb-6 relative">
+            <div className="flex-1 flex items-end gap-1 pb-1">
                 {data.map((d, i) => {
-                    const barHeight = d.total > 0 ? (d.total / maxTotal) * 100 : 0;
-                    const fixedPct = d.total > 0 ? (d.Fixed / d.total) * 100 : 0;
-                    const semiPct = d.total > 0 ? (d['Semi-Fixed'] / d.total) * 100 : 0;
-                    const varPct = d.total > 0 ? (d.Variable / d.total) * 100 : 0;
+                    const barHeight = d.total > 0 ? (d.total / maxTotal) * chartHeight : 0;
+                    const fixedH = d.total > 0 ? (d.Fixed / d.total) * barHeight : 0;
+                    const semiH = d.total > 0 ? (d['Semi-Fixed'] / d.total) * barHeight : 0;
+                    const varH = d.total > 0 ? (d.Variable / d.total) * barHeight : 0;
                     
                     return (
                         <div key={i} className="flex-1 flex flex-col items-center group">
-                            <div 
-                                className="w-full rounded-t relative cursor-pointer transition-all hover:opacity-90"
-                                style={{ height: `${barHeight}%`, minHeight: d.total > 0 ? '4px' : '0' }}
-                                title={`${d.month}: $${d.total.toLocaleString()}\nFixed: $${d.Fixed.toLocaleString()}\nSemi-Fixed: $${d['Semi-Fixed'].toLocaleString()}\nVariable: $${d.Variable.toLocaleString()}`}
-                            >
-                                {/* Stacked segments */}
-                                <div className="absolute bottom-0 left-0 right-0 flex flex-col-reverse h-full">
-                                    <div style={{ height: `${fixedPct}%`, backgroundColor: COST_TYPE_COLORS.Fixed }} className="rounded-t-sm" />
-                                    <div style={{ height: `${semiPct}%`, backgroundColor: COST_TYPE_COLORS['Semi-Fixed'] }} />
-                                    <div style={{ height: `${varPct}%`, backgroundColor: COST_TYPE_COLORS.Variable }} className="rounded-t" />
-                                </div>
+                            <div className="relative w-full flex flex-col justify-end" style={{ height: chartHeight }}>
                                 {/* Total label on hover */}
                                 {d.total > 0 && (
-                                    <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-[8px] font-bold text-slate-600 opacity-0 group-hover:opacity-100 whitespace-nowrap">
+                                    <div className="absolute -top-4 left-1/2 -translate-x-1/2 text-[8px] font-bold text-slate-600 opacity-0 group-hover:opacity-100 whitespace-nowrap z-10">
                                         ${(d.total/1000).toFixed(1)}k
                                     </div>
                                 )}
+                                {/* Stacked bars - Fixed at bottom, Variable at top */}
+                                <div 
+                                    className="w-full cursor-pointer"
+                                    title={`${d.month}: $${d.total.toLocaleString()}\nFixed: $${d.Fixed.toLocaleString()}\nSemi-Fixed: $${d['Semi-Fixed'].toLocaleString()}\nVariable: $${d.Variable.toLocaleString()}`}
+                                >
+                                    {varH > 0 && <div style={{ height: varH, backgroundColor: COST_TYPE_COLORS.Variable }} className="w-full rounded-t" />}
+                                    {semiH > 0 && <div style={{ height: semiH, backgroundColor: COST_TYPE_COLORS['Semi-Fixed'] }} className="w-full" />}
+                                    {fixedH > 0 && <div style={{ height: fixedH, backgroundColor: COST_TYPE_COLORS.Fixed }} className="w-full rounded-b" />}
+                                </div>
                             </div>
                             <div className="text-[9px] text-slate-400 mt-1 font-semibold">{d.month}</div>
                         </div>
@@ -662,38 +691,33 @@ const CostStructureEvolution = ({ expenses, merchantRules }) => {
     }, [expenses, merchantRules]);
     
     const hasData = data.some(d => d.years.some(y => y.total > 0));
+    const chartHeight = 160; // Fixed pixel height
     
     if (!hasData) return <Empty msg="No data for cost structure comparison" />;
     
     return (
         <div className="h-full flex flex-col">
-            <div className="flex-1 min-h-0 flex items-end gap-0.5 pb-6">
+            <div className="flex-1 flex items-end gap-1 pb-1">
                 {data.map((d, i) => (
-                    <div key={i} className="flex-1 flex flex-col">
+                    <div key={i} className="flex-1 flex flex-col items-center">
                         {/* Month bars - 2024 and 2025 side by side */}
-                        <div className="flex gap-0.5 items-end h-full">
+                        <div className="flex gap-0.5 w-full justify-center" style={{ height: chartHeight }}>
                             {d.years.map((yearData, yi) => {
-                                const barHeight = yearData.total > 0 ? (yearData.total / maxTotal) * 100 : 0;
-                                const fixedPct = yearData.total > 0 ? (yearData.Fixed / yearData.total) * 100 : 0;
-                                const semiPct = yearData.total > 0 ? (yearData['Semi-Fixed'] / yearData.total) * 100 : 0;
-                                const varPct = yearData.total > 0 ? (yearData.Variable / yearData.total) * 100 : 0;
+                                const barHeight = yearData.total > 0 ? (yearData.total / maxTotal) * chartHeight : 0;
+                                const fixedH = yearData.total > 0 ? (yearData.Fixed / yearData.total) * barHeight : 0;
+                                const semiH = yearData.total > 0 ? (yearData['Semi-Fixed'] / yearData.total) * barHeight : 0;
+                                const varH = yearData.total > 0 ? (yearData.Variable / yearData.total) * barHeight : 0;
                                 
                                 return (
                                     <div 
                                         key={yi}
-                                        className="flex-1 rounded-t cursor-pointer group relative"
-                                        style={{ 
-                                            height: `${barHeight}%`, 
-                                            minHeight: yearData.total > 0 ? '2px' : '0',
-                                            opacity: yi === 0 ? 0.6 : 1 // 2024 slightly faded
-                                        }}
+                                        className="flex-1 flex flex-col justify-end cursor-pointer"
+                                        style={{ opacity: yi === 0 ? 0.6 : 1 }}
                                         title={`${d.month} ${yearData.year}: $${yearData.total.toLocaleString()}\nFixed: $${yearData.Fixed.toLocaleString()}\nSemi-Fixed: $${yearData['Semi-Fixed'].toLocaleString()}\nVariable: $${yearData.Variable.toLocaleString()}`}
                                     >
-                                        <div className="absolute bottom-0 left-0 right-0 flex flex-col-reverse h-full">
-                                            <div style={{ height: `${fixedPct}%`, backgroundColor: COST_TYPE_COLORS.Fixed }} className="rounded-t-sm" />
-                                            <div style={{ height: `${semiPct}%`, backgroundColor: COST_TYPE_COLORS['Semi-Fixed'] }} />
-                                            <div style={{ height: `${varPct}%`, backgroundColor: COST_TYPE_COLORS.Variable }} className="rounded-t" />
-                                        </div>
+                                        {varH > 0 && <div style={{ height: varH, backgroundColor: COST_TYPE_COLORS.Variable }} className="w-full rounded-t" />}
+                                        {semiH > 0 && <div style={{ height: semiH, backgroundColor: COST_TYPE_COLORS['Semi-Fixed'] }} className="w-full" />}
+                                        {fixedH > 0 && <div style={{ height: fixedH, backgroundColor: COST_TYPE_COLORS.Fixed }} className="w-full rounded-b" />}
                                     </div>
                                 );
                             })}
