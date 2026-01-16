@@ -2607,15 +2607,21 @@ const ExportRules = ({ merchantRules, expenses }) => {
 
 // ============== IMPORT DIALOG ==============
 const ImportDialog = ({ headers, onClose, onConfirm, defaultAccountName = '' }) => {
+    const isHSBC = defaultAccountName.toLowerCase().includes('hsbc');
     const [map, setMap] = useState({ date: headers.find(h=>/date/i.test(h))||headers[0], amount: headers.find(h=>/amount|debit/i.test(h))||headers[1], desc: headers.find(h=>/desc|memo/i.test(h))||headers[2], cat: headers.find(h=>/cat/i.test(h))||'' });
     const [acc, setAcc] = useState(defaultAccountName);
-    const [accType, setAccType] = useState('credit'); // credit or checking
+    const [accType, setAccType] = useState(isHSBC ? 'checking' : 'credit'); // Auto-detect HSBC as checking
     
     return (<div className="fixed inset-0 z-50 flex items-center justify-center p-4"><div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={onClose}/>
         <div className="relative bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden">
             <div className="p-6 border-b border-slate-100">
                 <h2 className="text-xl font-black text-slate-800">Import CSV</h2>
                 <p className="text-sm text-slate-500 mt-1">📄 {defaultAccountName || 'Unknown file'}</p>
+                {isHSBC && (
+                    <div className="mt-2 px-3 py-1.5 bg-green-100 text-green-700 rounded-lg text-xs font-semibold inline-block">
+                        ✓ HSBC format detected - columns auto-mapped
+                    </div>
+                )}
             </div>
             <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
                 {/* Account Type Selection */}
@@ -2702,7 +2708,49 @@ const App = () => {
         // Extract filename without extension for default account name
         const fileName = f.name.replace(/\.[^/.]+$/, ''); // Remove extension
         setImportFileName(fileName);
-        Papa.parse(f, { header:true, skipEmptyLines:true, complete:r => { if (r.data.length) setImportData(r); } }); 
+        
+        // Check if this is an HSBC file (no headers)
+        const isHSBC = fileName.toLowerCase().includes('hsbc');
+        
+        if (isHSBC) {
+            // HSBC files have no headers - parse without header row
+            Papa.parse(f, { 
+                header: false, 
+                skipEmptyLines: true, 
+                complete: r => { 
+                    if (r.data.length) {
+                        // Transform headerless data to have consistent structure
+                        // HSBC format: Date, Description, Amount, Balance
+                        const headers = ['Date', 'Description', 'Amount', 'Balance'];
+                        const transformedData = r.data.map(row => {
+                            const obj = {};
+                            headers.forEach((h, i) => {
+                                let value = row[i] || '';
+                                // Clean up the data
+                                if (h === 'Description') {
+                                    // Strip excessive whitespace and normalize
+                                    value = value.replace(/\s+/g, ' ').trim();
+                                } else if (h === 'Amount' || h === 'Balance') {
+                                    // Remove commas from numbers (they're in quotes like "1,234.56")
+                                    value = String(value).replace(/,/g, '');
+                                }
+                                obj[h] = value;
+                            });
+                            return obj;
+                        });
+                        
+                        // Create a result object that looks like PapaParse with headers
+                        setImportData({
+                            data: transformedData,
+                            meta: { fields: headers }
+                        });
+                    }
+                } 
+            });
+        } else {
+            // Standard CSV with headers
+            Papa.parse(f, { header: true, skipEmptyLines: true, complete: r => { if (r.data.length) setImportData(r); } }); 
+        }
         e.target.value = ''; 
     };
     
