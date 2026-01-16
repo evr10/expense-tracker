@@ -3221,191 +3221,249 @@ const AIAnalystExport = ({ expenses, merchantRules }) => {
         setTimeout(() => {
             const lines = [];
             const now = new Date();
-            const currentYear = now.getFullYear();
-            const currentMonth = now.getMonth() + 1;
             
             // Helper to format currency
             const fmt = (n) => '$' + n.toLocaleString(undefined, { maximumFractionDigits: 0 });
             const fmtPct = (n) => n.toFixed(1) + '%';
             
+            // Filter to 2024 and 2025 only
+            const validYears = [2024, 2025];
+            
             // Filter valid expenses (exclude transfers, income for spending analysis)
             const allExpenses = expenses.filter(e => {
                 const cat = getEffectiveCategory(e, merchantRules).category;
-                return !EXCLUDED_CATEGORIES.includes(cat) && isValidYear(e.date);
+                const year = getY(e.date);
+                return !EXCLUDED_CATEGORIES.includes(cat) && validYears.includes(year);
             });
             
             const incomeExpenses = expenses.filter(e => {
                 const cat = getEffectiveCategory(e, merchantRules).category;
-                return (cat === 'Income' || cat === 'TaxIncome') && isValidYear(e.date);
+                const year = getY(e.date);
+                return (cat === 'Income' || cat === 'TaxIncome') && validYears.includes(year);
             });
             
-            // Get years with data
-            const yearsWithData = [...new Set(allExpenses.map(e => getY(e.date)))].sort((a, b) => b - a);
+            // Separate by year
+            const exp2024 = allExpenses.filter(e => getY(e.date) === 2024);
+            const exp2025 = allExpenses.filter(e => getY(e.date) === 2025);
+            const total2024 = exp2024.reduce((s, e) => s + safe(e.amount), 0);
+            const total2025 = exp2025.reduce((s, e) => s + safe(e.amount), 0);
             
             // === HEADER ===
-            lines.push('# 📊 Personal Finance Report');
+            lines.push('# 📊 Personal Finance Report (2024-2025)');
             lines.push('');
             lines.push(`**Generated:** ${now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`);
-            lines.push(`**Data Range:** ${yearsWithData[yearsWithData.length - 1] || 'N/A'} - ${yearsWithData[0] || 'N/A'}`);
+            lines.push(`**Focus Period:** 2024-2025 (with emphasis on 2025 insights)`);
             lines.push(`**Total Transactions Analyzed:** ${allExpenses.length.toLocaleString()}`);
             lines.push('');
             lines.push('---');
             lines.push('');
             
-            // === ANNUAL SUMMARY ===
-            lines.push('## 📅 Annual Spending Summary');
+            // === ANNUAL COMPARISON ===
+            lines.push('## 📅 2024 vs 2025 Overview');
             lines.push('');
-            lines.push('| Year | Total Spending | Transactions | Avg Transaction | Monthly Avg |');
-            lines.push('|------|----------------|--------------|-----------------|-------------|');
+            lines.push('| Metric | 2024 | 2025 | Change |');
+            lines.push('|--------|------|------|--------|');
             
-            yearsWithData.forEach(year => {
-                const yearExp = allExpenses.filter(e => getY(e.date) === year);
-                const total = yearExp.reduce((s, e) => s + safe(e.amount), 0);
-                const count = yearExp.length;
-                const avg = count > 0 ? total / count : 0;
-                const months = new Set(yearExp.map(e => getM(e.date))).size;
-                const monthlyAvg = months > 0 ? total / months : 0;
-                lines.push(`| ${year} | ${fmt(total)} | ${count} | ${fmt(avg)} | ${fmt(monthlyAvg)} |`);
+            const months2024 = new Set(exp2024.map(e => getM(e.date))).size || 1;
+            const months2025 = new Set(exp2025.map(e => getM(e.date))).size || 1;
+            const monthlyAvg2024 = total2024 / months2024;
+            const monthlyAvg2025 = total2025 / months2025;
+            const yoyChange = total2024 > 0 ? ((total2025 - total2024) / total2024) * 100 : 0;
+            const monthlyChange = monthlyAvg2024 > 0 ? ((monthlyAvg2025 - monthlyAvg2024) / monthlyAvg2024) * 100 : 0;
+            
+            lines.push(`| Total Spending | ${fmt(total2024)} | ${fmt(total2025)} | ${yoyChange >= 0 ? '+' : ''}${fmtPct(yoyChange)} |`);
+            lines.push(`| Transactions | ${exp2024.length} | ${exp2025.length} | ${exp2025.length - exp2024.length >= 0 ? '+' : ''}${exp2025.length - exp2024.length} |`);
+            lines.push(`| Monthly Average | ${fmt(monthlyAvg2024)} | ${fmt(monthlyAvg2025)} | ${monthlyChange >= 0 ? '+' : ''}${fmtPct(monthlyChange)} |`);
+            lines.push(`| Avg Transaction | ${fmt(exp2024.length > 0 ? total2024/exp2024.length : 0)} | ${fmt(exp2025.length > 0 ? total2025/exp2025.length : 0)} | |`);
+            lines.push('');
+            
+            // === COST STRUCTURE ANALYSIS (2025 Focus) ===
+            lines.push('## 📦 2025 Cost Structure Analysis');
+            lines.push('');
+            lines.push('*Expenses are categorized into three cost types for budgeting analysis:*');
+            lines.push('- **Fixed:** Mandatory expenses (Rent, Daycare)');
+            lines.push('- **Semi-Fixed:** Necessary but variable (Household, Groceries, Subscriptions)');
+            lines.push('- **Variable:** Discretionary spending (all other categories)');
+            lines.push('');
+            
+            // Calculate cost structure for 2025
+            const costStructure2025 = { Fixed: 0, 'Semi-Fixed': 0, Variable: 0 };
+            exp2025.forEach(e => {
+                const cat = getEffectiveCategory(e, merchantRules).category;
+                const costType = getCostType(cat);
+                costStructure2025[costType] += safe(e.amount);
             });
+            
+            const costStructure2024 = { Fixed: 0, 'Semi-Fixed': 0, Variable: 0 };
+            exp2024.forEach(e => {
+                const cat = getEffectiveCategory(e, merchantRules).category;
+                const costType = getCostType(cat);
+                costStructure2024[costType] += safe(e.amount);
+            });
+            
+            lines.push('| Cost Type | 2024 | 2025 | % of 2025 | YoY Change |');
+            lines.push('|-----------|------|------|-----------|------------|');
+            ['Fixed', 'Semi-Fixed', 'Variable'].forEach(type => {
+                const val2024 = costStructure2024[type];
+                const val2025 = costStructure2025[type];
+                const pct2025 = total2025 > 0 ? (val2025 / total2025) * 100 : 0;
+                const change = val2024 > 0 ? ((val2025 - val2024) / val2024) * 100 : 0;
+                lines.push(`| **${type}** | ${fmt(val2024)} | ${fmt(val2025)} | ${fmtPct(pct2025)} | ${change >= 0 ? '+' : ''}${fmtPct(change)} |`);
+            });
+            lines.push(`| **TOTAL** | ${fmt(total2024)} | ${fmt(total2025)} | 100% | ${yoyChange >= 0 ? '+' : ''}${fmtPct(yoyChange)} |`);
             lines.push('');
             
-            // === YEAR-OVER-YEAR CHANGE ===
-            if (yearsWithData.length >= 2) {
-                const thisYear = yearsWithData[0];
-                const lastYear = yearsWithData[1];
-                const thisYearTotal = allExpenses.filter(e => getY(e.date) === thisYear).reduce((s, e) => s + safe(e.amount), 0);
-                const lastYearTotal = allExpenses.filter(e => getY(e.date) === lastYear).reduce((s, e) => s + safe(e.amount), 0);
-                const yoyChange = lastYearTotal > 0 ? ((thisYearTotal - lastYearTotal) / lastYearTotal) * 100 : 0;
+            // Cost structure insight
+            const fixedPct = total2025 > 0 ? (costStructure2025.Fixed / total2025) * 100 : 0;
+            const semiFixedPct = total2025 > 0 ? (costStructure2025['Semi-Fixed'] / total2025) * 100 : 0;
+            const variablePct = total2025 > 0 ? (costStructure2025.Variable / total2025) * 100 : 0;
+            
+            lines.push('### 🔍 Cost Structure Insights');
+            lines.push(`- **${fmtPct(fixedPct + semiFixedPct)}** of spending is Fixed or Semi-Fixed (committed costs)`);
+            lines.push(`- **${fmtPct(variablePct)}** is Variable (discretionary - potential savings area)`);
+            if (variablePct > 50) {
+                lines.push(`- ⚠️ Variable spending is over 50% - high discretionary spending`);
+            }
+            if (fixedPct > 40) {
+                lines.push(`- ⚠️ Fixed costs are over 40% - limited budget flexibility`);
+            }
+            lines.push('');
+            
+            // === MONTHLY COST STRUCTURE (2025) ===
+            lines.push('## 📈 2025 Monthly Cost Structure');
+            lines.push('');
+            
+            const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            const monthlyCostStructure = {};
+            
+            exp2025.forEach(e => {
+                const month = getM(e.date);
+                const cat = getEffectiveCategory(e, merchantRules).category;
+                const costType = getCostType(cat);
+                if (!monthlyCostStructure[month]) {
+                    monthlyCostStructure[month] = { Fixed: 0, 'Semi-Fixed': 0, Variable: 0, total: 0 };
+                }
+                monthlyCostStructure[month][costType] += safe(e.amount);
+                monthlyCostStructure[month].total += safe(e.amount);
+            });
+            
+            lines.push('| Month | Fixed | Semi-Fixed | Variable | Total |');
+            lines.push('|-------|-------|------------|----------|-------|');
+            for (let m = 0; m < 12; m++) {
+                if (monthlyCostStructure[m]) {
+                    const mc = monthlyCostStructure[m];
+                    lines.push(`| ${monthNames[m]} | ${fmt(mc.Fixed)} | ${fmt(mc['Semi-Fixed'])} | ${fmt(mc.Variable)} | ${fmt(mc.total)} |`);
+                }
+            }
+            lines.push('');
+            
+            // Monthly stats
+            const monthlyTotals = Object.values(monthlyCostStructure).map(m => m.total);
+            if (monthlyTotals.length > 0) {
+                const avgMonthly = monthlyTotals.reduce((a, b) => a + b, 0) / monthlyTotals.length;
+                const maxMonthVal = Math.max(...monthlyTotals);
+                const minMonthVal = Math.min(...monthlyTotals);
+                const maxMonthIdx = Object.entries(monthlyCostStructure).find(([k, v]) => v.total === maxMonthVal)?.[0];
+                const minMonthIdx = Object.entries(monthlyCostStructure).find(([k, v]) => v.total === minMonthVal)?.[0];
                 
-                lines.push(`**Year-over-Year Change (${lastYear} → ${thisYear}):** ${yoyChange >= 0 ? '+' : ''}${fmtPct(yoyChange)}`);
+                lines.push(`- **Average Monthly:** ${fmt(avgMonthly)}`);
+                lines.push(`- **Highest:** ${monthNames[maxMonthIdx]} (${fmt(maxMonthVal)})`);
+                lines.push(`- **Lowest:** ${monthNames[minMonthIdx]} (${fmt(minMonthVal)})`);
+                lines.push(`- **Variance:** ${fmt(maxMonthVal - minMonthVal)} spread`);
                 lines.push('');
             }
             
-            // === CURRENT YEAR CATEGORY BREAKDOWN ===
-            const currentYearExp = allExpenses.filter(e => getY(e.date) === currentYear);
-            const currentYearTotal = currentYearExp.reduce((s, e) => s + safe(e.amount), 0);
-            
-            if (currentYearExp.length > 0) {
-                lines.push(`## 🏷️ ${currentYear} Spending by Category`);
+            // === 2025 CATEGORY BREAKDOWN ===
+            if (exp2025.length > 0) {
+                lines.push('## 🏷️ 2025 Spending by Category');
                 lines.push('');
                 
-                // Group by category
                 const byCategory = {};
-                currentYearExp.forEach(e => {
+                exp2025.forEach(e => {
                     const cat = getEffectiveCategory(e, merchantRules).category;
                     if (!byCategory[cat]) byCategory[cat] = { total: 0, count: 0 };
                     byCategory[cat].total += safe(e.amount);
                     byCategory[cat].count += 1;
                 });
                 
+                // Also get 2024 for comparison
+                const byCategory2024 = {};
+                exp2024.forEach(e => {
+                    const cat = getEffectiveCategory(e, merchantRules).category;
+                    if (!byCategory2024[cat]) byCategory2024[cat] = { total: 0 };
+                    byCategory2024[cat].total += safe(e.amount);
+                });
+                
                 const sortedCats = Object.entries(byCategory)
-                    .map(([cat, data]) => ({ cat, ...data, pct: (data.total / currentYearTotal) * 100 }))
+                    .map(([cat, data]) => ({ 
+                        cat, 
+                        ...data, 
+                        pct: (data.total / total2025) * 100,
+                        costType: getCostType(cat),
+                        prev: byCategory2024[cat]?.total || 0
+                    }))
                     .sort((a, b) => b.total - a.total);
                 
-                lines.push('| Category | Amount | % of Total | Transactions |');
-                lines.push('|----------|--------|------------|--------------|');
-                sortedCats.forEach(({ cat, total, pct, count }) => {
-                    lines.push(`| ${cat} | ${fmt(total)} | ${fmtPct(pct)} | ${count} |`);
+                lines.push('| Category | Cost Type | 2025 Amount | % of Total | vs 2024 |');
+                lines.push('|----------|-----------|-------------|------------|---------|');
+                sortedCats.forEach(({ cat, costType, total, pct, prev }) => {
+                    const change = prev > 0 ? ((total - prev) / prev) * 100 : 0;
+                    const changeStr = prev > 0 ? `${change >= 0 ? '+' : ''}${fmtPct(change)}` : 'New';
+                    lines.push(`| ${cat} | ${costType} | ${fmt(total)} | ${fmtPct(pct)} | ${changeStr} |`);
                 });
-                lines.push(`| **TOTAL** | **${fmt(currentYearTotal)}** | **100%** | **${currentYearExp.length}** |`);
-                lines.push('');
-                
-                // Top 3 Categories insight
-                lines.push('### 🔍 Key Insight');
-                const top3 = sortedCats.slice(0, 3);
-                const top3Total = top3.reduce((s, c) => s + c.total, 0);
-                const top3Pct = (top3Total / currentYearTotal) * 100;
-                lines.push(`Your top 3 spending categories (${top3.map(c => c.cat).join(', ')}) account for **${fmtPct(top3Pct)}** of your total spending.`);
+                lines.push(`| **TOTAL** | | **${fmt(total2025)}** | **100%** | |`);
                 lines.push('');
             }
             
-            // === MONTHLY TREND (Current Year) ===
-            if (currentYearExp.length > 0) {
-                lines.push(`## 📈 ${currentYear} Monthly Spending Trend`);
-                lines.push('');
-                
-                const byMonth = {};
-                currentYearExp.forEach(e => {
-                    const month = getM(e.date);
-                    byMonth[month] = (byMonth[month] || 0) + safe(e.amount);
-                });
-                
-                const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                const monthlyValues = [];
-                
-                lines.push('| Month | Spending |');
-                lines.push('|-------|----------|');
-                for (let m = 0; m < 12; m++) {
-                    if (byMonth[m] !== undefined) {
-                        monthlyValues.push(byMonth[m]);
-                        lines.push(`| ${monthNames[m]} | ${fmt(byMonth[m])} |`);
-                    }
-                }
-                lines.push('');
-                
-                // Stats
-                if (monthlyValues.length > 0) {
-                    const avgMonthly = monthlyValues.reduce((a, b) => a + b, 0) / monthlyValues.length;
-                    const maxMonth = Math.max(...monthlyValues);
-                    const minMonth = Math.min(...monthlyValues);
-                    const maxMonthName = monthNames[Object.entries(byMonth).find(([k, v]) => v === maxMonth)?.[0]];
-                    const minMonthName = monthNames[Object.entries(byMonth).find(([k, v]) => v === minMonth)?.[0]];
-                    
-                    lines.push(`- **Average Monthly:** ${fmt(avgMonthly)}`);
-                    lines.push(`- **Highest Month:** ${maxMonthName} (${fmt(maxMonth)})`);
-                    lines.push(`- **Lowest Month:** ${minMonthName} (${fmt(minMonth)})`);
-                    lines.push(`- **Variance:** ${fmt(maxMonth - minMonth)} spread`);
-                    lines.push('');
-                }
-            }
+            // === INCOME VS EXPENSES (2025) ===
+            const income2025 = incomeExpenses.filter(e => getY(e.date) === 2025);
+            const totalIncome2025 = income2025.reduce((s, e) => s + Math.abs(safe(e.amount)), 0);
             
-            // === INCOME VS EXPENSES ===
-            const currentYearIncome = incomeExpenses.filter(e => getY(e.date) === currentYear);
-            const totalIncome = currentYearIncome.reduce((s, e) => s + Math.abs(safe(e.amount)), 0);
-            
-            if (totalIncome > 0 && currentYearTotal > 0) {
-                lines.push(`## 💰 ${currentYear} Income vs Expenses`);
+            if (totalIncome2025 > 0 && total2025 > 0) {
+                lines.push('## 💰 2025 Income vs Expenses');
                 lines.push('');
-                lines.push(`| Metric | Amount |`);
-                lines.push(`|--------|--------|`);
-                lines.push(`| Total Income | ${fmt(totalIncome)} |`);
-                lines.push(`| Total Expenses | ${fmt(currentYearTotal)} |`);
-                lines.push(`| **Net Savings** | **${fmt(totalIncome - currentYearTotal)}** |`);
-                lines.push(`| Savings Rate | ${fmtPct(((totalIncome - currentYearTotal) / totalIncome) * 100)} |`);
-                lines.push(`| Burn Rate | ${fmtPct((currentYearTotal / totalIncome) * 100)} |`);
+                lines.push('| Metric | Amount |');
+                lines.push('|--------|--------|');
+                lines.push(`| Total Income | ${fmt(totalIncome2025)} |`);
+                lines.push(`| Total Expenses | ${fmt(total2025)} |`);
+                lines.push(`| **Net Savings** | **${fmt(totalIncome2025 - total2025)}** |`);
+                lines.push(`| Savings Rate | ${fmtPct(((totalIncome2025 - total2025) / totalIncome2025) * 100)} |`);
+                lines.push(`| Fixed Cost Ratio | ${fmtPct((costStructure2025.Fixed / totalIncome2025) * 100)} of income |`);
+                lines.push(`| Committed Cost Ratio | ${fmtPct(((costStructure2025.Fixed + costStructure2025['Semi-Fixed']) / totalIncome2025) * 100)} of income |`);
                 lines.push('');
             }
             
-            // === TOP MERCHANTS (Aggregated, no raw descriptions) ===
-            if (currentYearExp.length > 0) {
-                lines.push(`## 🏪 ${currentYear} Top 10 Spending Areas`);
+            // === TOP MERCHANTS (2025) ===
+            if (exp2025.length > 0) {
+                lines.push('## 🏪 2025 Top 10 Spending Areas');
                 lines.push('');
                 
                 const byMerchant = {};
-                currentYearExp.forEach(e => {
+                exp2025.forEach(e => {
                     const name = cleanMerchant(e.description);
-                    if (!byMerchant[name]) byMerchant[name] = { total: 0, count: 0 };
+                    const cat = getEffectiveCategory(e, merchantRules).category;
+                    if (!byMerchant[name]) byMerchant[name] = { total: 0, count: 0, category: cat };
                     byMerchant[name].total += safe(e.amount);
                     byMerchant[name].count += 1;
                 });
                 
                 const topMerchants = Object.entries(byMerchant)
-                    .map(([name, data]) => ({ name, ...data }))
+                    .map(([name, data]) => ({ name, ...data, costType: getCostType(data.category) }))
                     .sort((a, b) => b.total - a.total)
                     .slice(0, 10);
                 
-                lines.push('| Rank | Merchant | Total | Visits |');
-                lines.push('|------|----------|-------|--------|');
+                lines.push('| Rank | Merchant | Category | Cost Type | Total | Visits |');
+                lines.push('|------|----------|----------|-----------|-------|--------|');
                 topMerchants.forEach((m, i) => {
-                    lines.push(`| ${i + 1} | ${m.name} | ${fmt(m.total)} | ${m.count} |`);
+                    lines.push(`| ${i + 1} | ${m.name} | ${m.category} | ${m.costType} | ${fmt(m.total)} | ${m.count} |`);
                 });
                 lines.push('');
             }
             
-            // === RECURRING/SUBSCRIPTION DETECTION ===
+            // === RECURRING EXPENSES (2025) ===
             const subscriptionLikely = [];
             const merchantMonthly = {};
-            currentYearExp.forEach(e => {
+            exp2025.forEach(e => {
                 const name = cleanMerchant(e.description);
                 const month = getM(e.date);
                 if (!merchantMonthly[name]) merchantMonthly[name] = new Set();
@@ -3414,10 +3472,10 @@ const AIAnalystExport = ({ expenses, merchantRules }) => {
             
             Object.entries(merchantMonthly).forEach(([name, months]) => {
                 if (months.size >= 3) {
-                    const total = currentYearExp.filter(e => cleanMerchant(e.description) === name)
+                    const total = exp2025.filter(e => cleanMerchant(e.description) === name)
                         .reduce((s, e) => s + safe(e.amount), 0);
                     const monthly = total / months.size;
-                    if (monthly > 5 && monthly < 500) { // Reasonable subscription range
+                    if (monthly > 5 && monthly < 500) {
                         subscriptionLikely.push({ name, months: months.size, monthly, annual: monthly * 12 });
                     }
                 }
@@ -3428,7 +3486,7 @@ const AIAnalystExport = ({ expenses, merchantRules }) => {
                 const topSubs = subscriptionLikely.slice(0, 8);
                 const totalSubsAnnual = topSubs.reduce((s, sub) => s + sub.annual, 0);
                 
-                lines.push('## 🔄 Likely Recurring Expenses');
+                lines.push('## 🔄 Likely Recurring Expenses (2025)');
                 lines.push('');
                 lines.push('| Service | Est. Monthly | Est. Annual | Frequency |');
                 lines.push('|---------|--------------|-------------|-----------|');
@@ -3439,28 +3497,20 @@ const AIAnalystExport = ({ expenses, merchantRules }) => {
                 lines.push('');
             }
             
-            // === ACCOUNTS SUMMARY ===
-            const accounts = [...new Set(expenses.map(e => e.account).filter(Boolean))];
-            if (accounts.length > 1) {
-                lines.push('## 💳 Accounts Overview');
-                lines.push('');
-                lines.push(`You have **${accounts.length} accounts** tracked in this system.`);
-                lines.push('');
-            }
-            
             // === FOOTER / PROMPT ===
             lines.push('---');
             lines.push('');
             lines.push('## 🤖 Suggested Questions to Ask AI');
             lines.push('');
-            lines.push('1. "Based on my spending patterns, where can I cut costs?"');
-            lines.push('2. "Am I saving enough? What\'s a healthy savings rate for my situation?"');
-            lines.push('3. "Which category has grown the most year-over-year?"');
-            lines.push('4. "Help me create a budget based on these spending habits."');
-            lines.push('5. "Are there any red flags in my financial data?"');
+            lines.push('1. "Based on my cost structure, how can I reduce my fixed costs?"');
+            lines.push('2. "My variable spending is X% - is this healthy? Where can I cut?"');
+            lines.push('3. "Which categories grew the most from 2024 to 2025 and why?"');
+            lines.push('4. "Help me create a budget that reduces my committed costs ratio."');
+            lines.push('5. "What\'s a healthy ratio of Fixed/Semi-Fixed/Variable spending?"');
+            lines.push('6. "Are there any concerning trends in my monthly spending pattern?"');
             lines.push('');
             lines.push('---');
-            lines.push('*This report contains aggregated data only. No individual transaction details or bank descriptions are included for privacy.*');
+            lines.push('*This report contains aggregated 2024-2025 data only. No individual transaction details or bank descriptions are included for privacy.*');
             
             setReport(lines.join('\n'));
             setGenerating(false);
@@ -3501,16 +3551,16 @@ const AIAnalystExport = ({ expenses, merchantRules }) => {
                 </div>
                 
                 <div className="bg-slate-50 rounded-xl p-4 text-sm text-slate-600">
-                    <p className="font-semibold mb-2">📋 What's included:</p>
+                    <p className="font-semibold mb-2">📋 What's included (2024-2025 focus):</p>
                     <ul className="grid grid-cols-2 gap-1 text-xs">
-                        <li>✓ Annual spending summary</li>
-                        <li>✓ Category breakdown</li>
-                        <li>✓ Monthly trends</li>
-                        <li>✓ Income vs expenses</li>
-                        <li>✓ Top merchants (anonymized)</li>
+                        <li>✓ 2024 vs 2025 comparison</li>
+                        <li>✓ Cost structure (Fixed/Semi-Fixed/Variable)</li>
+                        <li>✓ Monthly cost breakdown</li>
+                        <li>✓ Category analysis with YoY change</li>
+                        <li>✓ Income vs expenses ratios</li>
+                        <li>✓ Top merchants with cost types</li>
                         <li>✓ Recurring expense detection</li>
-                        <li>✓ Year-over-year changes</li>
-                        <li>✓ Suggested AI questions</li>
+                        <li>✓ Budget-focused AI questions</li>
                     </ul>
                     <p className="mt-3 text-[10px] text-slate-400">🔒 <strong>Privacy:</strong> No individual transactions or raw bank descriptions are included.</p>
                 </div>
