@@ -350,7 +350,10 @@ const Legend = ({ years }) => <div className="flex flex-wrap gap-3 justify-cente
 
 const SeasonalityChart = ({ expenses, merchantRules }) => {
     const { data, years } = useMemo(() => {
-        const sp = expenses.filter(e => !EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category) && isValidYear(e.date));
+        const sp = expenses.filter(e => {
+            const year = getY(e.date);
+            return !EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category) && (year === 2024 || year === 2025);
+        });
         const yrs = [...new Set(sp.map(e => getY(e.date)))].sort();
         const data = yrs.map(y => {
             const mt = Array(12).fill(0);
@@ -368,7 +371,10 @@ const SeasonalityChart = ({ expenses, merchantRules }) => {
 
 const PaceChart = ({ expenses, merchantRules }) => {
     const { data, years } = useMemo(() => {
-        const sp = expenses.filter(e => !EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category) && isValidYear(e.date));
+        const sp = expenses.filter(e => {
+            const year = getY(e.date);
+            return !EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category) && (year === 2024 || year === 2025);
+        });
         const yrs = [...new Set(sp.map(e => getY(e.date)))].sort();
         const data = yrs.map(y => {
             const ye = sp.filter(e => getY(e.date) === y).sort((a,b) => pDate(a.date) - pDate(b.date));
@@ -394,9 +400,10 @@ const CategoryEvolution = ({ expenses, merchantRules }) => {
     const { data, years } = useMemo(() => {
         const sp = expenses.filter(e => {
             const cat = getEffectiveCategory(e, merchantRules).category;
-            return !EXCLUDED_CATEGORIES.includes(cat) && cat !== 'Uncategorized' && isValidYear(e.date);
+            const year = getY(e.date);
+            return !EXCLUDED_CATEGORIES.includes(cat) && cat !== 'Uncategorized' && (year === 2024 || year === 2025);
         });
-        const yrs = [...new Set(sp.map(e => getY(e.date)))].sort().slice(-2);
+        const yrs = [...new Set(sp.map(e => getY(e.date)))].sort();
         const cyt = {};
         sp.forEach(e => { 
             const y = getY(e.date); 
@@ -468,7 +475,10 @@ const CategoryEvolution = ({ expenses, merchantRules }) => {
 
 const Heatmap = ({ expenses, merchantRules }) => {
     const { data, years, min, max } = useMemo(() => {
-        const sp = expenses.filter(e => !EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category) && isValidYear(e.date));
+        const sp = expenses.filter(e => {
+            const year = getY(e.date);
+            return !EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category) && (year === 2024 || year === 2025);
+        });
         const yrs = [...new Set(sp.map(e => getY(e.date)))].sort();
         const data = {};
         sp.forEach(e => { const y = getY(e.date), m = getM(e.date); if (!data[y]) data[y] = Array(12).fill(0); data[y][m] += safe(e.amount); });
@@ -484,7 +494,10 @@ const Heatmap = ({ expenses, merchantRules }) => {
 
 const AccountTotalsChart = ({ expenses, merchantRules }) => {
     const { data, years, maxVal } = useMemo(() => {
-        const sp = expenses.filter(e => !EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category) && isValidYear(e.date));
+        const sp = expenses.filter(e => {
+            const year = getY(e.date);
+            return !EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category) && (year === 2024 || year === 2025);
+        });
         const byAccount = {};
         sp.forEach(e => { const acc = e.account || 'Unknown', year = getY(e.date); if (!byAccount[acc]) byAccount[acc] = {}; byAccount[acc][year] = (byAccount[acc][year] || 0) + safe(e.amount); });
         const yearsSet = new Set(sp.map(e => getY(e.date)));
