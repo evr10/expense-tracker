@@ -39,10 +39,134 @@ class ErrorBoundary extends Component {
 }
 
 // ============== CONFIGURATION ==============
-const CATEGORIES = ['Groceries','Rent','Daycare','Household','Transportation','Entertainment','Health & Wellness','Shopping','Dining','Travel','Subscriptions','Stylecom','Venmo','Income','TaxIncome','Transfer','Other','Excluded'];
+const CATEGORIES = ['Groceries','Rent','Daycare','Household','Transportation','Entertainment','Health & Wellness','Shopping','Dining','Travel','Stylecom','Venmo','Income','TaxIncome','Transfer','Other','Excluded'];
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const YEAR_COLORS = { 2021:'#94a3b8', 2022:'#f59e0b', 2023:'#3b82f6', 2024:'#ef4444', 2025:'#10b981', 2026:'#8b5cf6' };
-const CAT_COLORS = { Groceries:'#22c55e', Rent:'#f59e0b', Daycare:'#a855f7', Household:'#3b82f6', Transportation:'#8b5cf6', Entertainment:'#ec4899', 'Health & Wellness':'#14b8a6', Shopping:'#f43f5e', Dining:'#f97316', Travel:'#06b6d4', Subscriptions:'#6366f1', Stylecom:'#db2777', Venmo:'#008CFF', Other:'#94a3b8', Uncategorized:'#fbbf24', Excluded:'#cbd5e1', Income:'#10b981', TaxIncome:'#059669', Transfer:'#64748b' };
+const CAT_COLORS = { Groceries:'#22c55e', Rent:'#f59e0b', Daycare:'#a855f7', Household:'#3b82f6', Transportation:'#8b5cf6', Entertainment:'#ec4899', 'Health & Wellness':'#14b8a6', Shopping:'#f43f5e', Dining:'#f97316', Travel:'#06b6d4', Stylecom:'#db2777', Venmo:'#008CFF', Other:'#94a3b8', Uncategorized:'#fbbf24', Excluded:'#cbd5e1', Income:'#10b981', TaxIncome:'#059669', Transfer:'#64748b' };
+
+// SUBSCRIPTION DETECTION - Keywords that indicate recurring subscriptions
+// Maps keyword -> actual category (not "Subscriptions")
+const SUBSCRIPTION_RULES = {
+    // Entertainment subscriptions
+    'netflix': 'Entertainment',
+    'hulu': 'Entertainment',
+    'disney plus': 'Entertainment',
+    'disney+': 'Entertainment',
+    'hbo max': 'Entertainment',
+    'hbo': 'Entertainment',
+    'spotify': 'Entertainment',
+    'apple music': 'Entertainment',
+    'youtube premium': 'Entertainment',
+    'youtube music': 'Entertainment',
+    'amazon prime': 'Entertainment',
+    'prime video': 'Entertainment',
+    'peacock': 'Entertainment',
+    'paramount': 'Entertainment',
+    'audible': 'Entertainment',
+    'kindle unlimited': 'Entertainment',
+    'xbox game pass': 'Entertainment',
+    'playstation plus': 'Entertainment',
+    'nintendo online': 'Entertainment',
+    'crunchyroll': 'Entertainment',
+    'max.com': 'Entertainment',
+    'appletv': 'Entertainment',
+    'apple tv': 'Entertainment',
+    
+    // Health & Wellness subscriptions
+    'gym': 'Health & Wellness',
+    'equinox': 'Health & Wellness',
+    'planet fitness': 'Health & Wellness',
+    'orange theory': 'Health & Wellness',
+    'crossfit': 'Health & Wellness',
+    'peloton': 'Health & Wellness',
+    'classpass': 'Health & Wellness',
+    'solidstarts': 'Health & Wellness',
+    'headspace': 'Health & Wellness',
+    'calm': 'Health & Wellness',
+    'noom': 'Health & Wellness',
+    'weight watchers': 'Health & Wellness',
+    'every mother': 'Health & Wellness',
+    'fitbit premium': 'Health & Wellness',
+    'strava': 'Health & Wellness',
+    
+    // Household/Utilities subscriptions
+    'comcast': 'Household',
+    'xfinity': 'Household',
+    'spectrum': 'Household',
+    'verizon': 'Household',
+    'at&t': 'Household',
+    't-mobile': 'Household',
+    'internet': 'Household',
+    'icloud': 'Household',
+    'google one': 'Household',
+    'dropbox': 'Household',
+    'ring': 'Household',
+    'adt': 'Household',
+    'simplisafe': 'Household',
+    
+    // Groceries subscriptions
+    'hellofresh': 'Groceries',
+    'blue apron': 'Groceries',
+    'home chef': 'Groceries',
+    'instacart': 'Groceries',
+    'freshly': 'Groceries',
+    'factor': 'Groceries',
+    'daily harvest': 'Groceries',
+    
+    // Shopping subscriptions
+    'amazon prime': 'Shopping',
+    'costco membership': 'Shopping',
+    'sams club': 'Shopping',
+    'walmart+': 'Shopping',
+    'ipsy': 'Shopping',
+    'birchbox': 'Shopping',
+    'stitch fix': 'Shopping',
+    
+    // Software/Productivity (Stylecom for business, otherwise Other)
+    'adobe': 'Other',
+    'microsoft 365': 'Other',
+    'office 365': 'Other',
+    'linkedin premium': 'Other',
+    'github': 'Other',
+    'notion': 'Other',
+    'evernote': 'Other',
+    'lastpass': 'Other',
+    '1password': 'Other',
+    'dashlane': 'Other',
+    'nordvpn': 'Other',
+    'expressvpn': 'Other',
+    
+    // News/Education
+    'new york times': 'Other',
+    'nytimes': 'Other',
+    'washington post': 'Other',
+    'wall street journal': 'Other',
+    'wsj': 'Other',
+    'economist': 'Other',
+    'masterclass': 'Entertainment',
+    'skillshare': 'Entertainment',
+    'coursera': 'Other',
+    'duolingo': 'Other',
+    
+    // Generic subscription keywords
+    'subscription': 'Other',
+    'membership': 'Other',
+    'monthly': 'Other',
+    'recurring': 'Other',
+};
+
+// Helper function to detect if a transaction is a subscription
+const detectSubscription = (description) => {
+    if (!description) return { isSubscription: false, suggestedCategory: null };
+    const descLower = description.toLowerCase();
+    
+    for (const [keyword, category] of Object.entries(SUBSCRIPTION_RULES)) {
+        if (descLower.includes(keyword)) {
+            return { isSubscription: true, suggestedCategory: category };
+        }
+    }
+    return { isSubscription: false, suggestedCategory: null };
+};
 
 // HIGH PRIORITY specific expense rules (checked FIRST in autoRuleMatch)
 const PRIORITY_RULES = {
@@ -56,26 +180,42 @@ const CC_PAYOFF_KEYWORDS = ['amex', 'chase card', 'capital one', 'citi card', 'd
 const AUTO_RULES = {
     // Excluded - only for truly unmatchable/ignorable transactions
     Excluded:[],
-    Groceries:['walmart','kroger','safeway','trader joe','whole foods','aldi','costco','publix','grocery','supermarket','wegmans','heb','albertsons','sprouts'],
-    Dining:['sweetgreen','mcdonald','starbucks','chipotle','subway','restaurant','cafe','coffee','doordash','uber eats','pizza','grubhub','seamless','postmates'],
-    Transportation:['uber','lyft','taxi','shell','exxon','chevron','gas','fuel','parking','metro','transit','mobil','bp','sunoco'],
-    Shopping:['amazon','ebay','best buy','apple store','ikea','nike','nordstrom','target','macys','tjmaxx','marshalls','kohls','gap','old navy','zara','h&m','uniqlo','sephora','ulta','bath body'],
-    Entertainment:['netflix','hulu','disney','hbo','spotify','movie','cinema','xbox','steam','playstation','nintendo','amc'],
+    Groceries:['walmart','kroger','safeway','trader joe','whole foods','aldi','costco','publix','grocery','supermarket','wegmans','heb','albertsons','sprouts',
+        'hellofresh','blue apron','home chef','freshly','factor','daily harvest'],
+    Dining:['sweetgreen','mcdonald','starbucks','chipotle','subway','restaurant','cafe','coffee','doordash','uber eats','pizza','grubhub','seamless','postmates',
+        'cathedrale','alphabet ba','jongro gopchang','phd terrace','rubirosa','laccolade','shinn west','niagara','the garrett','ternesse golf','de vogelenzang','ops','brasserie den artist'],
+    Transportation:['uber','lyft','taxi','shell','exxon','chevron','gas','fuel','parking','metro','transit','mobil','bp','sunoco',
+        '900 8th ave gar','900 8th avenue gar','motorcycle mall'],
+    Shopping:['amazon','ebay','best buy','apple store','ikea','nike','nordstrom','target','macys','tjmaxx','marshalls','kohls','gap','old navy','zara','h&m','uniqlo','sephora','ulta','bath body',
+        'ferrier','hoekjes en boekjes','partzilla','dia art foundation','sp dore rose','hdsht'],
+    Entertainment:['netflix','hulu','disney','hbo','spotify','movie','cinema','xbox','steam','playstation','nintendo','amc',
+        'seatgeek','all borough party','fat black pussycat','fnac direct','ascent lounge','wcs zoos','msg concessions',
+        'apple music','youtube premium','amazon prime','prime video','peacock','paramount','audible','kindle','crunchyroll','masterclass','skillshare'],
     // Household - utilities, home services, maintenance, cleaning, home supplies
-    Household:['electric','power','water bill','comcast','xfinity','spectrum','internet','verizon','at&t','t-mobile','con ed','pge','national grid','cable','phone bill','trash','waste','sewer','gas bill','heating','cooling','hvac','plumber','plumbing','electrician','handyman','lawn','landscaping','pest control','cleaning','maid','housekeeping','home depot','lowes','ace hardware','menards','bed bath','container store','pottery barn','crate barrel','williams sonoma','wayfair','overstock','furniture','mattress','appliance','repair','maintenance','security','adt','ring','nest','thermostat'],
+    Household:['electric','power','water bill','comcast','xfinity','spectrum','internet','verizon','at&t','t-mobile','con ed','pge','national grid','cable','phone bill','trash','waste','sewer','gas bill','heating','cooling','hvac','plumber','plumbing','electrician','handyman','lawn','landscaping','pest control','cleaning','maid','housekeeping','home depot','lowes','ace hardware','menards','bed bath','container store','pottery barn','crate barrel','williams sonoma','wayfair','overstock','furniture','mattress','appliance','repair','maintenance','security','adt','ring','nest','thermostat',
+        'taskrabbit','ups store','laundry card','mysalights','hildreths','janovic paint','level frames','swans cleaners',
+        'icloud','google one','dropbox','simplisafe'],
     // Health & Wellness - medical, pharmacy, fitness, mental health, personal care
-    'Health & Wellness':['pharmacy','cvs','walgreens','doctor','hospital','medical','dentist','optum','cigna','aetna','united health','clinic','urgent care','emergency','lab','blood','xray','mri','therapy','therapist','counseling','psychiatrist','psychologist','mental health','gym','fitness','yoga','pilates','peloton','crossfit','equinox','planet fitness','orange theory','soulcycle','massage','spa','chiropractor','physical therapy','vision','eye','optical','glasses','contacts','lenscrafters','warby parker','vitamins','supplements','gnc','vitamin shoppe'],
-    Travel:['airline','delta','united','southwest','flight','airbnb','hotel','marriott','hilton','hyatt','expedia','booking.com'],
-    Subscriptions:['subscription','membership','adobe','dropbox','linkedin','patreon','github','notion'],
+    'Health & Wellness':['pharmacy','cvs','walgreens','doctor','hospital','medical','dentist','optum','cigna','aetna','united health','clinic','urgent care','emergency','lab','blood','xray','mri','therapy','therapist','counseling','psychiatrist','psychologist','mental health','gym','fitness','yoga','pilates','peloton','crossfit','equinox','planet fitness','orange theory','soulcycle','massage','spa','chiropractor','physical therapy','vision','eye','optical','glasses','contacts','lenscrafters','warby parker','vitamins','supplements','gnc','vitamin shoppe',
+        'evavercouteren','shair nyc','every mother','solidstarts','headspace','calm','noom','weight watchers','classpass','strava'],
+    Travel:['airline','delta','united','southwest','flight','airbnb','hotel','marriott','hilton','hyatt','expedia','booking.com',
+        'thestrabon','wuzipay'],
+    // Other - software, news, education subscriptions
+    Other:['adobe','linkedin premium','github','notion','patreon','evernote','lastpass','1password','nordvpn','expressvpn','new york times','nytimes','washington post','wall street journal','wsj','economist','coursera','duolingo'],
+    // Stylecom - business expenses for reimbursement
+    Stylecom:['softr','yww','airtable','iphone citiz','winred','crowne plaza amsterdam','smartsuite','gsuite','lindy','paddle.net','bambino technologies','hannago','vultr','odoo','dex personal crm','art of mondays','transip','vcn','hostinger','pingen','srd services'],
     // Venmo - special category, NOT excluded (allows netting)
     Venmo:['venmo'],
     // Income categories - will be auto-excluded from expense views
-    Income:['payroll','salary','direct deposit','paycheck','dividend','interest income','wire in','employer','bonus','commission','stripe'],
+    Income:['payroll','salary','direct deposit','paycheck','dividend','interest income','wire in','employer','bonus','commission','stripe',
+        'payyourselfback','returned payment','credit balance refund','travel credit'],
     // Tax refunds/income - auto-excluded
-    TaxIncome:['irs','treasury','tax refund','state tax','federal tax','tax credit'],
+    TaxIncome:['irs','treasury','tax refund','state tax','federal tax','tax credit',
+        'budgetnerd'],
     // Transfer category - internal moves between accounts (for transfer matching)
     // Includes CC payments so they can be matched with checking withdrawals
-    Transfer:['zelle to','zelle from','internal transfer','external transfer','online transfer to','online transfer from','ach payment to','transfer to sav','transfer from sav','transfer to chk','transfer from chk','autopay','auto pay','thank you','credit card payment','card payment','online payment','bill pay','paying','paid in full','minimum payment','statement balance','balance payment','ach payment','electronic payment','pymt','payment to chase','payment to amex','payment to citi','payment to capital one','payment to discover','amex transfer','chase transfer']
+    Transfer:['zelle to','zelle from','internal transfer','external transfer','online transfer to','online transfer from','ach payment to','transfer to sav','transfer from sav','transfer to chk','transfer from chk','autopay','auto pay','thank you','credit card payment','card payment','online payment','bill pay','paying','paid in full','minimum payment','statement balance','balance payment','ach payment','electronic payment','pymt','payment to chase','payment to amex','payment to citi','payment to capital one','payment to discover','amex transfer','chase transfer',
+        'payment thank you','ach automatic transfer to credit']
 };
 
 // INTERNAL TRANSFER SOURCES - these override income keywords
@@ -306,10 +446,104 @@ const loadExpenses = () => {
     } catch { return []; }
 };
 
+// Default merchant rules from categorization export
+const DEFAULT_MERCHANT_RULES = {
+    '900 8TH AVE GAR WEB': { category: 'Transportation', scope: 'global' },
+    '900 8TH AVENUE GAR': { category: 'Transportation', scope: 'global' },
+    '99231 LAUNDRY CARD': { category: 'Household', scope: 'global' },
+    'ACH AUTOMATIC TRANSFER TO CREDIT ACCOUNT': { category: 'Transfer', scope: 'global' },
+    'AIRTABLE.COM/BILL': { category: 'Stylecom', scope: 'global' },
+    'ALL BOROUGH PARTY RENTAL': { category: 'Entertainment', scope: 'global' },
+    'ART OF MONDAYS': { category: 'Stylecom', scope: 'global' },
+    'ASCENT LOUNGE': { category: 'Entertainment', scope: 'global' },
+    'BAMBINO TECHNOLOGIES': { category: 'Stylecom', scope: 'global' },
+    'BRASSERIE DEN ARTIST': { category: 'Dining', scope: 'global' },
+    'CATHEDRALE/ALPHABET BA': { category: 'Dining', scope: 'global' },
+    'CREDIT BALANCE REFUND': { category: 'Income', scope: 'global' },
+    'CROWNE PLAZA AMSTERDAM': { category: 'Stylecom', scope: 'global' },
+    'DE VOGELENZANG': { category: 'Dining', scope: 'global' },
+    'DEX PERSONAL CRM': { category: 'Stylecom', scope: 'global' },
+    'DIA ART FOUNDATION': { category: 'Shopping', scope: 'global' },
+    'DISNEY PLUS': { category: 'Entertainment', scope: 'global' },
+    'EVAVERCOUTEREN.COM': { category: 'Health & Wellness', scope: 'global' },
+    'EVERY MOTHER': { category: 'Health & Wellness', scope: 'global' },
+    'FAT BLACK PUSSYCAT': { category: 'Entertainment', scope: 'global' },
+    'FERRIER-30': { category: 'Shopping', scope: 'global' },
+    'FNAC DIRECT BELGIUM': { category: 'Entertainment', scope: 'global' },
+    'GSUITE MRTNS.IO': { category: 'Stylecom', scope: 'global' },
+    'GSUITE_NICOLASMERT': { category: 'Stylecom', scope: 'global' },
+    'HANNAGO': { category: 'Stylecom', scope: 'global' },
+    'HDSHT.PRO': { category: 'Shopping', scope: 'global' },
+    'HILDRETHS DEPT. STORE': { category: 'Household', scope: 'global' },
+    'HOEKJES EN BOEKJES': { category: 'Shopping', scope: 'global' },
+    'HOSTINGER': { category: 'Stylecom', scope: 'global' },
+    'IN': { category: 'Stylecom', scope: 'global' },
+    'IPHONE CITIZ': { category: 'Stylecom', scope: 'global' },
+    'JANOVIC PAINT AND DECORA': { category: 'Household', scope: 'global' },
+    'JONGRO GOPCHANG (5TH F': { category: 'Dining', scope: 'global' },
+    "L'ACCOLADE": { category: 'Dining', scope: 'global' },
+    'LEVEL FRAMES ORDER': { category: 'Household', scope: 'global' },
+    'LINDY': { category: 'Stylecom', scope: 'global' },
+    'MOTORCYCLE MALL INC.': { category: 'Transportation', scope: 'global' },
+    'MSG CONCESSIONS': { category: 'Entertainment', scope: 'global' },
+    'NIAGARA / LOVERS': { category: 'Dining', scope: 'global' },
+    'ODOO': { category: 'Stylecom', scope: 'global' },
+    'OPS': { category: 'Dining', scope: 'global' },
+    'PADDLE.NET': { category: 'Stylecom', scope: 'global' },
+    'PARTZILLA.COM': { category: 'Shopping', scope: 'global' },
+    'PAYMENT THANK YOU-MOBILE': { category: 'Transfer', scope: 'global' },
+    'PAYYOURSELFBACK CREDIT': { category: 'Income', scope: 'global' },
+    'PHD TERRACE AT DREAM H': { category: 'Dining', scope: 'global' },
+    'RETURNED PAYMENT': { category: 'Income', scope: 'global' },
+    'RUBIROSA - MULBERRY': { category: 'Dining', scope: 'global' },
+    'SEATGEEK TICKETS': { category: 'Entertainment', scope: 'global' },
+    'SHAIR NYC 000NEW YORK': { category: 'Health & Wellness', scope: 'global' },
+    'SHINN WEST': { category: 'Dining', scope: 'global' },
+    'SMARTSUITE': { category: 'Stylecom', scope: 'global' },
+    'SOFTR.IO': { category: 'Stylecom', scope: 'global' },
+    'SOLIDSTARTS': { category: 'Health & Wellness', scope: 'global' },
+    'SP BUDGETNERD': { category: 'TaxIncome', scope: 'global' },
+    'SP DORE ROSE': { category: 'Shopping', scope: 'global' },
+    'SP MYSALIGHTS': { category: 'Household', scope: 'global' },
+    'SRD SERVICES': { category: 'Stylecom', scope: 'global' },
+    "SWAN'S CLEANERS": { category: 'Household', scope: 'global' },
+    'TASKER ON TASKRABBITSAN FRANCISCO': { category: 'Household', scope: 'global' },
+    'TERNESSE GOLF &AMP; COUNTR': { category: 'Dining', scope: 'global' },
+    'THE GARRETT - WEST': { category: 'Dining', scope: 'global' },
+    'THE UPS STORE 6387': { category: 'Household', scope: 'global' },
+    'TRANSIP B.V.': { category: 'Stylecom', scope: 'global' },
+    'TRAVEL CREDIT $300/YEAR': { category: 'Income', scope: 'global' },
+    'VCN': { category: 'Stylecom', scope: 'global' },
+    'VULTR BY CONSTANT': { category: 'Stylecom', scope: 'global' },
+    'WCS ZOOS AND AQUARIUM': { category: 'Entertainment', scope: 'global' },
+    'WILLIAMS-SONOMA.COM': { category: 'Household', scope: 'global' },
+    'WINRED': { category: 'Stylecom', scope: 'global' },
+    'WITHDRAWAL FROM CON ED OF NY CECONY': { category: 'Household', scope: 'global' },
+    'WUZIPAY': { category: 'Travel', scope: 'global' },
+    'WWW.PINGEN.COM': { category: 'Stylecom', scope: 'global' },
+    'WWW.THESTRABON.COM': { category: 'Travel', scope: 'global' },
+    'YWW': { category: 'Stylecom', scope: 'global' },
+    'AIR EUROPA|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 4","Chase 0700 - 1","Chase 0700 - 2","Chase 0700 - 3","Chase 2251","Chase 5448"] },
+    'AIR FRANCE|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 5448","Chase 0700 - 1","Chase 0700 - 2","Chase 0700 - 3","Chase 0700 - 4","Chase 2251"] },
+    'BANGKOK AIRWAYS-5G7NK3|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 3","Chase 0700 - 1","Chase 0700 - 2","Chase 0700 - 4","Chase 2251"] },
+    'DELTA AIR|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 5448","Chase 0700 - 1","Chase 0700 - 2","Chase 0700 - 3","Chase 0700 - 4","Chase 2251"] },
+    'ETIHAD AIRW|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 3"] },
+    'JETBLUE|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 4"] },
+    'KLM AIRLINE|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 1","Chase 0700 - 2","Chase 0700 - 3","Chase 0700 - 4","Chase 2251","Chase 5448"] },
+    'KLM ROYAL DUYIAONX|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 1","Chase 0700 - 2","Chase 0700 - 3","Chase 0700 - 4","Chase 2251"] },
+    'QATAR AIR|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 3","Chase 0700 - 1","Chase 0700 - 2","Chase 0700 - 4","Chase 2251","Chase 5448"] },
+    'SWISS AIR|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 5448","Chase 0700 - 1","Chase 0700 - 2","Chase 0700 - 3","Chase 0700 - 4","Chase 2251"] },
+    'UNITED|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 5448","Chase 0700 - 1","Chase 0700 - 2","Chase 0700 - 3","Chase 0700 - 4","Chase 2251"] },
+};
+
 const loadMerchantRules = () => {
     try {
         const s = localStorage.getItem('merchant_rules_v2');
-        if (s) return JSON.parse(s);
+        if (s) {
+            const saved = JSON.parse(s);
+            // Merge with defaults (saved rules take precedence)
+            return { ...DEFAULT_MERCHANT_RULES, ...saved };
+        }
         
         // Migrate from old format (merchant_rules)
         const oldRules = localStorage.getItem('merchant_rules');
@@ -324,10 +558,10 @@ const loadMerchantRules = () => {
                     migrated[merchant] = value; // Already in new format
                 }
             });
-            return migrated;
+            return { ...DEFAULT_MERCHANT_RULES, ...migrated };
         }
-        return {};
-    } catch { return {}; }
+        return { ...DEFAULT_MERCHANT_RULES };
+    } catch { return { ...DEFAULT_MERCHANT_RULES }; }
 };
 
 // Get the rule key for account-specific rules (now uses merchant only, accounts stored in rule)
@@ -834,7 +1068,7 @@ const RecurringCosts = ({ expenses, merchantRules }) => {
     </tbody></table></div><div className="pt-2 border-t border-slate-100 mt-2 flex justify-between items-center"><div className="text-[10px] text-slate-400">🔄 {recurring.length} recurring</div><div className="text-right"><div className="text-[10px] font-bold text-slate-600">~${totalMonthly.toFixed(0)}/mo</div><div className="text-[11px] font-black text-indigo-600">${totalYearly.toLocaleString(undefined,{maximumFractionDigits:0})} YTD</div></div></div></div>);
 };
 
-// Subscriptions - exact same amount for 3+ consecutive months
+// Subscriptions - expenses with isSubscription flag OR detected recurring patterns
 const Subscriptions = ({ expenses, merchantRules }) => {
     const { subscriptions, totalMonthly, totalYearly } = useMemo(() => {
         const sp2025 = expenses.filter(e => !EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category) && getY(e.date) === 2025);
@@ -845,8 +1079,17 @@ const Subscriptions = ({ expenses, merchantRules }) => {
             const name = cleanMerchant(e.description);
             const month = getM(e.date);
             const amount = safe(e.amount);
+            const cat = getEffectiveCategory(e, merchantRules).category;
             
-            if (!byMerchant[name]) byMerchant[name] = { monthlyAmounts: {}, total: 0 };
+            if (!byMerchant[name]) byMerchant[name] = { 
+                monthlyAmounts: {}, 
+                total: 0, 
+                hasSubscriptionFlag: false,
+                category: cat
+            };
+            
+            // Track if any transaction for this merchant has subscription flag
+            if (e.isSubscription) byMerchant[name].hasSubscriptionFlag = true;
             
             // Store the amount for each month (use the first transaction of the month)
             if (!byMerchant[name].monthlyAmounts[month]) {
@@ -859,7 +1102,22 @@ const Subscriptions = ({ expenses, merchantRules }) => {
         
         Object.entries(byMerchant).forEach(([name, data]) => {
             const months = Object.keys(data.monthlyAmounts).map(Number).sort((a, b) => a - b);
-            if (months.length < 3) return; // Need at least 3 months
+            
+            // If manually flagged as subscription, include it even with fewer months
+            if (data.hasSubscriptionFlag) {
+                const avgAmount = data.total / months.length;
+                subscriptions.push({
+                    name,
+                    amount: avgAmount,
+                    months: months.length,
+                    totalYear: data.total,
+                    category: data.category,
+                    flagged: true
+                });
+                return;
+            }
+            
+            if (months.length < 3) return; // Need at least 3 months for auto-detection
             
             // Find sequences of consecutive months with exact same amount
             let maxConsecutive = 1;
@@ -894,7 +1152,9 @@ const Subscriptions = ({ expenses, merchantRules }) => {
                     name,
                     amount: bestAmount,
                     months: maxConsecutive,
-                    totalYear: data.total
+                    totalYear: data.total,
+                    category: data.category,
+                    flagged: false
                 });
             }
         });
@@ -903,10 +1163,10 @@ const Subscriptions = ({ expenses, merchantRules }) => {
         const totalYearly = subscriptions.reduce((s, r) => s + r.totalYear, 0);
         const totalMonthly = subscriptions.reduce((s, r) => s + r.amount, 0);
         
-        return { subscriptions: subscriptions.slice(0, 12), totalMonthly, totalYearly };
+        return { subscriptions: subscriptions.slice(0, 15), totalMonthly, totalYearly };
     }, [expenses, merchantRules]);
     
-    if (!subscriptions.length) return <Empty msg="No subscriptions detected (3+ months same amount)" />;
+    if (!subscriptions.length) return <Empty msg="No subscriptions detected" />;
     
     return (
         <div className="h-full flex flex-col">
@@ -915,24 +1175,26 @@ const Subscriptions = ({ expenses, merchantRules }) => {
                     <thead className="sticky top-0 bg-white">
                         <tr className="text-slate-400 uppercase font-bold">
                             <th className="text-left p-1.5">Service</th>
-                            <th className="text-center p-1.5">Streak</th>
-                            <th className="text-right p-1.5">Amount</th>
+                            <th className="text-left p-1.5">Category</th>
+                            <th className="text-right p-1.5">$/mo</th>
                             <th className="text-right p-1.5">2025</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50">
                         {subscriptions.map((s, i) => (
                             <tr key={s.name} className="hover:bg-emerald-50">
-                                <td className="p-1.5 font-semibold text-slate-700 truncate max-w-[120px]" title={s.name}>
+                                <td className="p-1.5 font-semibold text-slate-700 truncate max-w-[100px]" title={s.name}>
                                     <span className="inline-flex items-center gap-1">
-                                        <span className="w-4 h-4 rounded bg-emerald-100 text-emerald-600 flex items-center justify-center text-[8px] font-black">{i+1}</span>
+                                        {s.flagged && <span className="text-[8px]">🏷️</span>}
                                         {s.name}
                                     </span>
                                 </td>
-                                <td className="p-1.5 text-center">
-                                    <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded font-bold">{s.months}mo</span>
+                                <td className="p-1.5">
+                                    <span className="px-1.5 py-0.5 text-[8px] rounded font-bold text-white" style={{ backgroundColor: CAT_COLORS[s.category] || '#94a3b8' }}>
+                                        {s.category}
+                                    </span>
                                 </td>
-                                <td className="p-1.5 text-right font-bold text-slate-700">${s.amount.toFixed(2)}</td>
+                                <td className="p-1.5 text-right font-bold text-slate-700">${s.amount.toFixed(0)}</td>
                                 <td className="p-1.5 text-right font-black text-emerald-600">${s.totalYear.toFixed(0)}</td>
                             </tr>
                         ))}
@@ -940,9 +1202,9 @@ const Subscriptions = ({ expenses, merchantRules }) => {
                 </table>
             </div>
             <div className="pt-2 border-t border-slate-100 mt-2 flex justify-between items-center">
-                <div className="text-[10px] text-slate-400">📺 {subscriptions.length} subscriptions</div>
+                <div className="text-[10px] text-slate-400">🔄 {subscriptions.length} recurring</div>
                 <div className="text-right">
-                    <div className="text-[10px] font-bold text-slate-600">${totalMonthly.toFixed(2)}/mo</div>
+                    <div className="text-[10px] font-bold text-slate-600">${totalMonthly.toFixed(0)}/mo</div>
                     <div className="text-[11px] font-black text-emerald-600">${totalYearly.toLocaleString(undefined,{maximumFractionDigits:0})} YTD</div>
                 </div>
             </div>
@@ -1370,7 +1632,7 @@ const HighImpactView = ({ expenses, merchantRules, onUpdateRule }) => {
     );
 };
 
-const CategoryManagement = ({ expenses, merchantRules, onUpdateExpense, onUpdateRule, onDeleteRule }) => {
+const CategoryManagement = ({ expenses, merchantRules, onUpdateExpense, onUpdateRule, onDeleteRule, onUpdateSubscription }) => {
     const [viewMode, setViewMode] = useState('highimpact'); // 'highimpact' or 'transactions'
     const [filter, setFilter] = useState('all');
     const [searchTerm, setSearchTerm] = useState('');
@@ -1570,17 +1832,19 @@ const CategoryManagement = ({ expenses, merchantRules, onUpdateExpense, onUpdate
                                 <th className="p-3">Merchant</th>
                                 <th className="p-3">Amount</th>
                                 <th className="p-3">Category</th>
+                                <th className="p-3">Recurring</th>
                                 <th className="p-3 w-20">Action</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50">
                             {filteredExpenses.length === 0 ? (
-                                <tr><td colSpan={5} className="p-12 text-center text-slate-400">No transactions found</td></tr>
+                                <tr><td colSpan={6} className="p-12 text-center text-slate-400">No transactions found</td></tr>
                             ) : filteredExpenses.map(e => {
                                 const effective = getEffectiveCategory(e, merchantRules);
                                 const isExcluded = EXCLUDED_CATEGORIES.includes(effective.category);
                                 const isVenmo = effective.category === 'Venmo';
                                 const isNegative = e.amount < 0;
+                                const isSubscription = e.isSubscription || false;
                                 return (
                                     <tr key={e.id} className={`group ${isExcluded ? 'bg-slate-50 opacity-60' : isVenmo ? 'bg-blue-50/30' : 'hover:bg-slate-50'}`}>
                                         <td className="p-3 text-slate-500 text-xs">{e.date}</td>
@@ -1605,6 +1869,19 @@ const CategoryManagement = ({ expenses, merchantRules, onUpdateExpense, onUpdate
                                                 </span>
                                                 {getCategoryBadge(effective.source)}
                                             </div>
+                                        </td>
+                                        <td className="p-3">
+                                            <button
+                                                onClick={() => onUpdateSubscription && onUpdateSubscription(e.id, !isSubscription)}
+                                                className={`px-2 py-1 rounded text-[10px] font-bold transition-all ${
+                                                    isSubscription 
+                                                        ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' 
+                                                        : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                                                }`}
+                                                title={isSubscription ? 'Click to remove recurring flag' : 'Click to mark as recurring'}
+                                            >
+                                                {isSubscription ? '🔄 Yes' : '—'}
+                                            </button>
                                         </td>
                                         <td className="p-3">
                                             <button onClick={() => setEditingExpense(e)}
@@ -3852,6 +4129,9 @@ const App = () => {
             // Clean the description by stripping payment processor prefixes
             const cleanedDesc = cleanDescription(desc);
             
+            // Detect if this is a subscription
+            const subscriptionDetection = detectSubscription(cleanedDesc);
+            
             return { 
                 id: `e-${Date.now()}-${i}`, 
                 date: row[map.date] || new Date().toISOString().split('T')[0], 
@@ -3863,6 +4143,7 @@ const App = () => {
                 accountType: map.accType || 'credit',  // credit or checking
                 csvCategory: csvCategory,
                 manualCategory: null,
+                isSubscription: subscriptionDetection.isSubscription,  // Subscription flag
                 account: map.acc || 'Imported' 
             };
         }).filter(Boolean);
@@ -3875,6 +4156,10 @@ const App = () => {
 
     const updateExpenseCategory = (id, category) => {
         setExpenses(expenses.map(e => e.id === id ? {...e, manualCategory: category} : e));
+    };
+    
+    const updateExpenseSubscription = (id, isSubscription) => {
+        setExpenses(expenses.map(e => e.id === id ? {...e, isSubscription: isSubscription} : e));
     };
 
     const updateMerchantRule = (merchant, category, scope = 'global', accounts = []) => {
@@ -3947,7 +4232,7 @@ const App = () => {
                 </div>
                 <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">📦 Monthly Cost Structure (2025)</h3><div className="h-56"><CostStructureChart expenses={expenses} merchantRules={merchantRules}/></div></div>
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">📺 Subscriptions (2025)</h3><div className="h-56"><Subscriptions expenses={expenses} merchantRules={merchantRules}/></div></div>
+                    <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">🔄 Recurring Expenses (2025)</h3><div className="h-56"><Subscriptions expenses={expenses} merchantRules={merchantRules}/></div></div>
                     <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">☕ Small Purchase Leaks (2025)</h3><div className="h-56"><SmallPurchaseMerchants expenses={expenses} merchantRules={merchantRules}/></div></div>
                     <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">💸 Death by 1000 Cuts (2025)</h3><div className="h-56"><Scatter expenses={expenses} merchantRules={merchantRules}/></div></div>
                 </div>
@@ -3978,6 +4263,7 @@ const App = () => {
                     onUpdateExpense={updateExpenseCategory}
                     onUpdateRule={updateMerchantRule}
                     onDeleteRule={deleteMerchantRule}
+                    onUpdateSubscription={updateExpenseSubscription}
                 />
             )}
 
