@@ -2316,6 +2316,295 @@ const IncomeFlowDashboard = ({ expenses, merchantRules }) => {
     );
 };
 
+// ============== EXPORT RULES (DEVELOPER MODE) ==============
+const ExportRules = ({ merchantRules, expenses }) => {
+    const [copied, setCopied] = useState(false);
+    const [exportType, setExportType] = useState('all'); // 'all', 'global', 'accounts'
+    
+    // Generate statistics about rules
+    const ruleStats = useMemo(() => {
+        const globalRules = {};
+        const accountRules = {};
+        
+        Object.entries(merchantRules).forEach(([key, value]) => {
+            if (key.includes('|||')) {
+                // Account-specific rule
+                const merchant = key.split('|||')[0];
+                if (value.scope === 'accounts' && value.accounts) {
+                    accountRules[key] = { merchant, category: value.category, accounts: value.accounts };
+                } else if (value.account) {
+                    // Legacy single account
+                    accountRules[key] = { merchant, category: value.category, accounts: [value.account] };
+                }
+            } else if (value.scope === 'global') {
+                globalRules[key] = value.category;
+            }
+        });
+        
+        return { globalRules, accountRules, totalRules: Object.keys(merchantRules).length };
+    }, [merchantRules]);
+    
+    // Generate the code snippet for AUTO_RULES additions
+    const generateAutoRulesCode = () => {
+        const lines = [];
+        lines.push('// ========== NEW AUTO_RULES KEYWORDS ==========');
+        lines.push('// Copy these keywords into the appropriate category in AUTO_RULES');
+        lines.push('');
+        
+        // Group by category
+        const byCategory = {};
+        Object.entries(ruleStats.globalRules).forEach(([merchant, category]) => {
+            if (!byCategory[category]) byCategory[category] = [];
+            // Convert merchant name to a keyword (lowercase, simplified)
+            const keyword = merchant.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+            if (keyword) byCategory[category].push(keyword);
+        });
+        
+        Object.entries(byCategory).sort((a, b) => a[0].localeCompare(b[0])).forEach(([cat, keywords]) => {
+            lines.push(`// ${cat}:`);
+            keywords.forEach(kw => {
+                lines.push(`'${kw}',`);
+            });
+            lines.push('');
+        });
+        
+        return lines.join('\n');
+    };
+    
+    // Generate the code snippet for merchantRules (full export)
+    const generateMerchantRulesCode = () => {
+        const lines = [];
+        lines.push('// ========== MERCHANT RULES EXPORT ==========');
+        lines.push('// Paste this into localStorage or use to initialize merchantRules');
+        lines.push('');
+        lines.push('const SAVED_MERCHANT_RULES = {');
+        
+        // Global rules
+        Object.entries(ruleStats.globalRules).sort((a, b) => a[0].localeCompare(b[0])).forEach(([merchant, category]) => {
+            const escapedMerchant = merchant.replace(/'/g, "\\'");
+            lines.push(`    '${escapedMerchant}': { category: '${category}', scope: 'global' },`);
+        });
+        
+        // Account-specific rules
+        Object.entries(ruleStats.accountRules).sort((a, b) => a[0].localeCompare(b[0])).forEach(([key, rule]) => {
+            const escapedKey = key.replace(/'/g, "\\'");
+            const accountsStr = JSON.stringify(rule.accounts);
+            lines.push(`    '${escapedKey}': { category: '${rule.category}', scope: 'accounts', accounts: ${accountsStr} },`);
+        });
+        
+        lines.push('};');
+        
+        return lines.join('\n');
+    };
+    
+    // Generate PRIORITY_RULES additions
+    const generatePriorityRulesCode = () => {
+        const lines = [];
+        lines.push('// ========== SUGGESTED PRIORITY_RULES ADDITIONS ==========');
+        lines.push('// Add these to PRIORITY_RULES if you want them to override CC payoff detection');
+        lines.push('');
+        lines.push('const NEW_PRIORITY_RULES = {');
+        
+        Object.entries(ruleStats.globalRules).sort((a, b) => a[0].localeCompare(b[0])).forEach(([merchant, category]) => {
+            const keyword = merchant.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+            if (keyword) {
+                lines.push(`    // ${category}: ['${keyword}'],`);
+            }
+        });
+        
+        lines.push('};');
+        
+        return lines.join('\n');
+    };
+    
+    // Combined export
+    const generateFullExport = () => {
+        const sections = [];
+        sections.push('// ══════════════════════════════════════════════════════════');
+        sections.push('// EXPENSE TRACKER - RULES EXPORT');
+        sections.push(`// Generated: ${new Date().toISOString()}`);
+        sections.push(`// Total Rules: ${ruleStats.totalRules}`);
+        sections.push(`// Global Rules: ${Object.keys(ruleStats.globalRules).length}`);
+        sections.push(`// Account Rules: ${Object.keys(ruleStats.accountRules).length}`);
+        sections.push('// ══════════════════════════════════════════════════════════');
+        sections.push('');
+        sections.push(generateAutoRulesCode());
+        sections.push('');
+        sections.push(generateMerchantRulesCode());
+        sections.push('');
+        sections.push(generatePriorityRulesCode());
+        
+        return sections.join('\n');
+    };
+    
+    const getExportContent = () => {
+        switch (exportType) {
+            case 'auto': return generateAutoRulesCode();
+            case 'merchant': return generateMerchantRulesCode();
+            case 'priority': return generatePriorityRulesCode();
+            default: return generateFullExport();
+        }
+    };
+    
+    const copyToClipboard = () => {
+        navigator.clipboard.writeText(getExportContent());
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
+    
+    const downloadAsFile = () => {
+        const content = getExportContent();
+        const blob = new Blob([content], { type: 'text/javascript' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `expense-rules-${new Date().toISOString().split('T')[0]}.js`;
+        a.click();
+        URL.revokeObjectURL(url);
+    };
+    
+    return (
+        <div className="space-y-6">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-slate-700 to-slate-900 text-white p-6 rounded-2xl">
+                <h2 className="text-xl font-black">🛠️ Export Rules (Developer Mode)</h2>
+                <p className="text-slate-300 text-sm mt-1">Export your categorization rules to hardcode into the source</p>
+            </div>
+            
+            {/* Stats Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg">
+                    <h3 className="text-[10px] font-bold text-slate-400 uppercase">Total Rules</h3>
+                    <p className="text-3xl font-black text-slate-900">{ruleStats.totalRules}</p>
+                </div>
+                <div className="bg-white p-5 rounded-2xl border border-purple-200 shadow-lg">
+                    <h3 className="text-[10px] font-bold text-purple-600 uppercase">🌍 Global Rules</h3>
+                    <p className="text-3xl font-black text-purple-600">{Object.keys(ruleStats.globalRules).length}</p>
+                    <p className="text-xs text-slate-500 mt-1">Apply to all accounts</p>
+                </div>
+                <div className="bg-white p-5 rounded-2xl border border-cyan-200 shadow-lg">
+                    <h3 className="text-[10px] font-bold text-cyan-600 uppercase">💳 Account Rules</h3>
+                    <p className="text-3xl font-black text-cyan-600">{Object.keys(ruleStats.accountRules).length}</p>
+                    <p className="text-xs text-slate-500 mt-1">Account-specific overrides</p>
+                </div>
+            </div>
+            
+            {/* Export Type Selector */}
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-lg overflow-hidden">
+                <div className="p-5 border-b border-slate-100">
+                    <h3 className="text-sm font-black text-slate-800">📦 Export Type</h3>
+                </div>
+                <div className="p-4">
+                    <div className="flex flex-wrap gap-2">
+                        {[
+                            { key: 'all', label: '📋 Full Export', desc: 'Everything' },
+                            { key: 'auto', label: '🔤 AUTO_RULES', desc: 'Keywords only' },
+                            { key: 'merchant', label: '🏪 Merchant Rules', desc: 'JSON format' },
+                            { key: 'priority', label: '⚡ PRIORITY_RULES', desc: 'Hard overrides' }
+                        ].map(opt => (
+                            <button 
+                                key={opt.key}
+                                onClick={() => setExportType(opt.key)}
+                                className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${
+                                    exportType === opt.key 
+                                        ? 'bg-indigo-600 text-white' 
+                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                }`}>
+                                {opt.label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            </div>
+            
+            {/* Code Output */}
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-lg overflow-hidden">
+                <div className="p-5 border-b border-slate-100 flex justify-between items-center">
+                    <h3 className="text-sm font-black text-slate-800">📝 Generated Code</h3>
+                    <div className="flex gap-2">
+                        <button 
+                            onClick={downloadAsFile}
+                            className="px-4 py-2 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-200">
+                            💾 Download
+                        </button>
+                        <button 
+                            onClick={copyToClipboard}
+                            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                                copied 
+                                    ? 'bg-green-500 text-white' 
+                                    : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                            }`}>
+                            {copied ? '✓ Copied!' : '📋 Copy to Clipboard'}
+                        </button>
+                    </div>
+                </div>
+                <div className="p-4">
+                    <pre className="bg-slate-900 text-green-400 p-4 rounded-xl text-xs overflow-auto max-h-96 font-mono whitespace-pre-wrap">
+                        {getExportContent()}
+                    </pre>
+                </div>
+            </div>
+            
+            {/* Instructions */}
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5">
+                <h3 className="font-bold text-amber-800 mb-2">📖 How to Use This Export</h3>
+                <ol className="text-sm text-amber-700 space-y-2 list-decimal list-inside">
+                    <li>Categorize transactions in the <strong>Categories</strong> page</li>
+                    <li>Come here and click <strong>"Copy to Clipboard"</strong></li>
+                    <li>Paste the code into a chat with Claude and say: <em>"Add these to my expense tracker rules"</em></li>
+                    <li>Claude will update your source code with the new rules</li>
+                    <li>Push to GitHub and your rules are saved permanently!</li>
+                </ol>
+            </div>
+            
+            {/* Rules Preview */}
+            {Object.keys(ruleStats.globalRules).length > 0 && (
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-lg overflow-hidden">
+                    <div className="p-5 border-b border-slate-100">
+                        <h3 className="text-sm font-black text-slate-800">🌍 Global Rules Preview</h3>
+                    </div>
+                    <div className="p-4 max-h-64 overflow-y-auto">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                            {Object.entries(ruleStats.globalRules).sort((a, b) => a[0].localeCompare(b[0])).map(([merchant, category]) => (
+                                <div key={merchant} className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg">
+                                    <span className="text-xs font-semibold text-slate-600 truncate flex-1" title={merchant}>{merchant}</span>
+                                    <span className="text-[10px] font-bold text-white px-2 py-0.5 rounded" style={{ backgroundColor: CAT_COLORS[category] || '#6366f1' }}>
+                                        {category}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+            
+            {/* Account Rules Preview */}
+            {Object.keys(ruleStats.accountRules).length > 0 && (
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-lg overflow-hidden">
+                    <div className="p-5 border-b border-slate-100">
+                        <h3 className="text-sm font-black text-slate-800">💳 Account-Specific Rules Preview</h3>
+                    </div>
+                    <div className="p-4 max-h-64 overflow-y-auto">
+                        <div className="space-y-2">
+                            {Object.entries(ruleStats.accountRules).sort((a, b) => a[0].localeCompare(b[0])).map(([key, rule]) => (
+                                <div key={key} className="flex items-center gap-2 p-2 bg-cyan-50 rounded-lg">
+                                    <span className="text-xs font-semibold text-slate-600 truncate" style={{maxWidth: '150px'}} title={rule.merchant}>{rule.merchant}</span>
+                                    <span className="text-[9px] text-slate-400 truncate" style={{maxWidth: '150px'}} title={rule.accounts.join(', ')}>
+                                        ({rule.accounts.length > 1 ? `${rule.accounts.length} accounts` : rule.accounts[0]})
+                                    </span>
+                                    <span className="text-[10px] font-bold text-white px-2 py-0.5 rounded ml-auto" style={{ backgroundColor: CAT_COLORS[rule.category] || '#6366f1' }}>
+                                        {rule.category}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
 // ============== IMPORT DIALOG ==============
 const ImportDialog = ({ headers, onClose, onConfirm, defaultAccountName = '' }) => {
     const [map, setMap] = useState({ date: headers.find(h=>/date/i.test(h))||headers[0], amount: headers.find(h=>/amount|debit/i.test(h))||headers[1], desc: headers.find(h=>/desc|memo/i.test(h))||headers[2], cat: headers.find(h=>/cat/i.test(h))||'' });
@@ -2565,9 +2854,9 @@ const App = () => {
 
         <div className="max-w-7xl mx-auto px-4 mt-4">
             <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit text-xs overflow-x-auto">
-                {['dashboard','evolution','flow','categories','stylecom','transactions'].map(t => (
+                {['dashboard','evolution','flow','categories','stylecom','transactions','export'].map(t => (
                     <button key={t} onClick={()=>setTab(t)} className={`px-4 py-2 rounded-lg font-bold capitalize whitespace-nowrap ${tab===t?'bg-white text-indigo-600 shadow':'text-slate-500'}`}>
-                        {t==='dashboard'?'📊 ':t==='evolution'?'📈 ':t==='flow'?'💰 ':t==='categories'?'🏷️ ':t==='stylecom'?'👗 ':'📋 '}{t}
+                        {t==='dashboard'?'📊 ':t==='evolution'?'📈 ':t==='flow'?'💰 ':t==='categories'?'🏷️ ':t==='stylecom'?'👗 ':t==='transactions'?'📋 ':'🛠️ '}{t}
                     </button>
                 ))}
             </div>
@@ -2633,6 +2922,10 @@ const App = () => {
                     onDelete={del}
                     onClearAll={() => { if(confirm("Delete all data?")) setExpenses([]); }}
                 />
+            )}
+
+            {tab === 'export' && (
+                <ExportRules merchantRules={merchantRules} expenses={expenses} />
             )}
         </main>
         
