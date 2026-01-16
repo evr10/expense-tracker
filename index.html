@@ -512,23 +512,30 @@ const Stats = ({ expenses, merchantRules }) => {
 };
 
 const Pareto = ({ expenses, merchantRules }) => {
-    const data = useMemo(() => {
+    const { data, total } = useMemo(() => {
         const sp = expenses.filter(e => !EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category) && getY(e.date) === 2025);
         const bc = {}; sp.forEach(e => { const cat = getEffectiveCategory(e, merchantRules).category; bc[cat] = (bc[cat]||0) + safe(e.amount); });
         const sorted = Object.entries(bc).map(([n,v]) => ({name:n,value:v})).sort((a,b) => b.value - a.value);
         const tot = sorted.reduce((s,i) => s + i.value, 0);
-        let cum = 0;
-        return sorted.map(i => { cum += i.value; return {...i, cumPct: tot>0 ? cum/tot*100 : 0}; });
+        return { data: sorted.map(i => ({...i, pct: tot > 0 ? (i.value / tot) * 100 : 0 })), total: tot };
     }, [expenses, merchantRules]);
     if (!data.length) return <Empty msg="No 2025 data" />;
     const mx = Math.max(...data.map(d => d.value));
-    return (<div className="h-full flex flex-col"><div className="flex-1 flex flex-col justify-end gap-1 pb-2">
-        {data.slice(0,8).map(i => <div key={i.name} className="flex items-center gap-2">
-            <div className="w-20 text-[10px] font-semibold text-slate-500 truncate text-right">{i.name}</div>
-            <div className="flex-1 h-6 bg-slate-100 rounded relative overflow-hidden"><div className="h-full rounded" style={{width:`${i.value/mx*100}%`,backgroundColor:CAT_COLORS[i.name]||'#6366f1'}}/><div className="absolute top-0 bottom-0 w-0.5 bg-red-500" style={{left:`${i.cumPct}%`}}/></div>
-            <div className="w-12 text-[10px] font-bold text-slate-600 text-right">{i.cumPct.toFixed(0)}%</div>
-        </div>)}
-    </div><div className="text-[10px] text-slate-400 text-center pt-2 border-t border-slate-100">🔴 Red = cumulative %</div></div>);
+    return (<div className="h-full flex flex-col">
+        <div className="flex-1 overflow-auto space-y-1.5">
+            {data.map(i => <div key={i.name} className="flex items-center gap-2">
+                <div className="w-24 text-[10px] font-semibold text-slate-600 truncate text-right" title={i.name}>{i.name}</div>
+                <div className="flex-1 h-5 bg-slate-100 rounded overflow-hidden">
+                    <div className="h-full rounded" style={{width:`${i.value/mx*100}%`,backgroundColor:CAT_COLORS[i.name]||'#6366f1'}}/>
+                </div>
+                <div className="w-16 text-[10px] font-bold text-slate-700 text-right">${(i.value/1000).toFixed(1)}k</div>
+                <div className="w-10 text-[10px] font-bold text-slate-500 text-right">{i.pct.toFixed(0)}%</div>
+            </div>)}
+        </div>
+        <div className="text-[10px] text-slate-400 text-center pt-2 border-t border-slate-100 mt-2">
+            Total: <span className="font-bold text-slate-600">${total.toLocaleString(undefined,{maximumFractionDigits:0})}</span>
+        </div>
+    </div>);
 };
 
 const TopMerchants = ({ expenses, merchantRules }) => {
