@@ -2959,6 +2959,350 @@ const ExportRules = ({ merchantRules, expenses }) => {
     );
 };
 
+// ============== AI ANALYST EXPORT ==============
+const AIAnalystExport = ({ expenses, merchantRules }) => {
+    const [report, setReport] = useState('');
+    const [copied, setCopied] = useState(false);
+    const [generating, setGenerating] = useState(false);
+    
+    const generateReport = () => {
+        setGenerating(true);
+        
+        // Small delay for UX feedback
+        setTimeout(() => {
+            const lines = [];
+            const now = new Date();
+            const currentYear = now.getFullYear();
+            const currentMonth = now.getMonth() + 1;
+            
+            // Helper to format currency
+            const fmt = (n) => '$' + n.toLocaleString(undefined, { maximumFractionDigits: 0 });
+            const fmtPct = (n) => n.toFixed(1) + '%';
+            
+            // Filter valid expenses (exclude transfers, income for spending analysis)
+            const allExpenses = expenses.filter(e => {
+                const cat = getEffectiveCategory(e, merchantRules).category;
+                return !EXCLUDED_CATEGORIES.includes(cat) && isValidYear(e.date);
+            });
+            
+            const incomeExpenses = expenses.filter(e => {
+                const cat = getEffectiveCategory(e, merchantRules).category;
+                return (cat === 'Income' || cat === 'TaxIncome') && isValidYear(e.date);
+            });
+            
+            // Get years with data
+            const yearsWithData = [...new Set(allExpenses.map(e => getY(e.date)))].sort((a, b) => b - a);
+            
+            // === HEADER ===
+            lines.push('# 📊 Personal Finance Report');
+            lines.push('');
+            lines.push(`**Generated:** ${now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`);
+            lines.push(`**Data Range:** ${yearsWithData[yearsWithData.length - 1] || 'N/A'} - ${yearsWithData[0] || 'N/A'}`);
+            lines.push(`**Total Transactions Analyzed:** ${allExpenses.length.toLocaleString()}`);
+            lines.push('');
+            lines.push('---');
+            lines.push('');
+            
+            // === ANNUAL SUMMARY ===
+            lines.push('## 📅 Annual Spending Summary');
+            lines.push('');
+            lines.push('| Year | Total Spending | Transactions | Avg Transaction | Monthly Avg |');
+            lines.push('|------|----------------|--------------|-----------------|-------------|');
+            
+            yearsWithData.forEach(year => {
+                const yearExp = allExpenses.filter(e => getY(e.date) === year);
+                const total = yearExp.reduce((s, e) => s + safe(e.amount), 0);
+                const count = yearExp.length;
+                const avg = count > 0 ? total / count : 0;
+                const months = new Set(yearExp.map(e => getM(e.date))).size;
+                const monthlyAvg = months > 0 ? total / months : 0;
+                lines.push(`| ${year} | ${fmt(total)} | ${count} | ${fmt(avg)} | ${fmt(monthlyAvg)} |`);
+            });
+            lines.push('');
+            
+            // === YEAR-OVER-YEAR CHANGE ===
+            if (yearsWithData.length >= 2) {
+                const thisYear = yearsWithData[0];
+                const lastYear = yearsWithData[1];
+                const thisYearTotal = allExpenses.filter(e => getY(e.date) === thisYear).reduce((s, e) => s + safe(e.amount), 0);
+                const lastYearTotal = allExpenses.filter(e => getY(e.date) === lastYear).reduce((s, e) => s + safe(e.amount), 0);
+                const yoyChange = lastYearTotal > 0 ? ((thisYearTotal - lastYearTotal) / lastYearTotal) * 100 : 0;
+                
+                lines.push(`**Year-over-Year Change (${lastYear} → ${thisYear}):** ${yoyChange >= 0 ? '+' : ''}${fmtPct(yoyChange)}`);
+                lines.push('');
+            }
+            
+            // === CURRENT YEAR CATEGORY BREAKDOWN ===
+            const currentYearExp = allExpenses.filter(e => getY(e.date) === currentYear);
+            const currentYearTotal = currentYearExp.reduce((s, e) => s + safe(e.amount), 0);
+            
+            if (currentYearExp.length > 0) {
+                lines.push(`## 🏷️ ${currentYear} Spending by Category`);
+                lines.push('');
+                
+                // Group by category
+                const byCategory = {};
+                currentYearExp.forEach(e => {
+                    const cat = getEffectiveCategory(e, merchantRules).category;
+                    if (!byCategory[cat]) byCategory[cat] = { total: 0, count: 0 };
+                    byCategory[cat].total += safe(e.amount);
+                    byCategory[cat].count += 1;
+                });
+                
+                const sortedCats = Object.entries(byCategory)
+                    .map(([cat, data]) => ({ cat, ...data, pct: (data.total / currentYearTotal) * 100 }))
+                    .sort((a, b) => b.total - a.total);
+                
+                lines.push('| Category | Amount | % of Total | Transactions |');
+                lines.push('|----------|--------|------------|--------------|');
+                sortedCats.forEach(({ cat, total, pct, count }) => {
+                    lines.push(`| ${cat} | ${fmt(total)} | ${fmtPct(pct)} | ${count} |`);
+                });
+                lines.push(`| **TOTAL** | **${fmt(currentYearTotal)}** | **100%** | **${currentYearExp.length}** |`);
+                lines.push('');
+                
+                // Top 3 Categories insight
+                lines.push('### 🔍 Key Insight');
+                const top3 = sortedCats.slice(0, 3);
+                const top3Total = top3.reduce((s, c) => s + c.total, 0);
+                const top3Pct = (top3Total / currentYearTotal) * 100;
+                lines.push(`Your top 3 spending categories (${top3.map(c => c.cat).join(', ')}) account for **${fmtPct(top3Pct)}** of your total spending.`);
+                lines.push('');
+            }
+            
+            // === MONTHLY TREND (Current Year) ===
+            if (currentYearExp.length > 0) {
+                lines.push(`## 📈 ${currentYear} Monthly Spending Trend`);
+                lines.push('');
+                
+                const byMonth = {};
+                currentYearExp.forEach(e => {
+                    const month = getM(e.date);
+                    byMonth[month] = (byMonth[month] || 0) + safe(e.amount);
+                });
+                
+                const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                const monthlyValues = [];
+                
+                lines.push('| Month | Spending |');
+                lines.push('|-------|----------|');
+                for (let m = 0; m < 12; m++) {
+                    if (byMonth[m] !== undefined) {
+                        monthlyValues.push(byMonth[m]);
+                        lines.push(`| ${monthNames[m]} | ${fmt(byMonth[m])} |`);
+                    }
+                }
+                lines.push('');
+                
+                // Stats
+                if (monthlyValues.length > 0) {
+                    const avgMonthly = monthlyValues.reduce((a, b) => a + b, 0) / monthlyValues.length;
+                    const maxMonth = Math.max(...monthlyValues);
+                    const minMonth = Math.min(...monthlyValues);
+                    const maxMonthName = monthNames[Object.entries(byMonth).find(([k, v]) => v === maxMonth)?.[0]];
+                    const minMonthName = monthNames[Object.entries(byMonth).find(([k, v]) => v === minMonth)?.[0]];
+                    
+                    lines.push(`- **Average Monthly:** ${fmt(avgMonthly)}`);
+                    lines.push(`- **Highest Month:** ${maxMonthName} (${fmt(maxMonth)})`);
+                    lines.push(`- **Lowest Month:** ${minMonthName} (${fmt(minMonth)})`);
+                    lines.push(`- **Variance:** ${fmt(maxMonth - minMonth)} spread`);
+                    lines.push('');
+                }
+            }
+            
+            // === INCOME VS EXPENSES ===
+            const currentYearIncome = incomeExpenses.filter(e => getY(e.date) === currentYear);
+            const totalIncome = currentYearIncome.reduce((s, e) => s + Math.abs(safe(e.amount)), 0);
+            
+            if (totalIncome > 0 && currentYearTotal > 0) {
+                lines.push(`## 💰 ${currentYear} Income vs Expenses`);
+                lines.push('');
+                lines.push(`| Metric | Amount |`);
+                lines.push(`|--------|--------|`);
+                lines.push(`| Total Income | ${fmt(totalIncome)} |`);
+                lines.push(`| Total Expenses | ${fmt(currentYearTotal)} |`);
+                lines.push(`| **Net Savings** | **${fmt(totalIncome - currentYearTotal)}** |`);
+                lines.push(`| Savings Rate | ${fmtPct(((totalIncome - currentYearTotal) / totalIncome) * 100)} |`);
+                lines.push(`| Burn Rate | ${fmtPct((currentYearTotal / totalIncome) * 100)} |`);
+                lines.push('');
+            }
+            
+            // === TOP MERCHANTS (Aggregated, no raw descriptions) ===
+            if (currentYearExp.length > 0) {
+                lines.push(`## 🏪 ${currentYear} Top 10 Spending Areas`);
+                lines.push('');
+                
+                const byMerchant = {};
+                currentYearExp.forEach(e => {
+                    const name = cleanMerchant(e.description);
+                    if (!byMerchant[name]) byMerchant[name] = { total: 0, count: 0 };
+                    byMerchant[name].total += safe(e.amount);
+                    byMerchant[name].count += 1;
+                });
+                
+                const topMerchants = Object.entries(byMerchant)
+                    .map(([name, data]) => ({ name, ...data }))
+                    .sort((a, b) => b.total - a.total)
+                    .slice(0, 10);
+                
+                lines.push('| Rank | Merchant | Total | Visits |');
+                lines.push('|------|----------|-------|--------|');
+                topMerchants.forEach((m, i) => {
+                    lines.push(`| ${i + 1} | ${m.name} | ${fmt(m.total)} | ${m.count} |`);
+                });
+                lines.push('');
+            }
+            
+            // === RECURRING/SUBSCRIPTION DETECTION ===
+            const subscriptionLikely = [];
+            const merchantMonthly = {};
+            currentYearExp.forEach(e => {
+                const name = cleanMerchant(e.description);
+                const month = getM(e.date);
+                if (!merchantMonthly[name]) merchantMonthly[name] = new Set();
+                merchantMonthly[name].add(month);
+            });
+            
+            Object.entries(merchantMonthly).forEach(([name, months]) => {
+                if (months.size >= 3) {
+                    const total = currentYearExp.filter(e => cleanMerchant(e.description) === name)
+                        .reduce((s, e) => s + safe(e.amount), 0);
+                    const monthly = total / months.size;
+                    if (monthly > 5 && monthly < 500) { // Reasonable subscription range
+                        subscriptionLikely.push({ name, months: months.size, monthly, annual: monthly * 12 });
+                    }
+                }
+            });
+            
+            if (subscriptionLikely.length > 0) {
+                subscriptionLikely.sort((a, b) => b.annual - a.annual);
+                const topSubs = subscriptionLikely.slice(0, 8);
+                const totalSubsAnnual = topSubs.reduce((s, sub) => s + sub.annual, 0);
+                
+                lines.push('## 🔄 Likely Recurring Expenses');
+                lines.push('');
+                lines.push('| Service | Est. Monthly | Est. Annual | Frequency |');
+                lines.push('|---------|--------------|-------------|-----------|');
+                topSubs.forEach(sub => {
+                    lines.push(`| ${sub.name} | ${fmt(sub.monthly)} | ${fmt(sub.annual)} | ${sub.months} months |`);
+                });
+                lines.push(`| **Subtotal** | **${fmt(totalSubsAnnual / 12)}** | **${fmt(totalSubsAnnual)}** | |`);
+                lines.push('');
+            }
+            
+            // === ACCOUNTS SUMMARY ===
+            const accounts = [...new Set(expenses.map(e => e.account).filter(Boolean))];
+            if (accounts.length > 1) {
+                lines.push('## 💳 Accounts Overview');
+                lines.push('');
+                lines.push(`You have **${accounts.length} accounts** tracked in this system.`);
+                lines.push('');
+            }
+            
+            // === FOOTER / PROMPT ===
+            lines.push('---');
+            lines.push('');
+            lines.push('## 🤖 Suggested Questions to Ask AI');
+            lines.push('');
+            lines.push('1. "Based on my spending patterns, where can I cut costs?"');
+            lines.push('2. "Am I saving enough? What\'s a healthy savings rate for my situation?"');
+            lines.push('3. "Which category has grown the most year-over-year?"');
+            lines.push('4. "Help me create a budget based on these spending habits."');
+            lines.push('5. "Are there any red flags in my financial data?"');
+            lines.push('');
+            lines.push('---');
+            lines.push('*This report contains aggregated data only. No individual transaction details or bank descriptions are included for privacy.*');
+            
+            setReport(lines.join('\n'));
+            setGenerating(false);
+        }, 300);
+    };
+    
+    const copyToClipboard = () => {
+        navigator.clipboard.writeText(report);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
+    
+    return (
+        <div className="space-y-6">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white p-6 rounded-2xl">
+                <h2 className="text-xl font-black">🤖 AI Analyst Export</h2>
+                <p className="text-cyan-100 text-sm mt-1">Generate a privacy-safe report to paste into ChatGPT, Claude, or other AI assistants</p>
+            </div>
+            
+            {/* Generate Button */}
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-lg p-6">
+                <div className="flex items-center justify-between mb-4">
+                    <div>
+                        <h3 className="font-bold text-slate-800">Generate Financial Report</h3>
+                        <p className="text-sm text-slate-500 mt-1">Creates a Markdown-formatted summary of your finances</p>
+                    </div>
+                    <button 
+                        onClick={generateReport}
+                        disabled={generating}
+                        className={`px-6 py-3 rounded-xl font-bold text-white transition-all ${
+                            generating 
+                                ? 'bg-slate-400 cursor-wait' 
+                                : 'bg-gradient-to-r from-cyan-500 to-blue-600 hover:shadow-lg hover:scale-105'
+                        }`}>
+                        {generating ? '⏳ Generating...' : '✨ Generate AI Report'}
+                    </button>
+                </div>
+                
+                <div className="bg-slate-50 rounded-xl p-4 text-sm text-slate-600">
+                    <p className="font-semibold mb-2">📋 What's included:</p>
+                    <ul className="grid grid-cols-2 gap-1 text-xs">
+                        <li>✓ Annual spending summary</li>
+                        <li>✓ Category breakdown</li>
+                        <li>✓ Monthly trends</li>
+                        <li>✓ Income vs expenses</li>
+                        <li>✓ Top merchants (anonymized)</li>
+                        <li>✓ Recurring expense detection</li>
+                        <li>✓ Year-over-year changes</li>
+                        <li>✓ Suggested AI questions</li>
+                    </ul>
+                    <p className="mt-3 text-[10px] text-slate-400">🔒 <strong>Privacy:</strong> No individual transactions or raw bank descriptions are included.</p>
+                </div>
+            </div>
+            
+            {/* Report Output */}
+            {report && (
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-lg overflow-hidden">
+                    <div className="p-5 border-b border-slate-100 flex justify-between items-center">
+                        <h3 className="text-sm font-black text-slate-800">📝 Generated Report</h3>
+                        <button 
+                            onClick={copyToClipboard}
+                            className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${
+                                copied 
+                                    ? 'bg-green-500 text-white' 
+                                    : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                            }`}>
+                            {copied ? '✓ Copied!' : '📋 Copy to Clipboard'}
+                        </button>
+                    </div>
+                    <div className="p-4">
+                        <textarea 
+                            readOnly
+                            value={report}
+                            className="w-full h-96 p-4 bg-slate-900 text-green-400 rounded-xl text-xs font-mono resize-none outline-none"
+                        />
+                    </div>
+                    <div className="p-4 bg-amber-50 border-t border-amber-100">
+                        <p className="text-sm text-amber-800 font-semibold">💡 How to use:</p>
+                        <ol className="text-xs text-amber-700 mt-2 space-y-1 list-decimal list-inside">
+                            <li>Click "Copy to Clipboard" above</li>
+                            <li>Open ChatGPT, Claude, or your preferred AI assistant</li>
+                            <li>Paste the report and ask questions like: <em>"Analyze my spending and suggest a budget"</em></li>
+                        </ol>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
 // ============== IMPORT DIALOG ==============
 const ImportDialog = ({ headers, onClose, onConfirm, defaultAccountName = '' }) => {
     const isHSBC = defaultAccountName.toLowerCase().includes('hsbc');
@@ -3268,9 +3612,9 @@ const App = () => {
 
         <div className="max-w-7xl mx-auto px-4 mt-4">
             <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit text-xs overflow-x-auto">
-                {['dashboard','evolution','flow','categories','stylecom','transfers','transactions','export'].map(t => (
+                {['dashboard','evolution','flow','categories','stylecom','transfers','transactions','ai','export'].map(t => (
                     <button key={t} onClick={()=>setTab(t)} className={`px-4 py-2 rounded-lg font-bold capitalize whitespace-nowrap ${tab===t?'bg-white text-indigo-600 shadow':'text-slate-500'}`}>
-                        {t==='dashboard'?'📊 ':t==='evolution'?'📈 ':t==='flow'?'💰 ':t==='categories'?'🏷️ ':t==='stylecom'?'👗 ':t==='transfers'?'🔄 ':t==='transactions'?'📋 ':'🛠️ '}{t}
+                        {t==='dashboard'?'📊 ':t==='evolution'?'📈 ':t==='flow'?'💰 ':t==='categories'?'🏷️ ':t==='stylecom'?'👗 ':t==='transfers'?'🔄 ':t==='transactions'?'📋 ':t==='ai'?'🤖 ':'🛠️ '}{t}
                     </button>
                 ))}
             </div>
@@ -3340,6 +3684,10 @@ const App = () => {
                     onDelete={del}
                     onClearAll={() => { if(confirm("Delete all data?")) setExpenses([]); }}
                 />
+            )}
+
+            {tab === 'ai' && (
+                <AIAnalystExport expenses={expenses} merchantRules={merchantRules} />
             )}
 
             {tab === 'export' && (
