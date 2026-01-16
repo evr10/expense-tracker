@@ -54,8 +54,8 @@ const PRIORITY_RULES = {
 const CC_PAYOFF_KEYWORDS = ['amex', 'chase card', 'capital one', 'citi card', 'discover card', 'cc payment', 'card ccpymt', 'card autopay', 'credit card auto pay', 'wf credit card'];
 
 const AUTO_RULES = {
-    // Credit Card Payments from checking - transfers not expenses (EXCLUDED)
-    Excluded:['autopay','auto pay','thank you','credit card payment','card payment','online payment','bill pay','paying','paid in full','minimum payment','statement balance','balance payment','ach payment','electronic payment','pymt','payment to chase','payment to amex','payment to citi','payment to capital one','payment to discover','amex transfer','chase transfer'],
+    // Excluded - only for truly unmatchable/ignorable transactions
+    Excluded:[],
     Groceries:['walmart','kroger','safeway','trader joe','whole foods','aldi','costco','publix','grocery','supermarket','wegmans','heb','albertsons','sprouts'],
     Dining:['sweetgreen','mcdonald','starbucks','chipotle','subway','restaurant','cafe','coffee','doordash','uber eats','pizza','grubhub','seamless','postmates'],
     Transportation:['uber','lyft','taxi','shell','exxon','chevron','gas','fuel','parking','metro','transit','mobil','bp','sunoco'],
@@ -73,8 +73,9 @@ const AUTO_RULES = {
     Income:['payroll','salary','direct deposit','paycheck','dividend','interest income','wire in','employer','bonus','commission','stripe'],
     // Tax refunds/income - auto-excluded
     TaxIncome:['irs','treasury','tax refund','state tax','federal tax','tax credit'],
-    // Transfer category - internal moves, excluded from expense totals
-    Transfer:['zelle to','zelle from','internal transfer','external transfer','online transfer to','online transfer from','ach payment to','transfer to sav','transfer from sav','transfer to chk','transfer from chk']
+    // Transfer category - internal moves between accounts (for transfer matching)
+    // Includes CC payments so they can be matched with checking withdrawals
+    Transfer:['zelle to','zelle from','internal transfer','external transfer','online transfer to','online transfer from','ach payment to','transfer to sav','transfer from sav','transfer to chk','transfer from chk','autopay','auto pay','thank you','credit card payment','card payment','online payment','bill pay','paying','paid in full','minimum payment','statement balance','balance payment','ach payment','electronic payment','pymt','payment to chase','payment to amex','payment to citi','payment to capital one','payment to discover','amex transfer','chase transfer']
 };
 
 // INTERNAL TRANSFER SOURCES - these override income keywords
@@ -2582,8 +2583,8 @@ const TransferMatching = ({ expenses, merchantRules }) => {
     const [dateRange, setDateRange] = useState(5); // Days tolerance for matching
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
     
-    // Categories that represent transfers
-    const TRANSFER_CATEGORIES = ['Transfer', 'Excluded'];
+    // Categories that represent transfers (Excluded is now empty, all CC payments are Transfer)
+    const TRANSFER_CATEGORIES = ['Transfer'];
     
     // Matching algorithm
     const matchingData = useMemo(() => {
