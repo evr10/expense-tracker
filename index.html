@@ -70,11 +70,11 @@ const AUTO_RULES = {
     // Venmo - special category, NOT excluded (allows netting)
     Venmo:['venmo'],
     // Income categories - will be auto-excluded from expense views
-    Income:['payroll','salary','direct deposit','paycheck','dividend','interest income','wire in','ach credit','employer','bonus','commission'],
+    Income:['payroll','salary','direct deposit','paycheck','dividend','interest income','wire in','employer','bonus','commission'],
     // Tax refunds/income - auto-excluded
     TaxIncome:['irs','treasury','tax refund','state tax','federal tax','tax credit'],
     // Transfer category - internal moves, excluded from expense totals
-    Transfer:['zelle to','zelle from','internal transfer','external transfer']
+    Transfer:['zelle to','zelle from','internal transfer','external transfer','online transfer to','online transfer from','ach payment to','transfer to sav','transfer from sav','transfer to chk','transfer from chk']
 };
 
 // Categories to exclude from expense calculations (Venmo is NOT excluded - it nets out)
@@ -215,6 +215,11 @@ const autoRuleMatch = (desc, transactionType = 'expense') => {
     // Catches ATM withdrawals, transfers to savings, unrecognized bill payments
     // This runs AFTER specific overrides (Venmo, Wells Fargo, CC payoffs)
     if (rawLower.includes('withdrawal') || d.includes('withdrawal')) {
+        return 'Transfer';
+    }
+    
+    // PRIORITY 2.75: If transaction type is transfer (set during import for HSBC etc)
+    if (transactionType === 'transfer') {
         return 'Transfer';
     }
     
@@ -2763,13 +2768,16 @@ const App = () => {
     
     const processImport = (map) => {
         const isCheckingAccount = map.accType === 'checking';
+        const isHSBC = (map.acc || '').toLowerCase().includes('hsbc');
         
         const newExp = importData.data.map((row, i) => {
             const desc = row[map.desc] || '';
             const descLower = desc.toLowerCase();
             const raw = String(row[map.amount]||'0').replace(/[^\d.-]/g,'');
             const rawAmount = parseFloat(raw) || 0;
-            if (rawAmount === 0) return null;
+            
+            // Only skip truly zero amounts (not small ones like 0.01)
+            if (raw === '' || raw === '0' || raw === '0.00') return null;
             
             // Determine transaction type and final amount
             let transactionType = 'expense';
@@ -2778,10 +2786,15 @@ const App = () => {
             // Check if this is a Venmo transaction (by description, not amount sign)
             const isVenmo = descLower.includes('venmo');
             
+            // Check for ONLINE TRANSFER (HSBC style) - these are internal transfers
+            const isOnlineTransfer = descLower.includes('online transfer to') || 
+                                     descLower.includes('online transfer from') ||
+                                     descLower.includes('ach payment to');
+            
             // CRITICAL: Check if description indicates a WITHDRAWAL (money going OUT)
             // This overrides the raw amount sign for checking accounts
             const isWithdrawal = descLower.includes('withdrawal');
-            const isDeposit = descLower.includes('deposit') && !isWithdrawal;
+            const isDeposit = descLower.includes('deposit') && !isWithdrawal && !isOnlineTransfer;
             
             if (isVenmo) {
                 // Venmo: Use description keywords to determine direction
@@ -2798,6 +2811,10 @@ const App = () => {
                     transactionType = 'venmo-payment';
                     finalAmount = Math.abs(rawAmount);
                 }
+            } else if (isOnlineTransfer) {
+                // HSBC Online Transfers - categorize as transfer (excluded from expenses)
+                transactionType = 'transfer';
+                finalAmount = Math.abs(rawAmount);
             } else if (isCheckingAccount) {
                 // Checking account: Use DESCRIPTION to determine direction, not amount sign
                 // "Withdrawal" = money OUT = expense (regardless of sign in CSV)
