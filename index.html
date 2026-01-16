@@ -2328,6 +2328,348 @@ const IncomeFlowDashboard = ({ expenses, merchantRules }) => {
     );
 };
 
+// ============== TRANSFER MATCHING ==============
+const TransferMatching = ({ expenses, merchantRules }) => {
+    const [dateRange, setDateRange] = useState(5); // Days tolerance for matching
+    const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+    
+    // Categories that represent transfers
+    const TRANSFER_CATEGORIES = ['Transfer', 'Excluded'];
+    
+    // Matching algorithm
+    const matchingData = useMemo(() => {
+        // Filter to selected year and transfer categories
+        const transfers = expenses.filter(e => {
+            const year = getY(e.date);
+            if (year !== selectedYear) return false;
+            const cat = getEffectiveCategory(e, merchantRules).category;
+            return TRANSFER_CATEGORIES.includes(cat);
+        });
+        
+        // Separate into outflows (negative/sent) and inflows (positive/received)
+        // For checking accounts: negative amount = money leaving
+        // For credit cards: positive amount = payment received
+        const outflows = []; // Money leaving (checking account debits, transfers out)
+        const inflows = [];  // Money arriving (credit card payments received)
+        
+        transfers.forEach(t => {
+            const amount = safe(t.amount);
+            const rawAmount = t.rawAmount || amount;
+            const accountType = t.accountType || 'credit';
+            const desc = (t.description || '').toLowerCase();
+            
+            // Determine if this is an outflow or inflow based on context
+            // Checking account: negative raw amount = outflow
+            // Credit card: transactions are payments TO the card = inflow
+            
+            if (accountType === 'checking') {
+                // For checking: use raw amount sign
+                // Also check description for transfer direction
+                if (rawAmount < 0 || desc.includes('transfer to') || desc.includes('payment to') || desc.includes('autopay')) {
+                    outflows.push({ ...t, matchAmount: Math.abs(amount) });
+                } else if (rawAmount > 0 || desc.includes('transfer from')) {
+                    inflows.push({ ...t, matchAmount: Math.abs(amount) });
+                } else {
+                    // Default: treat as outflow if amount shown is positive (expense)
+                    outflows.push({ ...t, matchAmount: Math.abs(amount) });
+                }
+            } else {
+                // Credit card transfers are typically payments received (inflows)
+                inflows.push({ ...t, matchAmount: Math.abs(amount) });
+            }
+        });
+        
+        // Sort by date
+        outflows.sort((a, b) => new Date(a.date) - new Date(b.date));
+        inflows.sort((a, b) => new Date(a.date) - new Date(b.date));
+        
+        // Matching algorithm
+        const matched = [];
+        const usedInflowIds = new Set();
+        const unmatchedOutflows = [];
+        
+        outflows.forEach(outflow => {
+            const outDate = new Date(outflow.date);
+            let bestMatch = null;
+            let bestDaysDiff = Infinity;
+            
+            // Find best matching inflow
+            for (const inflow of inflows) {
+                if (usedInflowIds.has(inflow.id)) continue;
+                
+                // Check amount match (exact)
+                if (Math.abs(outflow.matchAmount - inflow.matchAmount) > 0.01) continue;
+                
+                // Check date range (inflow should be same day or after outflow)
+                const inDate = new Date(inflow.date);
+                const daysDiff = Math.floor((inDate - outDate) / (1000 * 60 * 60 * 24));
+                
+                // Allow for some flexibility - inflow can be before or after within range
+                if (Math.abs(daysDiff) <= dateRange) {
+                    if (Math.abs(daysDiff) < Math.abs(bestDaysDiff)) {
+                        bestMatch = inflow;
+                        bestDaysDiff = daysDiff;
+                    }
+                }
+            }
+            
+            if (bestMatch) {
+                usedInflowIds.add(bestMatch.id);
+                matched.push({
+                    outflow,
+                    inflow: bestMatch,
+                    amount: outflow.matchAmount,
+                    daysDiff: bestDaysDiff
+                });
+            } else {
+                unmatchedOutflows.push(outflow);
+            }
+        });
+        
+        // Find unmatched inflows
+        const unmatchedInflows = inflows.filter(i => !usedInflowIds.has(i.id));
+        
+        // Calculate totals
+        const totalMatched = matched.reduce((sum, m) => sum + m.amount, 0);
+        const totalUnmatchedOut = unmatchedOutflows.reduce((sum, t) => sum + Math.abs(safe(t.amount)), 0);
+        const totalUnmatchedIn = unmatchedInflows.reduce((sum, t) => sum + Math.abs(safe(t.amount)), 0);
+        
+        return {
+            matched,
+            unmatchedOutflows,
+            unmatchedInflows,
+            totalMatched,
+            totalUnmatchedOut,
+            totalUnmatchedIn,
+            outflowCount: outflows.length,
+            inflowCount: inflows.length
+        };
+    }, [expenses, merchantRules, selectedYear, dateRange]);
+    
+    // Get available years
+    const availableYears = useMemo(() => {
+        const years = new Set();
+        expenses.forEach(e => {
+            const year = getY(e.date);
+            if (year >= MIN_YEAR) years.add(year);
+        });
+        return [...years].sort((a, b) => b - a);
+    }, [expenses]);
+    
+    const matchRate = matchingData.outflowCount > 0 
+        ? ((matchingData.matched.length / matchingData.outflowCount) * 100).toFixed(0) 
+        : 0;
+    
+    return (
+        <div className="space-y-6">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-violet-500 to-purple-600 text-white p-6 rounded-2xl flex justify-between items-center">
+                <div>
+                    <h2 className="text-xl font-black">🔄 Transfer Matching</h2>
+                    <p className="text-violet-100 text-sm mt-1">Verify internal transfers between accounts</p>
+                </div>
+                <div className="flex gap-3">
+                    <div>
+                        <label className="text-[10px] text-violet-200 block mb-1">Year</label>
+                        <select 
+                            value={selectedYear} 
+                            onChange={e => setSelectedYear(Number(e.target.value))}
+                            className="bg-white/20 text-white border border-white/30 rounded-lg px-3 py-1.5 text-sm font-bold outline-none">
+                            {availableYears.map(y => <option key={y} value={y} className="text-slate-800">{y}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="text-[10px] text-violet-200 block mb-1">Date Tolerance</label>
+                        <select 
+                            value={dateRange} 
+                            onChange={e => setDateRange(Number(e.target.value))}
+                            className="bg-white/20 text-white border border-white/30 rounded-lg px-3 py-1.5 text-sm font-bold outline-none">
+                            {[1,2,3,5,7,10,14,30].map(d => <option key={d} value={d} className="text-slate-800">±{d} days</option>)}
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            {/* KPI Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                <div className="bg-white p-5 rounded-2xl border border-green-200 shadow-lg">
+                    <h3 className="text-[10px] font-bold text-green-600 uppercase">✓ Matched Volume</h3>
+                    <p className="text-2xl font-black text-green-600">${matchingData.totalMatched.toLocaleString(undefined, {maximumFractionDigits: 0})}</p>
+                    <p className="text-xs text-green-500 mt-1">{matchingData.matched.length} pairs found</p>
+                </div>
+                <div className={`bg-white p-5 rounded-2xl border shadow-lg ${matchingData.unmatchedOutflows.length > 0 ? 'border-red-300' : 'border-slate-100'}`}>
+                    <h3 className={`text-[10px] font-bold uppercase ${matchingData.unmatchedOutflows.length > 0 ? 'text-red-600' : 'text-slate-400'}`}>
+                        ⚠️ Unmatched Outflows
+                    </h3>
+                    <p className={`text-2xl font-black ${matchingData.unmatchedOutflows.length > 0 ? 'text-red-600' : 'text-slate-400'}`}>
+                        ${matchingData.totalUnmatchedOut.toLocaleString(undefined, {maximumFractionDigits: 0})}
+                    </p>
+                    <p className="text-xs text-slate-500 mt-1">{matchingData.unmatchedOutflows.length} orphaned</p>
+                </div>
+                <div className={`bg-white p-5 rounded-2xl border shadow-lg ${matchingData.unmatchedInflows.length > 0 ? 'border-amber-300' : 'border-slate-100'}`}>
+                    <h3 className={`text-[10px] font-bold uppercase ${matchingData.unmatchedInflows.length > 0 ? 'text-amber-600' : 'text-slate-400'}`}>
+                        ⚠️ Unmatched Inflows
+                    </h3>
+                    <p className={`text-2xl font-black ${matchingData.unmatchedInflows.length > 0 ? 'text-amber-600' : 'text-slate-400'}`}>
+                        ${matchingData.totalUnmatchedIn.toLocaleString(undefined, {maximumFractionDigits: 0})}
+                    </p>
+                    <p className="text-xs text-slate-500 mt-1">{matchingData.unmatchedInflows.length} orphaned</p>
+                </div>
+                <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg">
+                    <h3 className="text-[10px] font-bold text-slate-400 uppercase">Match Rate</h3>
+                    <p className="text-2xl font-black text-indigo-600">{matchRate}%</p>
+                    <div className="h-1.5 bg-slate-100 rounded-full mt-2 overflow-hidden">
+                        <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${matchRate}%` }}/>
+                    </div>
+                </div>
+                <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg">
+                    <h3 className="text-[10px] font-bold text-slate-400 uppercase">Total Transfers</h3>
+                    <p className="text-2xl font-black text-slate-700">{matchingData.outflowCount + matchingData.inflowCount}</p>
+                    <p className="text-xs text-slate-500 mt-1">{matchingData.outflowCount} out / {matchingData.inflowCount} in</p>
+                </div>
+            </div>
+            
+            {/* Matched Pairs Table */}
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-lg overflow-hidden">
+                <div className="p-5 border-b border-slate-100 bg-green-50">
+                    <h3 className="text-sm font-black text-green-800">✓ Matched Transfer Pairs ({matchingData.matched.length})</h3>
+                </div>
+                <div className="overflow-x-auto max-h-96">
+                    <table className="w-full text-sm">
+                        <thead className="bg-slate-50 text-slate-400 uppercase text-[10px] font-bold sticky top-0">
+                            <tr>
+                                <th className="p-3 text-left">Date Sent</th>
+                                <th className="p-3 text-left">From Account</th>
+                                <th className="p-3 text-left">Description</th>
+                                <th className="p-3 text-right">Amount</th>
+                                <th className="p-3 text-center">→</th>
+                                <th className="p-3 text-left">Date Received</th>
+                                <th className="p-3 text-left">To Account</th>
+                                <th className="p-3 text-center">Days Δ</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50">
+                            {matchingData.matched.length === 0 ? (
+                                <tr><td colSpan={8} className="p-8 text-center text-slate-400">No matched pairs found</td></tr>
+                            ) : matchingData.matched.map((pair, i) => (
+                                <tr key={i} className="hover:bg-green-50/50">
+                                    <td className="p-3 text-slate-600 whitespace-nowrap">{pair.outflow.date}</td>
+                                    <td className="p-3 text-slate-700 font-semibold text-xs">{pair.outflow.account}</td>
+                                    <td className="p-3 text-slate-500 text-xs truncate max-w-[150px]" title={pair.outflow.description}>{pair.outflow.description}</td>
+                                    <td className="p-3 text-right font-bold text-green-600">${pair.amount.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                                    <td className="p-3 text-center text-green-500 font-bold">→</td>
+                                    <td className="p-3 text-slate-600 whitespace-nowrap">{pair.inflow.date}</td>
+                                    <td className="p-3 text-slate-700 font-semibold text-xs">{pair.inflow.account}</td>
+                                    <td className="p-3 text-center">
+                                        <span className={`px-2 py-0.5 rounded text-xs font-bold ${
+                                            pair.daysDiff === 0 ? 'bg-green-100 text-green-700' :
+                                            Math.abs(pair.daysDiff) <= 2 ? 'bg-blue-100 text-blue-700' :
+                                            'bg-amber-100 text-amber-700'
+                                        }`}>
+                                            {pair.daysDiff === 0 ? 'Same day' : `${pair.daysDiff > 0 ? '+' : ''}${pair.daysDiff}d`}
+                                        </span>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            {/* Unmatched Outflows */}
+            {matchingData.unmatchedOutflows.length > 0 && (
+                <div className="bg-white rounded-2xl border border-red-200 shadow-lg overflow-hidden">
+                    <div className="p-5 border-b border-red-100 bg-red-50">
+                        <h3 className="text-sm font-black text-red-800">⚠️ Unmatched Outflows ({matchingData.unmatchedOutflows.length})</h3>
+                        <p className="text-xs text-red-600 mt-1">Money left these accounts but no matching inflow found</p>
+                    </div>
+                    <div className="overflow-x-auto max-h-64">
+                        <table className="w-full text-sm">
+                            <thead className="bg-red-50/50 text-slate-400 uppercase text-[10px] font-bold sticky top-0">
+                                <tr>
+                                    <th className="p-3 text-left">Date</th>
+                                    <th className="p-3 text-left">Account</th>
+                                    <th className="p-3 text-left">Description</th>
+                                    <th className="p-3 text-right">Amount</th>
+                                    <th className="p-3 text-left">Possible Issue</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-50">
+                                {matchingData.unmatchedOutflows.map(t => (
+                                    <tr key={t.id} className="hover:bg-red-50/50">
+                                        <td className="p-3 text-slate-600 whitespace-nowrap">{t.date}</td>
+                                        <td className="p-3 text-slate-700 font-semibold text-xs">{t.account}</td>
+                                        <td className="p-3 text-slate-500 text-xs truncate max-w-[200px]" title={t.description}>{t.description}</td>
+                                        <td className="p-3 text-right font-bold text-red-600">${Math.abs(safe(t.amount)).toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                                        <td className="p-3 text-xs text-slate-500">
+                                            {t.description?.toLowerCase().includes('atm') ? '🏧 ATM withdrawal' :
+                                             t.description?.toLowerCase().includes('fee') ? '💰 Bank fee' :
+                                             '❓ No matching inflow found'}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+            
+            {/* Unmatched Inflows */}
+            {matchingData.unmatchedInflows.length > 0 && (
+                <div className="bg-white rounded-2xl border border-amber-200 shadow-lg overflow-hidden">
+                    <div className="p-5 border-b border-amber-100 bg-amber-50">
+                        <h3 className="text-sm font-black text-amber-800">⚠️ Unmatched Inflows ({matchingData.unmatchedInflows.length})</h3>
+                        <p className="text-xs text-amber-600 mt-1">Payments received but no matching outflow found</p>
+                    </div>
+                    <div className="overflow-x-auto max-h-64">
+                        <table className="w-full text-sm">
+                            <thead className="bg-amber-50/50 text-slate-400 uppercase text-[10px] font-bold sticky top-0">
+                                <tr>
+                                    <th className="p-3 text-left">Date</th>
+                                    <th className="p-3 text-left">Account</th>
+                                    <th className="p-3 text-left">Description</th>
+                                    <th className="p-3 text-right">Amount</th>
+                                    <th className="p-3 text-left">Possible Issue</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-50">
+                                {matchingData.unmatchedInflows.map(t => (
+                                    <tr key={t.id} className="hover:bg-amber-50/50">
+                                        <td className="p-3 text-slate-600 whitespace-nowrap">{t.date}</td>
+                                        <td className="p-3 text-slate-700 font-semibold text-xs">{t.account}</td>
+                                        <td className="p-3 text-slate-500 text-xs truncate max-w-[200px]" title={t.description}>{t.description}</td>
+                                        <td className="p-3 text-right font-bold text-amber-600">${Math.abs(safe(t.amount)).toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                                        <td className="p-3 text-xs text-slate-500">
+                                            {t.description?.toLowerCase().includes('refund') ? '↩️ Possible refund' :
+                                             t.description?.toLowerCase().includes('credit') ? '💳 Statement credit' :
+                                             '❓ No matching outflow found'}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+            
+            {/* Help Section */}
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5">
+                <h3 className="font-bold text-slate-700 mb-2">📖 How Transfer Matching Works</h3>
+                <div className="text-sm text-slate-600 space-y-2">
+                    <p><strong>Outflows:</strong> Transactions categorized as "Transfer" or "Excluded" where money left a checking account (negative amounts, or descriptions like "transfer to", "payment to")</p>
+                    <p><strong>Inflows:</strong> Transactions on credit cards categorized as "Transfer" (payments received)</p>
+                    <p><strong>Matching:</strong> Pairs are matched by exact amount and date within ±{dateRange} days</p>
+                    <p><strong>Red Flags:</strong></p>
+                    <ul className="list-disc list-inside ml-4 text-slate-500">
+                        <li><span className="text-red-600">Unmatched Outflows</span> - Money left but didn't arrive (wrong category? missing import?)</li>
+                        <li><span className="text-amber-600">Unmatched Inflows</span> - Payment arrived but can't find source (external payment? wrong date range?)</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 // ============== EXPORT RULES (DEVELOPER MODE) ==============
 const ExportRules = ({ merchantRules, expenses }) => {
     const [copied, setCopied] = useState(false);
@@ -2926,9 +3268,9 @@ const App = () => {
 
         <div className="max-w-7xl mx-auto px-4 mt-4">
             <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit text-xs overflow-x-auto">
-                {['dashboard','evolution','flow','categories','stylecom','transactions','export'].map(t => (
+                {['dashboard','evolution','flow','categories','stylecom','transfers','transactions','export'].map(t => (
                     <button key={t} onClick={()=>setTab(t)} className={`px-4 py-2 rounded-lg font-bold capitalize whitespace-nowrap ${tab===t?'bg-white text-indigo-600 shadow':'text-slate-500'}`}>
-                        {t==='dashboard'?'📊 ':t==='evolution'?'📈 ':t==='flow'?'💰 ':t==='categories'?'🏷️ ':t==='stylecom'?'👗 ':t==='transactions'?'📋 ':'🛠️ '}{t}
+                        {t==='dashboard'?'📊 ':t==='evolution'?'📈 ':t==='flow'?'💰 ':t==='categories'?'🏷️ ':t==='stylecom'?'👗 ':t==='transfers'?'🔄 ':t==='transactions'?'📋 ':'🛠️ '}{t}
                     </button>
                 ))}
             </div>
@@ -2985,6 +3327,10 @@ const App = () => {
                     paidIds={paidStylecomIds}
                     onTogglePaid={toggleStylecomPaid}
                 />
+            )}
+
+            {tab === 'transfers' && (
+                <TransferMatching expenses={expenses} merchantRules={merchantRules} />
             )}
 
             {tab === 'transactions' && (
