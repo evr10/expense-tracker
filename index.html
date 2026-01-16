@@ -2609,22 +2609,37 @@ const TransferMatching = ({ expenses, merchantRules }) => {
             const desc = (t.description || '').toLowerCase();
             
             // Determine if this is an outflow or inflow based on context
-            // Checking account: negative raw amount = outflow
-            // Credit card: transactions are payments TO the card = inflow
             
-            if (accountType === 'checking') {
-                // For checking: use raw amount sign
-                // Also check description for transfer direction
-                if (rawAmount < 0 || desc.includes('transfer to') || desc.includes('payment to') || desc.includes('autopay')) {
+            // Key insight: "Withdrawal from CHASE CREDIT CRD EPAY" on a debit account
+            // means money LEFT the debit account TO PAY the credit card = OUTFLOW
+            // The "from" refers to the SOURCE of the payment instruction, not where money came from
+            
+            if (accountType === 'checking' || accountType === 'debit') {
+                // For checking/debit accounts:
+                // - "Withdrawal" = money leaving = OUTFLOW (regardless of "from" in description)
+                // - "transfer to" / "payment to" = OUTFLOW
+                // - "autopay" = OUTFLOW
+                // - "Deposit" or "transfer from" (without withdrawal) = money arriving = INFLOW
+                
+                const isWithdrawal = desc.includes('withdrawal');
+                const isDeposit = desc.includes('deposit') && !isWithdrawal;
+                const isTransferTo = desc.includes('transfer to') || desc.includes('payment to');
+                const isTransferFrom = desc.includes('transfer from') && !isWithdrawal;
+                const isAutopay = desc.includes('autopay') || desc.includes('auto pay');
+                
+                if (isWithdrawal || isTransferTo || isAutopay || rawAmount < 0) {
+                    // Money leaving the account
                     outflows.push({ ...t, matchAmount: Math.abs(amount) });
-                } else if (rawAmount > 0 || desc.includes('transfer from')) {
+                } else if (isDeposit || isTransferFrom || rawAmount > 0) {
+                    // Money arriving to the account
                     inflows.push({ ...t, matchAmount: Math.abs(amount) });
                 } else {
-                    // Default: treat as outflow if amount shown is positive (expense)
+                    // Default: treat as outflow (most transfers from checking are payments out)
                     outflows.push({ ...t, matchAmount: Math.abs(amount) });
                 }
             } else {
-                // Credit card transfers are typically payments received (inflows)
+                // Credit card accounts: transfers are typically payments received (inflows)
+                // These are the "AUTOPAY PAYMENT - THANK YOU" type transactions
                 inflows.push({ ...t, matchAmount: Math.abs(amount) });
             }
         });
