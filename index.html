@@ -242,7 +242,7 @@ const EXCLUDED_CATEGORIES = ['Income', 'Transfer', 'Excluded', 'TaxIncome'];
 // Cost Type mappings for budget structure analysis
 const COST_TYPE_RULES = {
     Fixed: ['Rent', 'Daycare'],
-    'Semi-Fixed': ['Household', 'Groceries', 'Subscriptions'],
+    'Semi-Fixed': ['Household', 'Groceries'],
     Variable: [] // Catch-all for everything else
 };
 const COST_TYPE_COLORS = {
@@ -251,8 +251,23 @@ const COST_TYPE_COLORS = {
     Variable: '#3b82f6'     // Blue - discretionary
 };
 
-// Helper to get cost type from category
-const getCostType = (category) => {
+// Load manual cost type overrides from localStorage
+const loadCostTypeOverrides = () => {
+    try {
+        const s = localStorage.getItem('cost_type_overrides');
+        return s ? JSON.parse(s) : {};
+    } catch { return {}; }
+};
+
+// Helper to get cost type from category (checks manual overrides first)
+const getCostType = (category, overrides = null) => {
+    // Check manual overrides first
+    const manualOverrides = overrides || loadCostTypeOverrides();
+    if (manualOverrides[category]) {
+        return manualOverrides[category];
+    }
+    
+    // Fall back to rules
     const catLower = (category || '').toLowerCase();
     for (const [costType, categories] of Object.entries(COST_TYPE_RULES)) {
         if (costType === 'Variable') continue; // Skip catch-all
@@ -804,7 +819,7 @@ const AccountTotalsChart = ({ expenses, merchantRules }) => {
 };
 
 // Cost Structure Chart - Dashboard version (2025 only) with segment labels and avg lines
-const CostStructureChart = ({ expenses, merchantRules }) => {
+const CostStructureChart = ({ expenses, merchantRules, costTypeOverrides = {} }) => {
     const { data, maxTotal, avgFixed, avgSemiFixed, avgVariable } = useMemo(() => {
         const sp = expenses.filter(e => {
             const cat = getEffectiveCategory(e, merchantRules).category;
@@ -816,7 +831,7 @@ const CostStructureChart = ({ expenses, merchantRules }) => {
         sp.forEach(e => {
             const month = getM(e.date);
             const cat = getEffectiveCategory(e, merchantRules).category;
-            const costType = getCostType(cat);
+            const costType = getCostType(cat, costTypeOverrides);
             
             if (!byMonth[month]) byMonth[month] = { Fixed: 0, 'Semi-Fixed': 0, Variable: 0, total: 0 };
             byMonth[month][costType] += safe(e.amount);
@@ -963,7 +978,7 @@ const CostStructureChart = ({ expenses, merchantRules }) => {
 };
 
 // Cost Structure Evolution - Chronological 2024 then 2025 with segment labels and avg lines
-const CostStructureEvolution = ({ expenses, merchantRules }) => {
+const CostStructureEvolution = ({ expenses, merchantRules, costTypeOverrides = {} }) => {
     const { data, maxTotal, avgFixed, avgSemiFixed, avgVariable } = useMemo(() => {
         const sp = expenses.filter(e => {
             const cat = getEffectiveCategory(e, merchantRules).category;
@@ -978,7 +993,7 @@ const CostStructureEvolution = ({ expenses, merchantRules }) => {
             const month = getM(e.date);
             const key = `${year}-${month}`;
             const cat = getEffectiveCategory(e, merchantRules).category;
-            const costType = getCostType(cat);
+            const costType = getCostType(cat, costTypeOverrides);
             
             if (!byYearMonth[key]) {
                 byYearMonth[key] = { year, month, Fixed: 0, 'Semi-Fixed': 0, Variable: 0, total: 0 };
@@ -2014,6 +2029,213 @@ const CategoryManagement = ({ expenses, merchantRules, onUpdateExpense, onUpdate
                     onClose={() => setEditingExpense(null)}
                 />
             )}
+        </div>
+    );
+};
+
+// ============== COST TYPE MANAGEMENT ==============
+const CostTypeManagement = ({ expenses, merchantRules, costTypeOverrides, onUpdateCostType }) => {
+    const [showExport, setShowExport] = useState(false);
+    const [copied, setCopied] = useState(false);
+    
+    // Get all categories with their current cost types and totals
+    const categoryData = useMemo(() => {
+        const sp = expenses.filter(e => {
+            const cat = getEffectiveCategory(e, merchantRules).category;
+            return !EXCLUDED_CATEGORIES.includes(cat) && (getY(e.date) === 2024 || getY(e.date) === 2025);
+        });
+        
+        const byCategory = {};
+        sp.forEach(e => {
+            const cat = getEffectiveCategory(e, merchantRules).category;
+            if (!byCategory[cat]) byCategory[cat] = { total: 0, count: 0 };
+            byCategory[cat].total += safe(e.amount);
+            byCategory[cat].count += 1;
+        });
+        
+        return Object.entries(byCategory)
+            .map(([category, data]) => ({
+                category,
+                ...data,
+                costType: getCostType(category, costTypeOverrides),
+                isOverridden: !!costTypeOverrides[category],
+                defaultCostType: getCostType(category, {}) // Get default without overrides
+            }))
+            .sort((a, b) => b.total - a.total);
+    }, [expenses, merchantRules, costTypeOverrides]);
+    
+    // Generate export code
+    const exportCode = useMemo(() => {
+        const lines = ['// Cost Type Overrides - Copy this into COST_TYPE_RULES'];
+        lines.push('const COST_TYPE_RULES = {');
+        
+        const byType = { Fixed: [], 'Semi-Fixed': [], Variable: [] };
+        categoryData.forEach(({ category, costType }) => {
+            byType[costType].push(category);
+        });
+        
+        ['Fixed', 'Semi-Fixed', 'Variable'].forEach(type => {
+            if (byType[type].length > 0) {
+                const cats = byType[type].map(c => `'${c}'`).join(', ');
+                lines.push(`    ${type === 'Semi-Fixed' ? "'Semi-Fixed'" : type}: [${cats}],`);
+            } else {
+                lines.push(`    ${type === 'Semi-Fixed' ? "'Semi-Fixed'" : type}: [],`);
+            }
+        });
+        
+        lines.push('};');
+        lines.push('');
+        lines.push('// Manual overrides only (for localStorage):');
+        lines.push('const COST_TYPE_OVERRIDES = ' + JSON.stringify(costTypeOverrides, null, 2) + ';');
+        
+        return lines.join('\n');
+    }, [categoryData, costTypeOverrides]);
+    
+    const handleCopy = () => {
+        navigator.clipboard.writeText(exportCode);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
+    
+    // Summary stats
+    const totals = useMemo(() => {
+        const result = { Fixed: 0, 'Semi-Fixed': 0, Variable: 0 };
+        categoryData.forEach(({ total, costType }) => {
+            result[costType] += total;
+        });
+        const grandTotal = result.Fixed + result['Semi-Fixed'] + result.Variable;
+        return { ...result, grandTotal };
+    }, [categoryData]);
+    
+    return (
+        <div className="space-y-6">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-amber-500 to-orange-600 text-white p-6 rounded-2xl">
+                <h2 className="text-xl font-black">📦 Cost Type Management</h2>
+                <p className="text-amber-100 text-sm mt-1">Assign categories to Fixed, Semi-Fixed, or Variable cost types</p>
+            </div>
+            
+            {/* Summary Cards */}
+            <div className="grid grid-cols-3 gap-4">
+                {['Fixed', 'Semi-Fixed', 'Variable'].map(type => {
+                    const pct = totals.grandTotal > 0 ? (totals[type] / totals.grandTotal) * 100 : 0;
+                    return (
+                        <div key={type} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-lg">
+                            <div className="flex items-center gap-2 mb-2">
+                                <div className="w-4 h-4 rounded" style={{ backgroundColor: COST_TYPE_COLORS[type] }} />
+                                <h3 className="text-sm font-black text-slate-700">{type}</h3>
+                            </div>
+                            <p className="text-2xl font-black" style={{ color: COST_TYPE_COLORS[type] }}>
+                                ${(totals[type]/1000).toFixed(1)}k
+                            </p>
+                            <p className="text-xs text-slate-400 mt-1">{pct.toFixed(1)}% of total</p>
+                        </div>
+                    );
+                })}
+            </div>
+            
+            {/* Category Assignment Table */}
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-lg overflow-hidden">
+                <div className="p-5 border-b border-slate-100 flex justify-between items-center">
+                    <h3 className="text-sm font-black text-slate-800">🏷️ Category Assignments</h3>
+                    <button 
+                        onClick={() => setShowExport(!showExport)}
+                        className="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-bold text-slate-600 transition-all"
+                    >
+                        {showExport ? '📋 Hide Export' : '📤 Export Rules'}
+                    </button>
+                </div>
+                
+                {/* Export Panel */}
+                {showExport && (
+                    <div className="p-4 bg-slate-50 border-b border-slate-100">
+                        <div className="flex justify-between items-center mb-2">
+                            <span className="text-xs font-bold text-slate-500">Copy this code into your source:</span>
+                            <button 
+                                onClick={handleCopy}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                                    copied ? 'bg-green-500 text-white' : 'bg-indigo-500 text-white hover:bg-indigo-600'
+                                }`}
+                            >
+                                {copied ? '✓ Copied!' : '📋 Copy Code'}
+                            </button>
+                        </div>
+                        <pre className="bg-slate-800 text-green-400 p-4 rounded-lg text-[10px] overflow-auto max-h-48 font-mono">
+                            {exportCode}
+                        </pre>
+                    </div>
+                )}
+                
+                <div className="overflow-x-auto max-h-[50vh]">
+                    <table className="w-full text-left text-sm">
+                        <thead className="bg-slate-50 text-slate-400 uppercase text-[10px] font-bold sticky top-0">
+                            <tr>
+                                <th className="p-3">Category</th>
+                                <th className="p-3">2024-25 Total</th>
+                                <th className="p-3">Transactions</th>
+                                <th className="p-3">Cost Type</th>
+                                <th className="p-3">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50">
+                            {categoryData.map(({ category, total, count, costType, isOverridden, defaultCostType }) => (
+                                <tr key={category} className={`hover:bg-slate-50 ${isOverridden ? 'bg-amber-50/50' : ''}`}>
+                                    <td className="p-3">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-3 h-3 rounded" style={{ backgroundColor: CAT_COLORS[category] || '#94a3b8' }} />
+                                            <span className="font-semibold text-slate-700">{category}</span>
+                                        </div>
+                                    </td>
+                                    <td className="p-3 font-bold text-slate-900">${total.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                                    <td className="p-3 text-slate-500">{count}</td>
+                                    <td className="p-3">
+                                        <div className="flex gap-1">
+                                            {['Fixed', 'Semi-Fixed', 'Variable'].map(type => (
+                                                <button
+                                                    key={type}
+                                                    onClick={() => onUpdateCostType(category, type)}
+                                                    className={`px-2 py-1 rounded text-[10px] font-bold transition-all ${
+                                                        costType === type 
+                                                            ? 'text-white shadow-sm' 
+                                                            : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                                                    }`}
+                                                    style={costType === type ? { backgroundColor: COST_TYPE_COLORS[type] } : {}}
+                                                >
+                                                    {type === 'Semi-Fixed' ? 'Semi' : type.substring(0, 3)}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </td>
+                                    <td className="p-3">
+                                        {isOverridden ? (
+                                            <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded text-[10px] font-bold">
+                                                ✏️ Override
+                                            </span>
+                                        ) : (
+                                            <span className="px-2 py-1 bg-slate-100 text-slate-400 rounded text-[10px] font-bold">
+                                                Auto
+                                            </span>
+                                        )}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            {/* Info Panel */}
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                <h4 className="font-bold text-blue-800 text-sm mb-2">💡 How Cost Types Work</h4>
+                <ul className="text-xs text-blue-700 space-y-1">
+                    <li><strong>Fixed:</strong> Mandatory expenses that don't change (Rent, Insurance, Daycare)</li>
+                    <li><strong>Semi-Fixed:</strong> Necessary but variable amounts (Groceries, Utilities, Household)</li>
+                    <li><strong>Variable:</strong> Discretionary spending (Dining, Entertainment, Shopping)</li>
+                </ul>
+                <p className="text-[10px] text-blue-600 mt-3">
+                    🔄 Changes are saved automatically. Use "Export Rules" to get code for permanent hardcoding.
+                </p>
+            </div>
         </div>
     );
 };
@@ -4069,6 +4291,7 @@ const App = () => {
     const [expenses, setExpenses] = useState([]);
     const [merchantRules, setMerchantRules] = useState({});
     const [paidStylecomIds, setPaidStylecomIds] = useState(new Set());
+    const [costTypeOverrides, setCostTypeOverrides] = useState({});
     const [importData, setImportData] = useState(null);
     const [importFileName, setImportFileName] = useState('');
     const [msg, setMsg] = useState('');
@@ -4077,6 +4300,7 @@ const App = () => {
     useEffect(() => { 
         setExpenses(loadExpenses()); 
         setMerchantRules(loadMerchantRules());
+        setCostTypeOverrides(loadCostTypeOverrides());
         // Load paid Stylecom IDs
         try {
             const saved = localStorage.getItem('stylecom_paid_ids');
@@ -4086,6 +4310,7 @@ const App = () => {
     
     useEffect(() => { localStorage.setItem('expense_v9', JSON.stringify(expenses)); }, [expenses]);
     useEffect(() => { localStorage.setItem('merchant_rules_v2', JSON.stringify(merchantRules)); }, [merchantRules]);
+    useEffect(() => { localStorage.setItem('cost_type_overrides', JSON.stringify(costTypeOverrides)); }, [costTypeOverrides]);
     useEffect(() => { localStorage.setItem('stylecom_paid_ids', JSON.stringify([...paidStylecomIds])); }, [paidStylecomIds]);
 
     const toggleStylecomPaid = (id) => {
@@ -4098,6 +4323,23 @@ const App = () => {
             }
             return next;
         });
+    };
+    
+    const updateCostType = (category, costType) => {
+        // Check if this matches the default rule (no override needed)
+        const defaultType = getCostType(category, {});
+        if (defaultType === costType) {
+            // Remove override if it exists
+            const newOverrides = {...costTypeOverrides};
+            delete newOverrides[category];
+            setCostTypeOverrides(newOverrides);
+            setMsg(`✅ ${category} → ${costType} (using default rule)`);
+        } else {
+            // Add override
+            setCostTypeOverrides(prev => ({...prev, [category]: costType}));
+            setMsg(`✅ ${category} → ${costType} (manual override)`);
+        }
+        setTimeout(() => setMsg(''), 3000);
     };
 
     const handleFile = e => { 
@@ -4337,9 +4579,9 @@ const App = () => {
 
         <div className="max-w-7xl mx-auto px-4 mt-4">
             <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit text-xs overflow-x-auto">
-                {['dashboard','evolution','flow','categories','stylecom','transfers','transactions','ai','export'].map(t => (
+                {['dashboard','evolution','flow','categories','costtype','stylecom','transfers','transactions','ai','export'].map(t => (
                     <button key={t} onClick={()=>setTab(t)} className={`px-4 py-2 rounded-lg font-bold capitalize whitespace-nowrap ${tab===t?'bg-white text-indigo-600 shadow':'text-slate-500'}`}>
-                        {t==='dashboard'?'📊 ':t==='evolution'?'📈 ':t==='flow'?'💰 ':t==='categories'?'🏷️ ':t==='stylecom'?'👗 ':t==='transfers'?'🔄 ':t==='transactions'?'📋 ':t==='ai'?'🤖 ':'🛠️ '}{t}
+                        {t==='dashboard'?'📊 ':t==='evolution'?'📈 ':t==='flow'?'💰 ':t==='categories'?'🏷️ ':t==='costtype'?'📦 ':t==='stylecom'?'👗 ':t==='transfers'?'🔄 ':t==='transactions'?'📋 ':t==='ai'?'🤖 ':'🛠️ '}{t === 'costtype' ? 'Cost Types' : t}
                     </button>
                 ))}
             </div>
@@ -4355,7 +4597,7 @@ const App = () => {
                     <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">🏪 Top 20 Merchants (2025)</h3><div className="h-80"><TopMerchants expenses={expenses} merchantRules={merchantRules}/></div></div>
                     <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">🔄 Recurring Costs (2025)</h3><div className="h-56"><RecurringCosts expenses={expenses} merchantRules={merchantRules}/></div></div>
                 </div>
-                <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">📦 Monthly Cost Structure (2025)</h3><div className="h-56"><CostStructureChart expenses={expenses} merchantRules={merchantRules}/></div></div>
+                <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">📦 Monthly Cost Structure (2025)</h3><div className="h-56"><CostStructureChart expenses={expenses} merchantRules={merchantRules} costTypeOverrides={costTypeOverrides}/></div></div>
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">📺 Subscriptions (2025)</h3><div className="h-56"><Subscriptions expenses={expenses} merchantRules={merchantRules}/></div></div>
                     <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">☕ Small Purchase Leaks (2025)</h3><div className="h-56"><SmallPurchaseMerchants expenses={expenses} merchantRules={merchantRules}/></div></div>
@@ -4369,7 +4611,7 @@ const App = () => {
                     <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">🗓️ Seasonality (Jan-Dec)</h3><div className="h-64"><SeasonalityChart expenses={expenses} merchantRules={merchantRules}/></div></div>
                     <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">🏃 Pace of Spending</h3><div className="h-64"><PaceChart expenses={expenses} merchantRules={merchantRules}/></div></div>
                 </div>
-                <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">📦 Cost Structure Evolution (2024 vs 2025)</h3><div className="h-64"><CostStructureEvolution expenses={expenses} merchantRules={merchantRules}/></div></div>
+                <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">📦 Cost Structure Evolution (2024 vs 2025)</h3><div className="h-64"><CostStructureEvolution expenses={expenses} merchantRules={merchantRules} costTypeOverrides={costTypeOverrides}/></div></div>
                 <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">📊 Category Evolution (YoY)</h3><div className="h-80"><CategoryEvolution expenses={expenses} merchantRules={merchantRules}/></div></div>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">🔥 Spending Heatmap</h3><div className="h-64"><Heatmap expenses={expenses} merchantRules={merchantRules}/></div></div>
@@ -4389,6 +4631,15 @@ const App = () => {
                     onUpdateRule={updateMerchantRule}
                     onDeleteRule={deleteMerchantRule}
                     onUpdateSubscription={updateExpenseSubscription}
+                />
+            )}
+            
+            {tab === 'costtype' && (
+                <CostTypeManagement 
+                    expenses={expenses} 
+                    merchantRules={merchantRules}
+                    costTypeOverrides={costTypeOverrides}
+                    onUpdateCostType={updateCostType}
                 />
             )}
 
