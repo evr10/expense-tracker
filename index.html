@@ -2821,26 +2821,31 @@ const IncomeFlowDashboard = ({ expenses, merchantRules, costTypeOverrides = {} }
     
     // Income source keywords - checked in ORDER (first match wins)
     const INCOME_KEYWORDS = [
-        { name: 'Microsoft', keywords: ['microsoft', 'msft'] },
-        { name: 'Salary/Payroll', keywords: ['payroll', 'salary', 'direct deposit', 'paycheck', 'employer', 'wage'] },
-        { name: 'Interest & Dividends', keywords: ['interest', 'dividend', 'yield', 'apy', 'capital gain'] },
-        { name: 'Tax Refunds', keywords: ['irs', 'treasury', 'tax refund', 'state tax', 'federal tax'] },
-        { name: 'Wire/Transfers In', keywords: ['wire in', 'wire deposit', 'incoming wire', 'ach credit', 'external deposit'] },
-        { name: 'Reimbursements', keywords: ['reimburse', 'refund', 'rebate', 'cashback', 'cash back', 'credit balance'] },
-        { name: 'Gifts/Other', keywords: ['gift', 'bonus', 'award'] }
+        { name: 'Microsoft', keywords: ['microsoft', 'msft'], color: '#0078d4' },
+        { name: 'Salary/Payroll', keywords: ['payroll', 'salary', 'direct deposit', 'paycheck', 'employer', 'wage'], color: '#22c55e' },
+        { name: 'Interest & Dividends', keywords: ['interest', 'dividend', 'yield', 'apy', 'capital gain'], color: '#059669' },
+        { name: 'Tax Refunds', keywords: ['irs', 'treasury', 'tax refund', 'state tax', 'federal tax'], color: '#10b981' },
+        { name: 'Wire/Transfers In', keywords: ['wire in', 'wire deposit', 'incoming wire', 'ach credit', 'external deposit'], color: '#16a34a' },
+        { name: 'Reimbursements', keywords: ['reimburse', 'refund', 'rebate', 'cashback', 'cash back', 'credit balance'], color: '#84cc16' },
+        { name: 'Gifts/Other', keywords: ['gift', 'bonus', 'award'], color: '#a3e635' }
     ];
     
     // Expense categories to exclude
     const EXCLUDED_FROM_EXPENSES = ['Income', 'TaxIncome', 'Transfer', 'Excluded', 'Venmo'];
     
-    // Prepare data for 3-column Sankey
+    // Prepare data for 4-STAGE Sankey:
+    // Column 1: Income Sources
+    // Column 2: Total Budget (aggregator)
+    // Column 3: Cost Structure (Fixed, Semi-Fixed, Variable, Savings)
+    // Column 4: Expense Categories
     const sankeyData = useMemo(() => {
         const yearExpenses = expenses.filter(e => getY(e.date) === selectedYear);
         
         // Separate income and expenses
         const incomeBySource = {};
+        const incomeColors = {};
         const expenseByCategory = {};
-        const otherIncomeDetails = []; // Track individual "Other Income" transactions
+        const otherIncomeDetails = [];
         
         yearExpenses.forEach(e => {
             const effective = getEffectiveCategory(e, merchantRules);
@@ -2849,23 +2854,22 @@ const IncomeFlowDashboard = ({ expenses, merchantRules, costTypeOverrides = {} }
             const descLower = (e.description || '').toLowerCase();
             
             if (INCOME_CATEGORIES.includes(category)) {
-                // Determine income source type
+                // Determine income source type and color
                 let sourceType = 'Other Income';
+                let sourceColor = '#65a30d'; // Default green for Other
                 for (const source of INCOME_KEYWORDS) {
                     if (source.keywords.some(kw => descLower.includes(kw))) {
                         sourceType = source.name;
+                        sourceColor = source.color;
                         break;
                     }
                 }
                 incomeBySource[sourceType] = (incomeBySource[sourceType] || 0) + amount;
+                incomeColors[sourceType] = sourceColor;
                 
                 // Track "Other Income" details
                 if (sourceType === 'Other Income') {
-                    otherIncomeDetails.push({
-                        date: e.date,
-                        description: e.description,
-                        amount: amount
-                    });
+                    otherIncomeDetails.push({ date: e.date, description: e.description, amount: amount });
                 }
             } else if (!EXCLUDED_FROM_EXPENSES.includes(category) && category !== 'Uncategorized') {
                 expenseByCategory[category] = (expenseByCategory[category] || 0) + amount;
@@ -2886,11 +2890,7 @@ const IncomeFlowDashboard = ({ expenses, merchantRules, costTypeOverrides = {} }
             categoryToCostType[cat] = costType;
         });
         
-        // Build nodes array for 3-column Sankey
-        // Column 1: Income Sources
-        // Column 2: Cost Structure (Fixed, Semi-Fixed, Variable, Savings)
-        // Column 3: Expense Categories
-        
+        // ========== BUILD 4-STAGE SANKEY ==========
         const nodes = [];
         const nodeIndices = {};
         let nodeIndex = 0;
@@ -2899,45 +2899,40 @@ const IncomeFlowDashboard = ({ expenses, merchantRules, costTypeOverrides = {} }
         const incomeSources = Object.keys(incomeBySource).sort((a, b) => incomeBySource[b] - incomeBySource[a]);
         incomeSources.forEach(source => {
             nodeIndices[`income_${source}`] = nodeIndex++;
-            const color = source === 'Microsoft' ? '#0078d4' :
-                         source === 'Salary/Payroll' ? '#22c55e' :
-                         source === 'Tax Refunds' ? '#10b981' :
-                         source === 'Interest & Dividends' ? '#059669' :
-                         source === 'Wire/Transfers In' ? '#16a34a' :
-                         source === 'Reimbursements' ? '#84cc16' :
-                         '#22c55e';
-            nodes.push({ name: source, color });
+            nodes.push({ name: source, color: incomeColors[source] || '#22c55e' });
         });
         
-        // COLUMN 2: Cost Structure + Savings
-        // Add in order: Fixed, Semi-Fixed, Variable, Savings
+        // COLUMN 2: Total Budget (single aggregator node)
+        const budgetIndex = nodeIndex++;
+        nodeIndices['budget'] = budgetIndex;
+        nodes.push({ name: `Total Budget`, color: '#6366f1' }); // Indigo
+        
+        // COLUMN 3: Cost Structure + Savings (in order: Fixed, Semi-Fixed, Variable, Savings)
         if (byCostType.Fixed > 0) {
             nodeIndices['cost_Fixed'] = nodeIndex++;
-            nodes.push({ name: `Fixed ($${(byCostType.Fixed/1000).toFixed(1)}k)`, color: COST_TYPE_COLORS.Fixed });
+            nodes.push({ name: `Fixed`, color: COST_TYPE_COLORS.Fixed });
         }
         if (byCostType['Semi-Fixed'] > 0) {
             nodeIndices['cost_Semi-Fixed'] = nodeIndex++;
-            nodes.push({ name: `Semi-Fixed ($${(byCostType['Semi-Fixed']/1000).toFixed(1)}k)`, color: COST_TYPE_COLORS['Semi-Fixed'] });
+            nodes.push({ name: `Semi-Fixed`, color: COST_TYPE_COLORS['Semi-Fixed'] });
         }
         if (byCostType.Variable > 0) {
             nodeIndices['cost_Variable'] = nodeIndex++;
-            nodes.push({ name: `Variable ($${(byCostType.Variable/1000).toFixed(1)}k)`, color: COST_TYPE_COLORS.Variable });
+            nodes.push({ name: `Variable`, color: COST_TYPE_COLORS.Variable });
         }
         if (savings > 0) {
             nodeIndices['savings'] = nodeIndex++;
-            nodes.push({ name: `💰 Savings ($${(savings/1000).toFixed(1)}k)`, color: '#3b82f6' });
+            nodes.push({ name: `💰 Savings`, color: '#3b82f6' });
         }
         
-        // COLUMN 3: Expense Categories (sorted by amount within each cost type)
+        // COLUMN 4: Expense Categories (sorted by cost type, then by amount)
         const sortedCategories = Object.keys(expenseByCategory).sort((a, b) => {
-            // First by cost type priority
             const typeOrder = { Fixed: 0, 'Semi-Fixed': 1, Variable: 2 };
             const aType = categoryToCostType[a];
             const bType = categoryToCostType[b];
             if (typeOrder[aType] !== typeOrder[bType]) {
                 return typeOrder[aType] - typeOrder[bType];
             }
-            // Then by amount
             return expenseByCategory[b] - expenseByCategory[a];
         });
         
@@ -2946,57 +2941,58 @@ const IncomeFlowDashboard = ({ expenses, merchantRules, costTypeOverrides = {} }
             nodes.push({ name: cat, color: CAT_COLORS[cat] || '#94a3b8' });
         });
         
-        // Build links
+        // ========== BUILD LINKS ==========
         const links = [];
         
-        // LINKS: Income Sources → Cost Types + Savings
-        // Calculate proportions for each income source
-        const totalOutflow = totalExpenses + Math.max(0, savings);
-        
+        // STAGE 1→2: Income Sources → Total Budget
+        // Each income source flows to budget with ITS OWN COLOR
         incomeSources.forEach(source => {
-            const sourceAmount = incomeBySource[source];
-            const sourceProportion = sourceAmount / totalIncome;
-            
-            // Distribute this income source proportionally to all cost types and savings
-            if (byCostType.Fixed > 0) {
-                const linkAmount = sourceProportion * byCostType.Fixed;
-                links.push({
-                    source: nodeIndices[`income_${source}`],
-                    target: nodeIndices['cost_Fixed'],
-                    value: linkAmount,
-                    color: `${COST_TYPE_COLORS.Fixed}50`
-                });
-            }
-            if (byCostType['Semi-Fixed'] > 0) {
-                const linkAmount = sourceProportion * byCostType['Semi-Fixed'];
-                links.push({
-                    source: nodeIndices[`income_${source}`],
-                    target: nodeIndices['cost_Semi-Fixed'],
-                    value: linkAmount,
-                    color: `${COST_TYPE_COLORS['Semi-Fixed']}50`
-                });
-            }
-            if (byCostType.Variable > 0) {
-                const linkAmount = sourceProportion * byCostType.Variable;
-                links.push({
-                    source: nodeIndices[`income_${source}`],
-                    target: nodeIndices['cost_Variable'],
-                    value: linkAmount,
-                    color: `${COST_TYPE_COLORS.Variable}50`
-                });
-            }
-            if (savings > 0) {
-                const linkAmount = sourceProportion * savings;
-                links.push({
-                    source: nodeIndices[`income_${source}`],
-                    target: nodeIndices['savings'],
-                    value: linkAmount,
-                    color: 'rgba(59, 130, 246, 0.4)'
-                });
-            }
+            const amount = incomeBySource[source];
+            const color = incomeColors[source] || '#22c55e';
+            links.push({
+                source: nodeIndices[`income_${source}`],
+                target: budgetIndex,
+                value: amount,
+                color: color + '70' // Add transparency
+            });
         });
         
-        // LINKS: Cost Types → Categories
+        // STAGE 2→3: Total Budget → Cost Structure + Savings
+        // Links colored by DESTINATION (cost type color)
+        if (byCostType.Fixed > 0) {
+            links.push({
+                source: budgetIndex,
+                target: nodeIndices['cost_Fixed'],
+                value: byCostType.Fixed,
+                color: COST_TYPE_COLORS.Fixed + '60'
+            });
+        }
+        if (byCostType['Semi-Fixed'] > 0) {
+            links.push({
+                source: budgetIndex,
+                target: nodeIndices['cost_Semi-Fixed'],
+                value: byCostType['Semi-Fixed'],
+                color: COST_TYPE_COLORS['Semi-Fixed'] + '60'
+            });
+        }
+        if (byCostType.Variable > 0) {
+            links.push({
+                source: budgetIndex,
+                target: nodeIndices['cost_Variable'],
+                value: byCostType.Variable,
+                color: COST_TYPE_COLORS.Variable + '60'
+            });
+        }
+        if (savings > 0) {
+            links.push({
+                source: budgetIndex,
+                target: nodeIndices['savings'],
+                value: savings,
+                color: 'rgba(59, 130, 246, 0.5)' // Blue for savings
+            });
+        }
+        
+        // STAGE 3→4: Cost Structure → Categories
         sortedCategories.forEach(cat => {
             const costType = categoryToCostType[cat];
             const costTypeKey = `cost_${costType}`;
@@ -3005,7 +3001,7 @@ const IncomeFlowDashboard = ({ expenses, merchantRules, costTypeOverrides = {} }
                     source: nodeIndices[costTypeKey],
                     target: nodeIndices[`cat_${cat}`],
                     value: expenseByCategory[cat],
-                    color: `${CAT_COLORS[cat] || '#94a3b8'}60`
+                    color: (CAT_COLORS[cat] || '#94a3b8') + '50'
                 });
             }
         });
@@ -3017,6 +3013,7 @@ const IncomeFlowDashboard = ({ expenses, merchantRules, costTypeOverrides = {} }
             totalExpenses,
             savings,
             incomeBySource,
+            incomeColors,
             expenseByCategory,
             byCostType,
             categoryToCostType,
@@ -3033,8 +3030,8 @@ const IncomeFlowDashboard = ({ expenses, merchantRules, costTypeOverrides = {} }
             orientation: 'h',
             arrangement: 'snap',
             node: {
-                pad: 15,
-                thickness: 25,
+                pad: 20,
+                thickness: 30,
                 line: { color: 'white', width: 2 },
                 label: sankeyData.nodes.map(n => n.name),
                 color: sankeyData.nodes.map(n => n.color),
@@ -3051,13 +3048,14 @@ const IncomeFlowDashboard = ({ expenses, merchantRules, costTypeOverrides = {} }
         
         const layout = {
             font: { family: 'Inter, sans-serif', size: 11 },
-            margin: { l: 10, r: 10, t: 30, b: 10 },
+            margin: { l: 10, r: 10, t: 40, b: 10 },
             paper_bgcolor: 'transparent',
             plot_bgcolor: 'transparent',
             annotations: [
-                { x: 0, y: 1.08, xref: 'paper', yref: 'paper', text: '<b>Income Sources</b>', showarrow: false, font: { size: 12, color: '#22c55e' } },
-                { x: 0.5, y: 1.08, xref: 'paper', yref: 'paper', text: '<b>Cost Structure</b>', showarrow: false, font: { size: 12, color: '#6366f1' } },
-                { x: 1, y: 1.08, xref: 'paper', yref: 'paper', text: '<b>Categories</b>', showarrow: false, font: { size: 12, color: '#64748b' } }
+                { x: 0, y: 1.06, xref: 'paper', yref: 'paper', text: '<b>Income</b>', showarrow: false, font: { size: 11, color: '#22c55e' } },
+                { x: 0.33, y: 1.06, xref: 'paper', yref: 'paper', text: '<b>Budget</b>', showarrow: false, font: { size: 11, color: '#6366f1' } },
+                { x: 0.66, y: 1.06, xref: 'paper', yref: 'paper', text: '<b>Cost Type</b>', showarrow: false, font: { size: 11, color: '#64748b' } },
+                { x: 1, y: 1.06, xref: 'paper', yref: 'paper', text: '<b>Categories</b>', showarrow: false, font: { size: 11, color: '#64748b' } }
             ]
         };
         
@@ -3092,8 +3090,8 @@ const IncomeFlowDashboard = ({ expenses, merchantRules, costTypeOverrides = {} }
             {/* Header */}
             <div className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white p-6 rounded-2xl flex justify-between items-center">
                 <div>
-                    <h2 className="text-xl font-black">💰 Money Flow Diagram</h2>
-                    <p className="text-emerald-100 text-sm mt-1">Income → Cost Structure → Categories</p>
+                    <h2 className="text-xl font-black">💰 4-Stage Money Flow</h2>
+                    <p className="text-emerald-100 text-sm mt-1">Income → Budget → Cost Structure → Categories</p>
                 </div>
                 <select 
                     value={selectedYear} 
@@ -3103,7 +3101,7 @@ const IncomeFlowDashboard = ({ expenses, merchantRules, costTypeOverrides = {} }
                 </select>
             </div>
             
-            {/* KPI Cards - 5 columns */}
+            {/* KPI Cards */}
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                 <div className="bg-white p-4 rounded-2xl border border-green-200 shadow-lg">
                     <h3 className="text-[10px] font-bold text-green-600 uppercase">Total Income</h3>
@@ -3135,9 +3133,9 @@ const IncomeFlowDashboard = ({ expenses, merchantRules, costTypeOverrides = {} }
             <div className="bg-white rounded-2xl border border-slate-100 shadow-lg overflow-hidden">
                 <div className="p-5 border-b border-slate-100 flex justify-between items-center">
                     <div>
-                        <h3 className="text-sm font-black text-slate-800">📊 3-Stage Money Flow</h3>
+                        <h3 className="text-sm font-black text-slate-800">📊 4-Stage Money Flow</h3>
                         <p className="text-xs text-slate-500 mt-1">
-                            Total: ${(sankeyData.totalIncome/1000).toFixed(1)}k income → 
+                            ${(sankeyData.totalIncome/1000).toFixed(1)}k income → 
                             ${(sankeyData.totalExpenses/1000).toFixed(1)}k expenses → 
                             ${(Math.abs(sankeyData.savings)/1000).toFixed(1)}k {sankeyData.savings >= 0 ? 'saved' : 'deficit'}
                         </p>
@@ -3179,8 +3177,11 @@ const IncomeFlowDashboard = ({ expenses, merchantRules, costTypeOverrides = {} }
                                     .sort((a, b) => b[1] - a[1])
                                     .map(([source, amount]) => (
                                         <div key={source} className="flex justify-between items-center text-sm">
-                                            <span className="text-slate-700">{source}</span>
-                                            <span className="font-bold text-green-600">${(amount/1000).toFixed(1)}k</span>
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-3 h-3 rounded" style={{ backgroundColor: sankeyData.incomeColors[source] || '#22c55e' }} />
+                                                <span className="text-slate-700">{source}</span>
+                                            </div>
+                                            <span className="font-bold" style={{ color: sankeyData.incomeColors[source] || '#22c55e' }}>${(amount/1000).toFixed(1)}k</span>
                                         </div>
                                     ))}
                             </div>
