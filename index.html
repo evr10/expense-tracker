@@ -803,9 +803,9 @@ const AccountTotalsChart = ({ expenses, merchantRules }) => {
     </div>);
 };
 
-// Cost Structure Chart - Dashboard version (2025 only)
+// Cost Structure Chart - Dashboard version (2025 only) with segment labels and avg lines
 const CostStructureChart = ({ expenses, merchantRules }) => {
-    const data = useMemo(() => {
+    const { data, maxTotal, avgFixed, avgSemiFixed, avgVariable } = useMemo(() => {
         const sp = expenses.filter(e => {
             const cat = getEffectiveCategory(e, merchantRules).category;
             return !EXCLUDED_CATEGORIES.includes(cat) && getY(e.date) === 2025;
@@ -824,51 +824,130 @@ const CostStructureChart = ({ expenses, merchantRules }) => {
         });
         
         // Convert to array format
-        return MONTHS.map((name, i) => ({
+        const data = MONTHS.map((name, i) => ({
             month: name,
             monthIndex: i,
             ...byMonth[i] || { Fixed: 0, 'Semi-Fixed': 0, Variable: 0, total: 0 }
         }));
+        
+        // Calculate averages (only months with data)
+        const monthsWithData = data.filter(d => d.total > 0);
+        const monthCount = monthsWithData.length || 1;
+        const avgFixed = monthsWithData.reduce((s, d) => s + d.Fixed, 0) / monthCount;
+        const avgSemiFixed = monthsWithData.reduce((s, d) => s + d['Semi-Fixed'], 0) / monthCount;
+        const avgVariable = monthsWithData.reduce((s, d) => s + d.Variable, 0) / monthCount;
+        
+        const maxTotal = Math.max(...data.map(d => d.total), 1);
+        
+        return { data, maxTotal, avgFixed, avgSemiFixed, avgVariable };
     }, [expenses, merchantRules]);
     
-    const maxTotal = Math.max(...data.map(d => d.total), 1);
     const hasData = data.some(d => d.total > 0);
-    const chartHeight = 160; // Fixed pixel height for bars area
+    const chartHeight = 160;
     
     if (!hasData) return <Empty msg="No 2025 data for cost structure" />;
     
+    // Calculate average line positions (cumulative from bottom)
+    const avgFixedY = chartHeight - (avgFixed / maxTotal) * chartHeight;
+    const avgSemiFixedY = chartHeight - ((avgFixed + avgSemiFixed) / maxTotal) * chartHeight;
+    const avgVariableY = chartHeight - ((avgFixed + avgSemiFixed + avgVariable) / maxTotal) * chartHeight;
+    
     return (
         <div className="h-full flex flex-col">
-            <div className="flex-1 flex items-end gap-1 pb-1">
-                {data.map((d, i) => {
-                    const barHeight = d.total > 0 ? (d.total / maxTotal) * chartHeight : 0;
-                    const fixedH = d.total > 0 ? (d.Fixed / d.total) * barHeight : 0;
-                    const semiH = d.total > 0 ? (d['Semi-Fixed'] / d.total) * barHeight : 0;
-                    const varH = d.total > 0 ? (d.Variable / d.total) * barHeight : 0;
-                    
-                    return (
-                        <div key={i} className="flex-1 flex flex-col items-center group">
-                            <div className="relative w-full flex flex-col justify-end" style={{ height: chartHeight }}>
-                                {/* Total label on hover */}
-                                {d.total > 0 && (
-                                    <div className="absolute -top-4 left-1/2 -translate-x-1/2 text-[8px] font-bold text-slate-600 opacity-0 group-hover:opacity-100 whitespace-nowrap z-10">
-                                        ${(d.total/1000).toFixed(1)}k
-                                    </div>
-                                )}
-                                {/* Stacked bars - Fixed at bottom, Variable at top */}
-                                <div 
-                                    className="w-full cursor-pointer"
-                                    title={`${d.month}: $${d.total.toLocaleString()}\nFixed: $${d.Fixed.toLocaleString()}\nSemi-Fixed: $${d['Semi-Fixed'].toLocaleString()}\nVariable: $${d.Variable.toLocaleString()}`}
-                                >
-                                    {varH > 0 && <div style={{ height: varH, backgroundColor: COST_TYPE_COLORS.Variable }} className="w-full rounded-t" />}
-                                    {semiH > 0 && <div style={{ height: semiH, backgroundColor: COST_TYPE_COLORS['Semi-Fixed'] }} className="w-full" />}
-                                    {fixedH > 0 && <div style={{ height: fixedH, backgroundColor: COST_TYPE_COLORS.Fixed }} className="w-full rounded-b" />}
-                                </div>
-                            </div>
-                            <div className="text-[9px] text-slate-400 mt-1 font-semibold">{d.month}</div>
+            <div className="flex-1 relative">
+                {/* Average reference lines */}
+                <div className="absolute inset-0 pointer-events-none" style={{ height: chartHeight }}>
+                    {avgFixed > 0 && (
+                        <div 
+                            className="absolute left-0 right-0 border-t-2 border-dashed z-10"
+                            style={{ top: avgFixedY, borderColor: COST_TYPE_COLORS.Fixed }}
+                            title={`Avg Fixed: $${avgFixed.toFixed(0)}`}
+                        >
+                            <span className="absolute -top-3 right-0 text-[7px] font-bold px-1 rounded" style={{ color: COST_TYPE_COLORS.Fixed }}>
+                                F: ${(avgFixed/1000).toFixed(1)}k
+                            </span>
                         </div>
-                    );
-                })}
+                    )}
+                    {avgSemiFixed > 0 && (
+                        <div 
+                            className="absolute left-0 right-0 border-t-2 border-dashed z-10"
+                            style={{ top: avgSemiFixedY, borderColor: COST_TYPE_COLORS['Semi-Fixed'] }}
+                            title={`Avg Semi-Fixed: $${avgSemiFixed.toFixed(0)}`}
+                        >
+                            <span className="absolute -top-3 right-0 text-[7px] font-bold px-1 rounded" style={{ color: COST_TYPE_COLORS['Semi-Fixed'] }}>
+                                SF: ${(avgSemiFixed/1000).toFixed(1)}k
+                            </span>
+                        </div>
+                    )}
+                    {avgVariable > 0 && (
+                        <div 
+                            className="absolute left-0 right-0 border-t-2 border-dashed z-10"
+                            style={{ top: avgVariableY, borderColor: COST_TYPE_COLORS.Variable }}
+                            title={`Avg Variable: $${avgVariable.toFixed(0)}`}
+                        >
+                            <span className="absolute -top-3 right-0 text-[7px] font-bold px-1 rounded" style={{ color: COST_TYPE_COLORS.Variable }}>
+                                V: ${(avgVariable/1000).toFixed(1)}k
+                            </span>
+                        </div>
+                    )}
+                </div>
+                
+                {/* Bars */}
+                <div className="flex items-end gap-1 pb-1 h-full">
+                    {data.map((d, i) => {
+                        const barHeight = d.total > 0 ? (d.total / maxTotal) * chartHeight : 0;
+                        const fixedH = d.total > 0 ? (d.Fixed / d.total) * barHeight : 0;
+                        const semiH = d.total > 0 ? (d['Semi-Fixed'] / d.total) * barHeight : 0;
+                        const varH = d.total > 0 ? (d.Variable / d.total) * barHeight : 0;
+                        
+                        // Min height for text display
+                        const minHeightForText = 16;
+                        
+                        return (
+                            <div key={i} className="flex-1 flex flex-col items-center group">
+                                <div className="relative w-full flex flex-col justify-end" style={{ height: chartHeight }}>
+                                    {/* Stacked bars with labels */}
+                                    <div 
+                                        className="w-full cursor-pointer"
+                                        title={`${d.month}: $${d.total.toLocaleString()}\nFixed: $${d.Fixed.toLocaleString()}\nSemi-Fixed: $${d['Semi-Fixed'].toLocaleString()}\nVariable: $${d.Variable.toLocaleString()}`}
+                                    >
+                                        {varH > 0 && (
+                                            <div 
+                                                style={{ height: varH, backgroundColor: COST_TYPE_COLORS.Variable }} 
+                                                className="w-full rounded-t flex items-center justify-center overflow-hidden"
+                                            >
+                                                {varH >= minHeightForText && (
+                                                    <span className="text-[8px] font-bold text-white">${(d.Variable/1000).toFixed(1)}k</span>
+                                                )}
+                                            </div>
+                                        )}
+                                        {semiH > 0 && (
+                                            <div 
+                                                style={{ height: semiH, backgroundColor: COST_TYPE_COLORS['Semi-Fixed'] }} 
+                                                className="w-full flex items-center justify-center overflow-hidden"
+                                            >
+                                                {semiH >= minHeightForText && (
+                                                    <span className="text-[8px] font-bold text-white">${(d['Semi-Fixed']/1000).toFixed(1)}k</span>
+                                                )}
+                                            </div>
+                                        )}
+                                        {fixedH > 0 && (
+                                            <div 
+                                                style={{ height: fixedH, backgroundColor: COST_TYPE_COLORS.Fixed }} 
+                                                className="w-full rounded-b flex items-center justify-center overflow-hidden"
+                                            >
+                                                {fixedH >= minHeightForText && (
+                                                    <span className="text-[8px] font-bold text-white">${(d.Fixed/1000).toFixed(1)}k</span>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="text-[9px] text-slate-400 mt-1 font-semibold">{d.month}</div>
+                            </div>
+                        );
+                    })}
+                </div>
             </div>
             {/* Legend */}
             <div className="flex-shrink-0 flex justify-center gap-4 pt-2 border-t border-slate-100">
@@ -883,85 +962,169 @@ const CostStructureChart = ({ expenses, merchantRules }) => {
     );
 };
 
-// Cost Structure Evolution - 2024 vs 2025 side by side
+// Cost Structure Evolution - Chronological 2024 then 2025 with segment labels and avg lines
 const CostStructureEvolution = ({ expenses, merchantRules }) => {
-    const { data, maxTotal } = useMemo(() => {
-        const years = [2024, 2025];
+    const { data, maxTotal, avgFixed, avgSemiFixed, avgVariable } = useMemo(() => {
         const sp = expenses.filter(e => {
             const cat = getEffectiveCategory(e, merchantRules).category;
             const year = getY(e.date);
             return !EXCLUDED_CATEGORIES.includes(cat) && (year === 2024 || year === 2025);
         });
         
-        // Group by year, month, and cost type
+        // Group by year-month
         const byYearMonth = {};
-        years.forEach(y => { byYearMonth[y] = {}; });
-        
         sp.forEach(e => {
             const year = getY(e.date);
             const month = getM(e.date);
+            const key = `${year}-${month}`;
             const cat = getEffectiveCategory(e, merchantRules).category;
             const costType = getCostType(cat);
             
-            if (!byYearMonth[year][month]) {
-                byYearMonth[year][month] = { Fixed: 0, 'Semi-Fixed': 0, Variable: 0, total: 0 };
+            if (!byYearMonth[key]) {
+                byYearMonth[key] = { year, month, Fixed: 0, 'Semi-Fixed': 0, Variable: 0, total: 0 };
             }
-            byYearMonth[year][month][costType] += safe(e.amount);
-            byYearMonth[year][month].total += safe(e.amount);
+            byYearMonth[key][costType] += safe(e.amount);
+            byYearMonth[key].total += safe(e.amount);
         });
         
-        // Build data array
-        const data = MONTHS.map((name, i) => ({
-            month: name,
-            monthIndex: i,
-            years: years.map(y => ({
-                year: y,
-                ...(byYearMonth[y][i] || { Fixed: 0, 'Semi-Fixed': 0, Variable: 0, total: 0 })
-            }))
-        }));
+        // Build chronological array: all 2024 months, then all 2025 months
+        const data = [];
+        [2024, 2025].forEach(year => {
+            for (let m = 0; m < 12; m++) {
+                const key = `${year}-${m}`;
+                const monthData = byYearMonth[key] || { year, month: m, Fixed: 0, 'Semi-Fixed': 0, Variable: 0, total: 0 };
+                data.push({
+                    ...monthData,
+                    label: `${MONTHS[m].substring(0, 1)}`,
+                    fullLabel: `${MONTHS[m]} ${year}`,
+                    isYearStart: m === 0
+                });
+            }
+        });
         
-        const maxTotal = Math.max(...data.flatMap(d => d.years.map(y => y.total)), 1);
+        // Calculate global averages (all months with data from both years)
+        const monthsWithData = data.filter(d => d.total > 0);
+        const monthCount = monthsWithData.length || 1;
+        const avgFixed = monthsWithData.reduce((s, d) => s + d.Fixed, 0) / monthCount;
+        const avgSemiFixed = monthsWithData.reduce((s, d) => s + d['Semi-Fixed'], 0) / monthCount;
+        const avgVariable = monthsWithData.reduce((s, d) => s + d.Variable, 0) / monthCount;
         
-        return { data, maxTotal };
+        const maxTotal = Math.max(...data.map(d => d.total), 1);
+        
+        return { data, maxTotal, avgFixed, avgSemiFixed, avgVariable };
     }, [expenses, merchantRules]);
     
-    const hasData = data.some(d => d.years.some(y => y.total > 0));
-    const chartHeight = 160; // Fixed pixel height
+    const hasData = data.some(d => d.total > 0);
+    const chartHeight = 160;
     
     if (!hasData) return <Empty msg="No data for cost structure comparison" />;
     
+    // Calculate average line positions
+    const avgFixedY = chartHeight - (avgFixed / maxTotal) * chartHeight;
+    const avgSemiFixedY = chartHeight - ((avgFixed + avgSemiFixed) / maxTotal) * chartHeight;
+    const avgVariableY = chartHeight - ((avgFixed + avgSemiFixed + avgVariable) / maxTotal) * chartHeight;
+    
     return (
         <div className="h-full flex flex-col">
-            <div className="flex-1 flex items-end gap-1 pb-1">
-                {data.map((d, i) => (
-                    <div key={i} className="flex-1 flex flex-col items-center">
-                        {/* Month bars - 2024 and 2025 side by side */}
-                        <div className="flex gap-0.5 w-full justify-center" style={{ height: chartHeight }}>
-                            {d.years.map((yearData, yi) => {
-                                const barHeight = yearData.total > 0 ? (yearData.total / maxTotal) * chartHeight : 0;
-                                const fixedH = yearData.total > 0 ? (yearData.Fixed / yearData.total) * barHeight : 0;
-                                const semiH = yearData.total > 0 ? (yearData['Semi-Fixed'] / yearData.total) * barHeight : 0;
-                                const varH = yearData.total > 0 ? (yearData.Variable / yearData.total) * barHeight : 0;
-                                
-                                return (
-                                    <div 
-                                        key={yi}
-                                        className="flex-1 flex flex-col justify-end cursor-pointer"
-                                        style={{ opacity: yi === 0 ? 0.6 : 1 }}
-                                        title={`${d.month} ${yearData.year}: $${yearData.total.toLocaleString()}\nFixed: $${yearData.Fixed.toLocaleString()}\nSemi-Fixed: $${yearData['Semi-Fixed'].toLocaleString()}\nVariable: $${yearData.Variable.toLocaleString()}`}
-                                    >
-                                        {varH > 0 && <div style={{ height: varH, backgroundColor: COST_TYPE_COLORS.Variable }} className="w-full rounded-t" />}
-                                        {semiH > 0 && <div style={{ height: semiH, backgroundColor: COST_TYPE_COLORS['Semi-Fixed'] }} className="w-full" />}
-                                        {fixedH > 0 && <div style={{ height: fixedH, backgroundColor: COST_TYPE_COLORS.Fixed }} className="w-full rounded-b" />}
-                                    </div>
-                                );
-                            })}
+            <div className="flex-1 relative">
+                {/* Average reference lines */}
+                <div className="absolute inset-0 pointer-events-none" style={{ height: chartHeight }}>
+                    {avgFixed > 0 && (
+                        <div 
+                            className="absolute left-0 right-0 border-t-2 border-dashed z-10"
+                            style={{ top: avgFixedY, borderColor: COST_TYPE_COLORS.Fixed }}
+                            title={`Avg Fixed: $${avgFixed.toFixed(0)}`}
+                        >
+                            <span className="absolute -top-3 right-0 text-[7px] font-bold px-1 rounded" style={{ color: COST_TYPE_COLORS.Fixed }}>
+                                F: ${(avgFixed/1000).toFixed(1)}k
+                            </span>
                         </div>
-                        <div className="text-[8px] text-slate-400 text-center mt-1 font-semibold">{d.month}</div>
-                    </div>
-                ))}
+                    )}
+                    {avgSemiFixed > 0 && (
+                        <div 
+                            className="absolute left-0 right-0 border-t-2 border-dashed z-10"
+                            style={{ top: avgSemiFixedY, borderColor: COST_TYPE_COLORS['Semi-Fixed'] }}
+                            title={`Avg Semi-Fixed: $${avgSemiFixed.toFixed(0)}`}
+                        >
+                            <span className="absolute -top-3 right-0 text-[7px] font-bold px-1 rounded" style={{ color: COST_TYPE_COLORS['Semi-Fixed'] }}>
+                                SF: ${(avgSemiFixed/1000).toFixed(1)}k
+                            </span>
+                        </div>
+                    )}
+                    {avgVariable > 0 && (
+                        <div 
+                            className="absolute left-0 right-0 border-t-2 border-dashed z-10"
+                            style={{ top: avgVariableY, borderColor: COST_TYPE_COLORS.Variable }}
+                            title={`Avg Variable: $${avgVariable.toFixed(0)}`}
+                        >
+                            <span className="absolute -top-3 right-0 text-[7px] font-bold px-1 rounded" style={{ color: COST_TYPE_COLORS.Variable }}>
+                                V: ${(avgVariable/1000).toFixed(1)}k
+                            </span>
+                        </div>
+                    )}
+                </div>
+                
+                {/* Bars - chronological */}
+                <div className="flex items-end gap-px pb-1 h-full">
+                    {data.map((d, i) => {
+                        const barHeight = d.total > 0 ? (d.total / maxTotal) * chartHeight : 0;
+                        const fixedH = d.total > 0 ? (d.Fixed / d.total) * barHeight : 0;
+                        const semiH = d.total > 0 ? (d['Semi-Fixed'] / d.total) * barHeight : 0;
+                        const varH = d.total > 0 ? (d.Variable / d.total) * barHeight : 0;
+                        
+                        const minHeightForText = 14;
+                        const is2024 = d.year === 2024;
+                        
+                        return (
+                            <div key={i} className={`flex-1 flex flex-col items-center ${d.isYearStart && i > 0 ? 'ml-2' : ''}`}>
+                                <div className="relative w-full flex flex-col justify-end" style={{ height: chartHeight }}>
+                                    <div 
+                                        className="w-full cursor-pointer"
+                                        style={{ opacity: is2024 ? 0.65 : 1 }}
+                                        title={`${d.fullLabel}: $${d.total.toLocaleString()}\nFixed: $${d.Fixed.toLocaleString()}\nSemi-Fixed: $${d['Semi-Fixed'].toLocaleString()}\nVariable: $${d.Variable.toLocaleString()}`}
+                                    >
+                                        {varH > 0 && (
+                                            <div 
+                                                style={{ height: varH, backgroundColor: COST_TYPE_COLORS.Variable }} 
+                                                className="w-full rounded-t flex items-center justify-center overflow-hidden"
+                                            >
+                                                {varH >= minHeightForText && (
+                                                    <span className="text-[6px] font-bold text-white">{(d.Variable/1000).toFixed(1)}</span>
+                                                )}
+                                            </div>
+                                        )}
+                                        {semiH > 0 && (
+                                            <div 
+                                                style={{ height: semiH, backgroundColor: COST_TYPE_COLORS['Semi-Fixed'] }} 
+                                                className="w-full flex items-center justify-center overflow-hidden"
+                                            >
+                                                {semiH >= minHeightForText && (
+                                                    <span className="text-[6px] font-bold text-white">{(d['Semi-Fixed']/1000).toFixed(1)}</span>
+                                                )}
+                                            </div>
+                                        )}
+                                        {fixedH > 0 && (
+                                            <div 
+                                                style={{ height: fixedH, backgroundColor: COST_TYPE_COLORS.Fixed }} 
+                                                className="w-full rounded-b flex items-center justify-center overflow-hidden"
+                                            >
+                                                {fixedH >= minHeightForText && (
+                                                    <span className="text-[6px] font-bold text-white">{(d.Fixed/1000).toFixed(1)}</span>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                                {/* X-axis labels */}
+                                <div className="text-[6px] text-slate-400 mt-0.5 font-semibold">
+                                    {d.isYearStart ? d.year : (d.month === 5 ? MONTHS[d.month].substring(0,3) : '')}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
             </div>
-            {/* Combined Legend */}
+            {/* Legend */}
             <div className="flex-shrink-0 border-t border-slate-100 pt-2">
                 <div className="flex justify-center gap-4 mb-1">
                     {['Fixed', 'Semi-Fixed', 'Variable'].map(type => (
@@ -971,15 +1134,10 @@ const CostStructureEvolution = ({ expenses, merchantRules }) => {
                         </div>
                     ))}
                 </div>
-                <div className="flex justify-center gap-3">
-                    <div className="flex items-center gap-1">
-                        <div className="w-3 h-2 bg-slate-400 rounded opacity-60" />
-                        <span className="text-[9px] text-slate-400">2024</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                        <div className="w-3 h-2 bg-slate-600 rounded" />
-                        <span className="text-[9px] text-slate-400">2025</span>
-                    </div>
+                <div className="flex justify-center gap-3 text-[8px] text-slate-400">
+                    <span>← 2024 (faded)</span>
+                    <span>|</span>
+                    <span>2025 →</span>
                 </div>
             </div>
         </div>
@@ -1068,13 +1226,19 @@ const RecurringCosts = ({ expenses, merchantRules }) => {
     </tbody></table></div><div className="pt-2 border-t border-slate-100 mt-2 flex justify-between items-center"><div className="text-[10px] text-slate-400">🔄 {recurring.length} recurring</div><div className="text-right"><div className="text-[10px] font-bold text-slate-600">~${totalMonthly.toFixed(0)}/mo</div><div className="text-[11px] font-black text-indigo-600">${totalYearly.toLocaleString(undefined,{maximumFractionDigits:0})} YTD</div></div></div></div>);
 };
 
-// Subscriptions - expenses with isSubscription flag OR detected recurring patterns
+// Subscriptions - ONLY expenses with isSubscription flag (manually tagged)
 const Subscriptions = ({ expenses, merchantRules }) => {
     const { subscriptions, totalMonthly, totalYearly } = useMemo(() => {
-        const sp2025 = expenses.filter(e => !EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category) && getY(e.date) === 2025);
+        // Only include expenses with isSubscription flag set to true
+        const sp2025 = expenses.filter(e => 
+            e.isSubscription === true && 
+            !EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category) && 
+            getY(e.date) === 2025
+        );
+        
         const byMerchant = {};
         
-        // Group by merchant and track amounts per month
+        // Group by merchant
         sp2025.forEach(e => {
             const name = cleanMerchant(e.description);
             const month = getM(e.date);
@@ -1084,79 +1248,26 @@ const Subscriptions = ({ expenses, merchantRules }) => {
             if (!byMerchant[name]) byMerchant[name] = { 
                 monthlyAmounts: {}, 
                 total: 0, 
-                hasSubscriptionFlag: false,
                 category: cat
             };
             
-            // Track if any transaction for this merchant has subscription flag
-            if (e.isSubscription) byMerchant[name].hasSubscriptionFlag = true;
-            
-            // Store the amount for each month (use the first transaction of the month)
+            // Store the amount for each month
             if (!byMerchant[name].monthlyAmounts[month]) {
                 byMerchant[name].monthlyAmounts[month] = amount;
             }
             byMerchant[name].total += amount;
         });
         
-        const subscriptions = [];
-        
-        Object.entries(byMerchant).forEach(([name, data]) => {
-            const months = Object.keys(data.monthlyAmounts).map(Number).sort((a, b) => a - b);
-            
-            // If manually flagged as subscription, include it even with fewer months
-            if (data.hasSubscriptionFlag) {
-                const avgAmount = data.total / months.length;
-                subscriptions.push({
-                    name,
-                    amount: avgAmount,
-                    months: months.length,
-                    totalYear: data.total,
-                    category: data.category,
-                    flagged: true
-                });
-                return;
-            }
-            
-            if (months.length < 3) return; // Need at least 3 months for auto-detection
-            
-            // Find sequences of consecutive months with exact same amount
-            let maxConsecutive = 1;
-            let currentConsecutive = 1;
-            let subscriptionAmount = null;
-            let bestAmount = null;
-            
-            for (let i = 1; i < months.length; i++) {
-                const prevMonth = months[i - 1];
-                const currMonth = months[i];
-                const prevAmount = data.monthlyAmounts[prevMonth];
-                const currAmount = data.monthlyAmounts[currMonth];
-                
-                // Check if consecutive month AND exact same amount (within 1 cent tolerance)
-                const isConsecutive = (currMonth === prevMonth + 1) || (prevMonth === 11 && currMonth === 0);
-                const isSameAmount = Math.abs(prevAmount - currAmount) < 0.02;
-                
-                if (isConsecutive && isSameAmount) {
-                    currentConsecutive++;
-                    if (currentConsecutive > maxConsecutive) {
-                        maxConsecutive = currentConsecutive;
-                        bestAmount = currAmount;
-                    }
-                } else {
-                    currentConsecutive = 1;
-                }
-            }
-            
-            // Only include if 3+ consecutive months with exact same amount
-            if (maxConsecutive >= 3 && bestAmount !== null) {
-                subscriptions.push({
-                    name,
-                    amount: bestAmount,
-                    months: maxConsecutive,
-                    totalYear: data.total,
-                    category: data.category,
-                    flagged: false
-                });
-            }
+        const subscriptions = Object.entries(byMerchant).map(([name, data]) => {
+            const months = Object.keys(data.monthlyAmounts).length;
+            const avgAmount = months > 0 ? data.total / months : 0;
+            return {
+                name,
+                amount: avgAmount,
+                months: months,
+                totalYear: data.total,
+                category: data.category
+            };
         });
         
         subscriptions.sort((a, b) => b.totalYear - a.totalYear);
@@ -1166,7 +1277,7 @@ const Subscriptions = ({ expenses, merchantRules }) => {
         return { subscriptions: subscriptions.slice(0, 15), totalMonthly, totalYearly };
     }, [expenses, merchantRules]);
     
-    if (!subscriptions.length) return <Empty msg="No subscriptions detected" />;
+    if (!subscriptions.length) return <Empty msg="No subscriptions tagged. Use Categories page to mark expenses as subscriptions." />;
     
     return (
         <div className="h-full flex flex-col">
@@ -1184,10 +1295,7 @@ const Subscriptions = ({ expenses, merchantRules }) => {
                         {subscriptions.map((s, i) => (
                             <tr key={s.name} className="hover:bg-emerald-50">
                                 <td className="p-1.5 font-semibold text-slate-700 truncate max-w-[100px]" title={s.name}>
-                                    <span className="inline-flex items-center gap-1">
-                                        {s.flagged && <span className="text-[8px]">🏷️</span>}
-                                        {s.name}
-                                    </span>
+                                    {s.name}
                                 </td>
                                 <td className="p-1.5">
                                     <span className="px-1.5 py-0.5 text-[8px] rounded font-bold text-white" style={{ backgroundColor: CAT_COLORS[s.category] || '#94a3b8' }}>
@@ -1202,7 +1310,7 @@ const Subscriptions = ({ expenses, merchantRules }) => {
                 </table>
             </div>
             <div className="pt-2 border-t border-slate-100 mt-2 flex justify-between items-center">
-                <div className="text-[10px] text-slate-400">🔄 {subscriptions.length} recurring</div>
+                <div className="text-[10px] text-slate-400">📺 {subscriptions.length} subscriptions</div>
                 <div className="text-right">
                     <div className="text-[10px] font-bold text-slate-600">${totalMonthly.toFixed(0)}/mo</div>
                     <div className="text-[11px] font-black text-emerald-600">${totalYearly.toLocaleString(undefined,{maximumFractionDigits:0})} YTD</div>
@@ -4159,7 +4267,24 @@ const App = () => {
     };
     
     const updateExpenseSubscription = (id, isSubscription) => {
-        setExpenses(expenses.map(e => e.id === id ? {...e, isSubscription: isSubscription} : e));
+        // Find the merchant for this expense
+        const expense = expenses.find(e => e.id === id);
+        if (!expense) return;
+        
+        const merchant = cleanMerchant(expense.description);
+        
+        // Update ALL expenses from the same merchant
+        setExpenses(expenses.map(e => {
+            if (cleanMerchant(e.description) === merchant) {
+                return {...e, isSubscription: isSubscription};
+            }
+            return e;
+        }));
+        
+        // Show feedback
+        const count = expenses.filter(e => cleanMerchant(e.description) === merchant).length;
+        setMsg(`✅ ${isSubscription ? 'Marked' : 'Unmarked'} ${count} "${merchant}" transactions as ${isSubscription ? 'recurring' : 'one-time'}`);
+        setTimeout(() => setMsg(''), 4000);
     };
 
     const updateMerchantRule = (merchant, category, scope = 'global', accounts = []) => {
@@ -4232,7 +4357,7 @@ const App = () => {
                 </div>
                 <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">📦 Monthly Cost Structure (2025)</h3><div className="h-56"><CostStructureChart expenses={expenses} merchantRules={merchantRules}/></div></div>
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">🔄 Recurring Expenses (2025)</h3><div className="h-56"><Subscriptions expenses={expenses} merchantRules={merchantRules}/></div></div>
+                    <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">📺 Subscriptions (2025)</h3><div className="h-56"><Subscriptions expenses={expenses} merchantRules={merchantRules}/></div></div>
                     <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">☕ Small Purchase Leaks (2025)</h3><div className="h-56"><SmallPurchaseMerchants expenses={expenses} merchantRules={merchantRules}/></div></div>
                     <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">💸 Death by 1000 Cuts (2025)</h3><div className="h-56"><Scatter expenses={expenses} merchantRules={merchantRules}/></div></div>
                 </div>
