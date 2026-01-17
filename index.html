@@ -2839,7 +2839,7 @@ const StylecomReimbursement = ({ expenses, merchantRules, paidIds, onTogglePaid 
 };
 
 // ============== INCOME VS SPEND FLOW (SANKEY) ==============
-const IncomeFlowDashboard = ({ expenses, merchantRules }) => {
+const IncomeFlowDashboard = ({ expenses, merchantRules, costTypeOverrides = {} }) => {
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
     const chartRef = React.useRef(null);
     
@@ -2847,28 +2847,27 @@ const IncomeFlowDashboard = ({ expenses, merchantRules }) => {
     const INCOME_CATEGORIES = ['Income', 'TaxIncome'];
     
     // Income source keywords - checked in ORDER (first match wins)
-    // More specific sources should come before generic ones
     const INCOME_KEYWORDS = [
         { name: 'Microsoft', keywords: ['microsoft', 'msft'] },
         { name: 'Salary/Payroll', keywords: ['payroll', 'salary', 'direct deposit', 'paycheck', 'employer', 'wage'] },
         { name: 'Interest & Dividends', keywords: ['interest', 'dividend', 'yield', 'apy', 'capital gain'] },
         { name: 'Tax Refunds', keywords: ['irs', 'treasury', 'tax refund', 'state tax', 'federal tax'] },
         { name: 'Wire/Transfers In', keywords: ['wire in', 'wire deposit', 'incoming wire', 'ach credit', 'external deposit'] },
-        { name: 'Reimbursements', keywords: ['reimburse', 'refund', 'rebate', 'cashback', 'cash back'] },
+        { name: 'Reimbursements', keywords: ['reimburse', 'refund', 'rebate', 'cashback', 'cash back', 'credit balance'] },
         { name: 'Gifts/Other', keywords: ['gift', 'bonus', 'award'] }
     ];
     
     // Expense categories to exclude
     const EXCLUDED_FROM_EXPENSES = ['Income', 'TaxIncome', 'Transfer', 'Excluded', 'Venmo'];
     
-    // Prepare data for Sankey
+    // Prepare data for 3-column Sankey
     const sankeyData = useMemo(() => {
-        // Filter by year
         const yearExpenses = expenses.filter(e => getY(e.date) === selectedYear);
         
         // Separate income and expenses
         const incomeBySource = {};
         const expenseByCategory = {};
+        const otherIncomeDetails = []; // Track individual "Other Income" transactions
         
         yearExpenses.forEach(e => {
             const effective = getEffectiveCategory(e, merchantRules);
@@ -2877,7 +2876,7 @@ const IncomeFlowDashboard = ({ expenses, merchantRules }) => {
             const descLower = (e.description || '').toLowerCase();
             
             if (INCOME_CATEGORIES.includes(category)) {
-                // Determine income source type - check in order, first match wins
+                // Determine income source type
                 let sourceType = 'Other Income';
                 for (const source of INCOME_KEYWORDS) {
                     if (source.keywords.some(kw => descLower.includes(kw))) {
@@ -2886,6 +2885,15 @@ const IncomeFlowDashboard = ({ expenses, merchantRules }) => {
                     }
                 }
                 incomeBySource[sourceType] = (incomeBySource[sourceType] || 0) + amount;
+                
+                // Track "Other Income" details
+                if (sourceType === 'Other Income') {
+                    otherIncomeDetails.push({
+                        date: e.date,
+                        description: e.description,
+                        amount: amount
+                    });
+                }
             } else if (!EXCLUDED_FROM_EXPENSES.includes(category) && category !== 'Uncategorized') {
                 expenseByCategory[category] = (expenseByCategory[category] || 0) + amount;
             }
@@ -2896,75 +2904,137 @@ const IncomeFlowDashboard = ({ expenses, merchantRules }) => {
         const totalExpenses = Object.values(expenseByCategory).reduce((a, b) => a + b, 0);
         const savings = totalIncome - totalExpenses;
         
-        // Build nodes and links
+        // Group expenses by cost type
+        const byCostType = { Fixed: 0, 'Semi-Fixed': 0, Variable: 0 };
+        const categoryToCostType = {};
+        Object.entries(expenseByCategory).forEach(([cat, amount]) => {
+            const costType = getCostType(cat, costTypeOverrides);
+            byCostType[costType] += amount;
+            categoryToCostType[cat] = costType;
+        });
+        
+        // Build nodes array for 3-column Sankey
+        // Column 1: Income Sources
+        // Column 2: Cost Structure (Fixed, Semi-Fixed, Variable, Savings)
+        // Column 3: Expense Categories
+        
         const nodes = [];
         const nodeIndices = {};
         let nodeIndex = 0;
         
-        // Add income source nodes (left side) - sorted by amount
+        // COLUMN 1: Income Sources (sorted by amount)
         const incomeSources = Object.keys(incomeBySource).sort((a, b) => incomeBySource[b] - incomeBySource[a]);
         incomeSources.forEach(source => {
-            nodeIndices[source] = nodeIndex++;
-            // Use different green shades for different income sources
-            const color = source === 'Microsoft' ? '#0078d4' : // Microsoft blue
-                         source === 'Salary/Payroll' ? '#22c55e' : // Green
-                         source === 'Tax Refunds' ? '#10b981' : // Teal
-                         source === 'Interest & Dividends' ? '#059669' : // Emerald
-                         '#16a34a'; // Default green
+            nodeIndices[`income_${source}`] = nodeIndex++;
+            const color = source === 'Microsoft' ? '#0078d4' :
+                         source === 'Salary/Payroll' ? '#22c55e' :
+                         source === 'Tax Refunds' ? '#10b981' :
+                         source === 'Interest & Dividends' ? '#059669' :
+                         source === 'Wire/Transfers In' ? '#16a34a' :
+                         source === 'Reimbursements' ? '#84cc16' :
+                         '#22c55e';
             nodes.push({ name: source, color });
         });
         
-        // Add "Budget" middle node
-        const budgetIndex = nodeIndex++;
-        nodes.push({ name: 'Total Budget', color: '#6366f1' }); // Indigo for budget
-        nodeIndices['Budget'] = budgetIndex;
-        
-        // IMPORTANT: Add Savings FIRST (before expenses) so it appears at top of right column
+        // COLUMN 2: Cost Structure + Savings
+        // Add in order: Fixed, Semi-Fixed, Variable, Savings
+        if (byCostType.Fixed > 0) {
+            nodeIndices['cost_Fixed'] = nodeIndex++;
+            nodes.push({ name: `Fixed ($${(byCostType.Fixed/1000).toFixed(1)}k)`, color: COST_TYPE_COLORS.Fixed });
+        }
+        if (byCostType['Semi-Fixed'] > 0) {
+            nodeIndices['cost_Semi-Fixed'] = nodeIndex++;
+            nodes.push({ name: `Semi-Fixed ($${(byCostType['Semi-Fixed']/1000).toFixed(1)}k)`, color: COST_TYPE_COLORS['Semi-Fixed'] });
+        }
+        if (byCostType.Variable > 0) {
+            nodeIndices['cost_Variable'] = nodeIndex++;
+            nodes.push({ name: `Variable ($${(byCostType.Variable/1000).toFixed(1)}k)`, color: COST_TYPE_COLORS.Variable });
+        }
         if (savings > 0) {
-            nodeIndices['Savings'] = nodeIndex++;
-            nodes.push({ name: '💰 SAVINGS', color: '#3b82f6' }); // Blue for savings - prominent
+            nodeIndices['savings'] = nodeIndex++;
+            nodes.push({ name: `💰 Savings ($${(savings/1000).toFixed(1)}k)`, color: '#3b82f6' });
         }
         
-        // Add expense category nodes (right side) - sorted by amount
-        const expenseCategories = Object.keys(expenseByCategory).sort((a, b) => expenseByCategory[b] - expenseByCategory[a]);
-        expenseCategories.forEach(cat => {
-            nodeIndices[cat] = nodeIndex++;
-            nodes.push({ name: cat, color: CAT_COLORS[cat] || '#ef4444' });
+        // COLUMN 3: Expense Categories (sorted by amount within each cost type)
+        const sortedCategories = Object.keys(expenseByCategory).sort((a, b) => {
+            // First by cost type priority
+            const typeOrder = { Fixed: 0, 'Semi-Fixed': 1, Variable: 2 };
+            const aType = categoryToCostType[a];
+            const bType = categoryToCostType[b];
+            if (typeOrder[aType] !== typeOrder[bType]) {
+                return typeOrder[aType] - typeOrder[bType];
+            }
+            // Then by amount
+            return expenseByCategory[b] - expenseByCategory[a];
+        });
+        
+        sortedCategories.forEach(cat => {
+            nodeIndices[`cat_${cat}`] = nodeIndex++;
+            nodes.push({ name: cat, color: CAT_COLORS[cat] || '#94a3b8' });
         });
         
         // Build links
         const links = [];
         
-        // Income sources -> Budget (use source-specific colors)
+        // LINKS: Income Sources → Cost Types + Savings
+        // Calculate proportions for each income source
+        const totalOutflow = totalExpenses + Math.max(0, savings);
+        
         incomeSources.forEach(source => {
-            const sourceColor = source === 'Microsoft' ? 'rgba(0, 120, 212, 0.5)' : // Microsoft blue
-                               'rgba(34, 197, 94, 0.4)'; // Default green
-            links.push({
-                source: nodeIndices[source],
-                target: budgetIndex,
-                value: incomeBySource[source],
-                color: sourceColor
-            });
+            const sourceAmount = incomeBySource[source];
+            const sourceProportion = sourceAmount / totalIncome;
+            
+            // Distribute this income source proportionally to all cost types and savings
+            if (byCostType.Fixed > 0) {
+                const linkAmount = sourceProportion * byCostType.Fixed;
+                links.push({
+                    source: nodeIndices[`income_${source}`],
+                    target: nodeIndices['cost_Fixed'],
+                    value: linkAmount,
+                    color: `${COST_TYPE_COLORS.Fixed}50`
+                });
+            }
+            if (byCostType['Semi-Fixed'] > 0) {
+                const linkAmount = sourceProportion * byCostType['Semi-Fixed'];
+                links.push({
+                    source: nodeIndices[`income_${source}`],
+                    target: nodeIndices['cost_Semi-Fixed'],
+                    value: linkAmount,
+                    color: `${COST_TYPE_COLORS['Semi-Fixed']}50`
+                });
+            }
+            if (byCostType.Variable > 0) {
+                const linkAmount = sourceProportion * byCostType.Variable;
+                links.push({
+                    source: nodeIndices[`income_${source}`],
+                    target: nodeIndices['cost_Variable'],
+                    value: linkAmount,
+                    color: `${COST_TYPE_COLORS.Variable}50`
+                });
+            }
+            if (savings > 0) {
+                const linkAmount = sourceProportion * savings;
+                links.push({
+                    source: nodeIndices[`income_${source}`],
+                    target: nodeIndices['savings'],
+                    value: linkAmount,
+                    color: 'rgba(59, 130, 246, 0.4)'
+                });
+            }
         });
         
-        // Budget -> Savings FIRST (so it renders at top)
-        if (savings > 0) {
-            links.push({
-                source: budgetIndex,
-                target: nodeIndices['Savings'],
-                value: savings,
-                color: 'rgba(59, 130, 246, 0.6)' // Blue with more opacity - more prominent
-            });
-        }
-        
-        // Budget -> Expense categories
-        expenseCategories.forEach(cat => {
-            links.push({
-                source: budgetIndex,
-                target: nodeIndices[cat],
-                value: expenseByCategory[cat],
-                color: `${CAT_COLORS[cat] || '#ef4444'}66` // Category color with transparency
-            });
+        // LINKS: Cost Types → Categories
+        sortedCategories.forEach(cat => {
+            const costType = categoryToCostType[cat];
+            const costTypeKey = `cost_${costType}`;
+            if (nodeIndices[costTypeKey] !== undefined) {
+                links.push({
+                    source: nodeIndices[costTypeKey],
+                    target: nodeIndices[`cat_${cat}`],
+                    value: expenseByCategory[cat],
+                    color: `${CAT_COLORS[cat] || '#94a3b8'}60`
+                });
+            }
         });
         
         return {
@@ -2974,9 +3044,12 @@ const IncomeFlowDashboard = ({ expenses, merchantRules }) => {
             totalExpenses,
             savings,
             incomeBySource,
-            expenseByCategory
+            expenseByCategory,
+            byCostType,
+            categoryToCostType,
+            otherIncomeDetails: otherIncomeDetails.sort((a, b) => b.amount - a.amount)
         };
-    }, [expenses, merchantRules, selectedYear]);
+    }, [expenses, merchantRules, selectedYear, costTypeOverrides]);
     
     // Render Plotly chart
     useEffect(() => {
@@ -2985,9 +3058,10 @@ const IncomeFlowDashboard = ({ expenses, merchantRules }) => {
         const data = [{
             type: 'sankey',
             orientation: 'h',
+            arrangement: 'snap',
             node: {
-                pad: 20,
-                thickness: 30,
+                pad: 15,
+                thickness: 25,
                 line: { color: 'white', width: 2 },
                 label: sankeyData.nodes.map(n => n.name),
                 color: sankeyData.nodes.map(n => n.color),
@@ -3003,10 +3077,15 @@ const IncomeFlowDashboard = ({ expenses, merchantRules }) => {
         }];
         
         const layout = {
-            font: { family: 'Inter, sans-serif', size: 12 },
-            margin: { l: 20, r: 20, t: 20, b: 20 },
+            font: { family: 'Inter, sans-serif', size: 11 },
+            margin: { l: 10, r: 10, t: 30, b: 10 },
             paper_bgcolor: 'transparent',
-            plot_bgcolor: 'transparent'
+            plot_bgcolor: 'transparent',
+            annotations: [
+                { x: 0, y: 1.08, xref: 'paper', yref: 'paper', text: '<b>Income Sources</b>', showarrow: false, font: { size: 12, color: '#22c55e' } },
+                { x: 0.5, y: 1.08, xref: 'paper', yref: 'paper', text: '<b>Cost Structure</b>', showarrow: false, font: { size: 12, color: '#6366f1' } },
+                { x: 1, y: 1.08, xref: 'paper', yref: 'paper', text: '<b>Categories</b>', showarrow: false, font: { size: 12, color: '#64748b' } }
+            ]
         };
         
         const config = {
@@ -3040,8 +3119,8 @@ const IncomeFlowDashboard = ({ expenses, merchantRules }) => {
             {/* Header */}
             <div className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white p-6 rounded-2xl flex justify-between items-center">
                 <div>
-                    <h2 className="text-xl font-black">💰 Income vs Spend Flow</h2>
-                    <p className="text-emerald-100 text-sm mt-1">Visualize how your money flows from income to expenses</p>
+                    <h2 className="text-xl font-black">💰 Money Flow Diagram</h2>
+                    <p className="text-emerald-100 text-sm mt-1">Income → Cost Structure → Categories</p>
                 </div>
                 <select 
                     value={selectedYear} 
@@ -3051,47 +3130,54 @@ const IncomeFlowDashboard = ({ expenses, merchantRules }) => {
                 </select>
             </div>
             
-            {/* KPI Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="bg-white p-5 rounded-2xl border border-green-200 shadow-lg">
+            {/* KPI Cards - 5 columns */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                <div className="bg-white p-4 rounded-2xl border border-green-200 shadow-lg">
                     <h3 className="text-[10px] font-bold text-green-600 uppercase">Total Income</h3>
-                    <p className="text-2xl font-black text-green-600">${sankeyData.totalIncome.toLocaleString(undefined, {maximumFractionDigits: 0})}</p>
-                    <p className="text-xs text-green-500 mt-1">{Object.keys(sankeyData.incomeBySource).length} sources</p>
+                    <p className="text-xl font-black text-green-600">${(sankeyData.totalIncome/1000).toFixed(1)}k</p>
                 </div>
-                <div className="bg-white p-5 rounded-2xl border border-red-200 shadow-lg">
-                    <h3 className="text-[10px] font-bold text-red-600 uppercase">Total Expenses</h3>
-                    <p className="text-2xl font-black text-red-600">${sankeyData.totalExpenses.toLocaleString(undefined, {maximumFractionDigits: 0})}</p>
-                    <p className="text-xs text-red-500 mt-1">{Object.keys(sankeyData.expenseByCategory).length} categories</p>
+                <div className="bg-white p-4 rounded-2xl border shadow-lg" style={{ borderColor: COST_TYPE_COLORS.Fixed }}>
+                    <h3 className="text-[10px] font-bold uppercase" style={{ color: COST_TYPE_COLORS.Fixed }}>Fixed</h3>
+                    <p className="text-xl font-black" style={{ color: COST_TYPE_COLORS.Fixed }}>${(sankeyData.byCostType.Fixed/1000).toFixed(1)}k</p>
                 </div>
-                <div className={`bg-white p-5 rounded-2xl border shadow-lg ${sankeyData.savings >= 0 ? 'border-blue-200' : 'border-amber-200'}`}>
+                <div className="bg-white p-4 rounded-2xl border shadow-lg" style={{ borderColor: COST_TYPE_COLORS['Semi-Fixed'] }}>
+                    <h3 className="text-[10px] font-bold uppercase" style={{ color: COST_TYPE_COLORS['Semi-Fixed'] }}>Semi-Fixed</h3>
+                    <p className="text-xl font-black" style={{ color: COST_TYPE_COLORS['Semi-Fixed'] }}>${(sankeyData.byCostType['Semi-Fixed']/1000).toFixed(1)}k</p>
+                </div>
+                <div className="bg-white p-4 rounded-2xl border shadow-lg" style={{ borderColor: COST_TYPE_COLORS.Variable }}>
+                    <h3 className="text-[10px] font-bold uppercase" style={{ color: COST_TYPE_COLORS.Variable }}>Variable</h3>
+                    <p className="text-xl font-black" style={{ color: COST_TYPE_COLORS.Variable }}>${(sankeyData.byCostType.Variable/1000).toFixed(1)}k</p>
+                </div>
+                <div className={`bg-white p-4 rounded-2xl border shadow-lg ${sankeyData.savings >= 0 ? 'border-blue-300' : 'border-amber-300'}`}>
                     <h3 className={`text-[10px] font-bold uppercase ${sankeyData.savings >= 0 ? 'text-blue-600' : 'text-amber-600'}`}>
-                        {sankeyData.savings >= 0 ? 'Savings' : 'Deficit'}
+                        {sankeyData.savings >= 0 ? '💰 Savings' : 'Deficit'}
                     </h3>
-                    <p className={`text-2xl font-black ${sankeyData.savings >= 0 ? 'text-blue-600' : 'text-amber-600'}`}>
-                        ${Math.abs(sankeyData.savings).toLocaleString(undefined, {maximumFractionDigits: 0})}
+                    <p className={`text-xl font-black ${sankeyData.savings >= 0 ? 'text-blue-600' : 'text-amber-600'}`}>
+                        ${(Math.abs(sankeyData.savings)/1000).toFixed(1)}k
                     </p>
-                    <p className={`text-xs mt-1 ${sankeyData.savings >= 0 ? 'text-blue-500' : 'text-amber-500'}`}>
-                        {sankeyData.totalIncome > 0 ? `${Math.abs(sankeyData.savings / sankeyData.totalIncome * 100).toFixed(1)}% of income` : 'N/A'}
-                    </p>
-                </div>
-                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-lg">
-                    <h3 className="text-[10px] font-bold text-slate-500 uppercase">Burn Rate</h3>
-                    <p className="text-2xl font-black text-slate-700">
-                        {sankeyData.totalIncome > 0 ? `${(sankeyData.totalExpenses / sankeyData.totalIncome * 100).toFixed(0)}%` : 'N/A'}
-                    </p>
-                    <p className="text-xs text-slate-500 mt-1">of income spent</p>
                 </div>
             </div>
             
             {/* Sankey Chart */}
             <div className="bg-white rounded-2xl border border-slate-100 shadow-lg overflow-hidden">
-                <div className="p-5 border-b border-slate-100">
-                    <h3 className="text-sm font-black text-slate-800">📊 Money Flow Diagram</h3>
-                    <p className="text-xs text-slate-500 mt-1">Income sources → Budget → Expense categories</p>
+                <div className="p-5 border-b border-slate-100 flex justify-between items-center">
+                    <div>
+                        <h3 className="text-sm font-black text-slate-800">📊 3-Stage Money Flow</h3>
+                        <p className="text-xs text-slate-500 mt-1">
+                            Total: ${(sankeyData.totalIncome/1000).toFixed(1)}k income → 
+                            ${(sankeyData.totalExpenses/1000).toFixed(1)}k expenses → 
+                            ${(Math.abs(sankeyData.savings)/1000).toFixed(1)}k {sankeyData.savings >= 0 ? 'saved' : 'deficit'}
+                        </p>
+                    </div>
+                    <div className="text-right text-xs text-slate-400">
+                        <div>Savings Rate: <span className={`font-bold ${sankeyData.savings >= 0 ? 'text-blue-600' : 'text-amber-600'}`}>
+                            {sankeyData.totalIncome > 0 ? `${(sankeyData.savings / sankeyData.totalIncome * 100).toFixed(1)}%` : 'N/A'}
+                        </span></div>
+                    </div>
                 </div>
                 <div className="p-4">
                     {hasData ? (
-                        <div ref={chartRef} style={{ width: '100%', height: '500px' }} />
+                        <div ref={chartRef} style={{ width: '100%', height: '550px' }} />
                     ) : (
                         <div className="h-64 flex items-center justify-center text-slate-400">
                             <div className="text-center">
@@ -3103,84 +3189,126 @@ const IncomeFlowDashboard = ({ expenses, merchantRules }) => {
                 </div>
             </div>
             
-            {/* Breakdown Tables */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Income Breakdown */}
+            {/* Breakdown Tables - 3 columns */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Income Sources */}
                 <div className="bg-white rounded-2xl border border-slate-100 shadow-lg overflow-hidden">
-                    <div className="p-5 border-b border-slate-100 bg-green-50">
+                    <div className="p-4 border-b border-slate-100 bg-green-50">
                         <h3 className="text-sm font-black text-green-800">💵 Income Sources</h3>
+                        <p className="text-xs text-green-600 mt-0.5">Total: ${sankeyData.totalIncome.toLocaleString(undefined, {maximumFractionDigits: 0})}</p>
                     </div>
-                    <div className="p-4">
+                    <div className="p-4 max-h-64 overflow-y-auto">
                         {Object.keys(sankeyData.incomeBySource).length === 0 ? (
-                            <p className="text-slate-400 text-center py-8">No income recorded</p>
+                            <p className="text-slate-400 text-center py-4 text-sm">No income recorded</p>
                         ) : (
-                            <div className="space-y-3">
+                            <div className="space-y-2">
                                 {Object.entries(sankeyData.incomeBySource)
                                     .sort((a, b) => b[1] - a[1])
-                                    .map(([source, amount]) => {
-                                        const color = source === 'Microsoft' ? '#0078d4' : 
-                                                     source === 'Salary/Payroll' ? '#22c55e' : 
-                                                     source === 'Tax Refunds' ? '#10b981' : 
-                                                     source === 'Interest & Dividends' ? '#059669' : 
-                                                     '#16a34a';
-                                        return (
-                                            <div key={source} className="flex items-center gap-3">
-                                                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
-                                                <div className="flex-1">
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="font-semibold text-sm text-slate-700">
-                                                            {source === 'Microsoft' && '🏢 '}{source}
-                                                        </span>
-                                                        <span className="font-bold" style={{ color }}>${amount.toLocaleString(undefined, {maximumFractionDigits: 0})}</span>
-                                                    </div>
-                                                    <div className="h-1.5 bg-slate-100 rounded-full mt-1 overflow-hidden">
-                                                        <div className="h-full rounded-full" style={{ backgroundColor: color, width: `${(amount / sankeyData.totalIncome) * 100}%` }} />
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                            </div>
-                        )}
-                    </div>
-                </div>
-                
-                {/* Expense Breakdown */}
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-lg overflow-hidden">
-                    <div className="p-5 border-b border-slate-100 bg-red-50">
-                        <h3 className="text-sm font-black text-red-800">💸 Expense Categories</h3>
-                    </div>
-                    <div className="p-4 max-h-80 overflow-y-auto">
-                        {Object.keys(sankeyData.expenseByCategory).length === 0 ? (
-                            <p className="text-slate-400 text-center py-8">No expenses recorded</p>
-                        ) : (
-                            <div className="space-y-3">
-                                {Object.entries(sankeyData.expenseByCategory)
-                                    .sort((a, b) => b[1] - a[1])
-                                    .map(([cat, amount]) => (
-                                        <div key={cat} className="flex items-center gap-3">
-                                            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: CAT_COLORS[cat] || '#ef4444' }} />
-                                            <div className="flex-1">
-                                                <div className="flex justify-between items-center">
-                                                    <span className="font-semibold text-sm text-slate-700">{cat}</span>
-                                                    <span className="font-bold" style={{ color: CAT_COLORS[cat] || '#ef4444' }}>
-                                                        ${amount.toLocaleString(undefined, {maximumFractionDigits: 0})}
-                                                    </span>
-                                                </div>
-                                                <div className="h-1.5 bg-slate-100 rounded-full mt-1 overflow-hidden">
-                                                    <div className="h-full rounded-full" style={{ 
-                                                        backgroundColor: CAT_COLORS[cat] || '#ef4444',
-                                                        width: `${(amount / sankeyData.totalExpenses) * 100}%` 
-                                                    }} />
-                                                </div>
-                                            </div>
+                                    .map(([source, amount]) => (
+                                        <div key={source} className="flex justify-between items-center text-sm">
+                                            <span className="text-slate-700">{source}</span>
+                                            <span className="font-bold text-green-600">${(amount/1000).toFixed(1)}k</span>
                                         </div>
                                     ))}
                             </div>
                         )}
                     </div>
                 </div>
+                
+                {/* Cost Structure */}
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-lg overflow-hidden">
+                    <div className="p-4 border-b border-slate-100 bg-indigo-50">
+                        <h3 className="text-sm font-black text-indigo-800">📦 Cost Structure</h3>
+                        <p className="text-xs text-indigo-600 mt-0.5">Total Expenses: ${sankeyData.totalExpenses.toLocaleString(undefined, {maximumFractionDigits: 0})}</p>
+                    </div>
+                    <div className="p-4">
+                        <div className="space-y-3">
+                            {['Fixed', 'Semi-Fixed', 'Variable'].map(type => {
+                                const amount = sankeyData.byCostType[type];
+                                const pct = sankeyData.totalExpenses > 0 ? (amount / sankeyData.totalExpenses * 100) : 0;
+                                return (
+                                    <div key={type}>
+                                        <div className="flex justify-between items-center text-sm mb-1">
+                                            <span className="font-semibold" style={{ color: COST_TYPE_COLORS[type] }}>{type}</span>
+                                            <span className="font-bold" style={{ color: COST_TYPE_COLORS[type] }}>${(amount/1000).toFixed(1)}k ({pct.toFixed(0)}%)</span>
+                                        </div>
+                                        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                                            <div className="h-full rounded-full" style={{ backgroundColor: COST_TYPE_COLORS[type], width: `${pct}%` }} />
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                            {sankeyData.savings > 0 && (
+                                <div className="pt-2 border-t border-slate-100">
+                                    <div className="flex justify-between items-center text-sm mb-1">
+                                        <span className="font-semibold text-blue-600">💰 Savings</span>
+                                        <span className="font-bold text-blue-600">${(sankeyData.savings/1000).toFixed(1)}k ({(sankeyData.savings/sankeyData.totalIncome*100).toFixed(0)}%)</span>
+                                    </div>
+                                    <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                                        <div className="h-full rounded-full bg-blue-500" style={{ width: `${sankeyData.savings/sankeyData.totalIncome*100}%` }} />
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+                
+                {/* Top Categories */}
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-lg overflow-hidden">
+                    <div className="p-4 border-b border-slate-100 bg-slate-50">
+                        <h3 className="text-sm font-black text-slate-800">🏷️ Top Categories</h3>
+                        <p className="text-xs text-slate-500 mt-0.5">{Object.keys(sankeyData.expenseByCategory).length} categories</p>
+                    </div>
+                    <div className="p-4 max-h-64 overflow-y-auto">
+                        <div className="space-y-2">
+                            {Object.entries(sankeyData.expenseByCategory)
+                                .sort((a, b) => b[1] - a[1])
+                                .slice(0, 10)
+                                .map(([cat, amount]) => (
+                                    <div key={cat} className="flex justify-between items-center text-sm">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: CAT_COLORS[cat] || '#94a3b8' }} />
+                                            <span className="text-slate-700">{cat}</span>
+                                        </div>
+                                        <span className="font-bold" style={{ color: CAT_COLORS[cat] || '#94a3b8' }}>${(amount/1000).toFixed(1)}k</span>
+                                    </div>
+                                ))}
+                        </div>
+                    </div>
+                </div>
             </div>
+            
+            {/* Other Income Breakdown Table */}
+            {sankeyData.otherIncomeDetails.length > 0 && (
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-lg overflow-hidden">
+                    <div className="p-4 border-b border-slate-100 bg-amber-50">
+                        <h3 className="text-sm font-black text-amber-800">❓ "Other Income" Breakdown</h3>
+                        <p className="text-xs text-amber-600 mt-0.5">
+                            {sankeyData.otherIncomeDetails.length} transactions totaling ${(sankeyData.incomeBySource['Other Income'] || 0).toLocaleString(undefined, {maximumFractionDigits: 0})}
+                        </p>
+                    </div>
+                    <div className="overflow-x-auto max-h-64">
+                        <table className="w-full text-sm">
+                            <thead className="bg-slate-50 sticky top-0">
+                                <tr className="text-slate-400 uppercase text-[10px] font-bold">
+                                    <th className="p-3 text-left">Date</th>
+                                    <th className="p-3 text-left">Description</th>
+                                    <th className="p-3 text-right">Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-50">
+                                {sankeyData.otherIncomeDetails.map((item, i) => (
+                                    <tr key={i} className="hover:bg-amber-50/50">
+                                        <td className="p-3 text-slate-500 text-xs">{item.date}</td>
+                                        <td className="p-3 text-slate-700 truncate max-w-[300px]" title={item.description}>{item.description}</td>
+                                        <td className="p-3 text-right font-bold text-green-600">${item.amount.toLocaleString(undefined, {maximumFractionDigits: 0})}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
@@ -4620,7 +4748,7 @@ const App = () => {
             </>)}
 
             {tab === 'flow' && (
-                <IncomeFlowDashboard expenses={expenses} merchantRules={merchantRules} />
+                <IncomeFlowDashboard expenses={expenses} merchantRules={merchantRules} costTypeOverrides={costTypeOverrides} />
             )}
 
             {tab === 'categories' && (
