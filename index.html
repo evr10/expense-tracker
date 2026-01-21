@@ -239,6 +239,9 @@ const INTERNAL_TRANSFER_SOURCES = [
 // Categories to exclude from expense calculations (Venmo is NOT excluded - it nets out)
 const EXCLUDED_CATEGORIES = ['Income', 'Transfer', 'Excluded', 'TaxIncome'];
 
+// Extended exclusions for dashboard/evolution/flow pages (Stylecom is reimbursable, tracked separately)
+const DASHBOARD_EXCLUDED_CATEGORIES = ['Income', 'Transfer', 'Excluded', 'TaxIncome', 'Stylecom'];
+
 // Cost Type mappings for budget structure analysis
 const COST_TYPE_RULES = {
     Fixed: ['Rent', 'Daycare'],
@@ -655,7 +658,7 @@ const SeasonalityChart = ({ expenses, merchantRules }) => {
     const { data, years } = useMemo(() => {
         const sp = expenses.filter(e => {
             const year = getY(e.date);
-            return !EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category) && (year === 2024 || year === 2025);
+            return !DASHBOARD_EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category) && (year === 2024 || year === 2025);
         });
         const yrs = [...new Set(sp.map(e => getY(e.date)))].sort();
         const data = yrs.map(y => {
@@ -676,7 +679,7 @@ const PaceChart = ({ expenses, merchantRules }) => {
     const { data, years } = useMemo(() => {
         const sp = expenses.filter(e => {
             const year = getY(e.date);
-            return !EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category) && (year === 2024 || year === 2025);
+            return !DASHBOARD_EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category) && (year === 2024 || year === 2025);
         });
         const yrs = [...new Set(sp.map(e => getY(e.date)))].sort();
         const data = yrs.map(y => {
@@ -704,7 +707,7 @@ const CategoryEvolution = ({ expenses, merchantRules }) => {
         const sp = expenses.filter(e => {
             const cat = getEffectiveCategory(e, merchantRules).category;
             const year = getY(e.date);
-            return !EXCLUDED_CATEGORIES.includes(cat) && cat !== 'Uncategorized' && (year === 2024 || year === 2025);
+            return !DASHBOARD_EXCLUDED_CATEGORIES.includes(cat) && cat !== 'Uncategorized' && (year === 2024 || year === 2025);
         });
         const yrs = [...new Set(sp.map(e => getY(e.date)))].sort();
         const cyt = {};
@@ -780,7 +783,7 @@ const Heatmap = ({ expenses, merchantRules }) => {
     const { data, years, min, max } = useMemo(() => {
         const sp = expenses.filter(e => {
             const year = getY(e.date);
-            return !EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category) && (year === 2024 || year === 2025);
+            return !DASHBOARD_EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category) && (year === 2024 || year === 2025);
         });
         const yrs = [...new Set(sp.map(e => getY(e.date)))].sort();
         const data = {};
@@ -799,7 +802,7 @@ const AccountTotalsChart = ({ expenses, merchantRules }) => {
     const { data, years, maxVal } = useMemo(() => {
         const sp = expenses.filter(e => {
             const year = getY(e.date);
-            return !EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category) && (year === 2024 || year === 2025);
+            return !DASHBOARD_EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category) && (year === 2024 || year === 2025);
         });
         const byAccount = {};
         sp.forEach(e => { const acc = e.account || 'Unknown', year = getY(e.date); if (!byAccount[acc]) byAccount[acc] = {}; byAccount[acc][year] = (byAccount[acc][year] || 0) + safe(e.amount); });
@@ -823,7 +826,7 @@ const CostStructureChart = ({ expenses, merchantRules, costTypeOverrides = {} })
     const { data, maxTotal, avgFixed, avgSemiFixed, avgVariable, avgTotal } = useMemo(() => {
         const sp = expenses.filter(e => {
             const cat = getEffectiveCategory(e, merchantRules).category;
-            return !EXCLUDED_CATEGORIES.includes(cat) && getY(e.date) === 2025;
+            return !DASHBOARD_EXCLUDED_CATEGORIES.includes(cat) && getY(e.date) === 2025;
         });
         
         // Group by month and cost type
@@ -974,7 +977,7 @@ const CostStructureEvolution = ({ expenses, merchantRules, costTypeOverrides = {
         const sp = expenses.filter(e => {
             const cat = getEffectiveCategory(e, merchantRules).category;
             const year = getY(e.date);
-            return !EXCLUDED_CATEGORIES.includes(cat) && (year === 2024 || year === 2025);
+            return !DASHBOARD_EXCLUDED_CATEGORIES.includes(cat) && (year === 2024 || year === 2025);
         });
         
         // Group by year-month
@@ -1135,7 +1138,7 @@ const CostStructureEvolution = ({ expenses, merchantRules, costTypeOverrides = {
 // Dashboard Charts (2025 filtered)
 const Stats = ({ expenses, merchantRules }) => {
     const { tot, cnt, avg } = useMemo(() => {
-        const sp = expenses.filter(e => !EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category) && getY(e.date) === 2025);
+        const sp = expenses.filter(e => !DASHBOARD_EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category) && getY(e.date) === 2025);
         const tot = sp.reduce((s,e) => s + safe(e.amount), 0);
         return { tot, cnt: sp.length, avg: sp.length ? tot/sp.length : 0 };
     }, [expenses, merchantRules]);
@@ -1148,7 +1151,7 @@ const Stats = ({ expenses, merchantRules }) => {
 
 const Pareto = ({ expenses, merchantRules }) => {
     const { data, total } = useMemo(() => {
-        const sp = expenses.filter(e => !EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category) && getY(e.date) === 2025);
+        const sp = expenses.filter(e => !DASHBOARD_EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category) && getY(e.date) === 2025);
         const bc = {}; sp.forEach(e => { const cat = getEffectiveCategory(e, merchantRules).category; bc[cat] = (bc[cat]||0) + safe(e.amount); });
         const sorted = Object.entries(bc).map(([n,v]) => ({name:n,value:v})).sort((a,b) => b.value - a.value);
         const tot = sorted.reduce((s,i) => s + i.value, 0);
@@ -1175,7 +1178,7 @@ const Pareto = ({ expenses, merchantRules }) => {
 
 const TopMerchants = ({ expenses, merchantRules }) => {
     const { data, total } = useMemo(() => {
-        const sp = expenses.filter(e => !EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category) && getY(e.date) === 2025);
+        const sp = expenses.filter(e => !DASHBOARD_EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category) && getY(e.date) === 2025);
         const total = sp.reduce((s, e) => s + safe(e.amount), 0);
         const byMerchant = {};
         sp.forEach(e => { const name = cleanMerchant(e.description); byMerchant[name] = (byMerchant[name] || 0) + safe(e.amount); });
@@ -1190,28 +1193,86 @@ const TopMerchants = ({ expenses, merchantRules }) => {
 };
 
 const RecurringCosts = ({ expenses, merchantRules }) => {
-    const { recurring, totalMonthly, totalYearly } = useMemo(() => {
-        const sp2025 = expenses.filter(e => !EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category) && getY(e.date) === 2025);
+    const { recurring, totalMonthly, totalYearly, totalCount } = useMemo(() => {
+        // Exclude subscription-flagged items - those are shown in Subscriptions widget
+        const sp2025 = expenses.filter(e => 
+            !DASHBOARD_EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category) && 
+            getY(e.date) === 2025 &&
+            e.isSubscription !== true // Exclude items flagged as subscriptions
+        );
         const byMerchant = {};
-        sp2025.forEach(e => { const name = cleanMerchant(e.description); if (!byMerchant[name]) byMerchant[name] = { amounts: [], months: new Set(), total: 0 }; byMerchant[name].amounts.push(safe(e.amount)); byMerchant[name].months.add(getM(e.date)); byMerchant[name].total += safe(e.amount); });
+        sp2025.forEach(e => { 
+            const name = cleanMerchant(e.description); 
+            if (!byMerchant[name]) byMerchant[name] = { amounts: [], months: new Set(), total: 0 }; 
+            byMerchant[name].amounts.push(safe(e.amount)); 
+            byMerchant[name].months.add(getM(e.date)); 
+            byMerchant[name].total += safe(e.amount); 
+        });
         const recurring = [];
         Object.entries(byMerchant).forEach(([name, data]) => {
+            // Require at least 2 months of data
             if (data.months.size >= 2) {
                 const amounts = data.amounts.sort((a,b) => a - b);
                 const median = amounts[Math.floor(amounts.length / 2)];
-                const consistent = amounts.filter(a => Math.abs(a - median) / median < 0.2).length;
-                if (consistent >= data.months.size * 0.6) recurring.push({ name, monthlyAvg: data.total / data.months.size, totalYear: data.total, months: data.months.size });
+                const consistent = amounts.filter(a => Math.abs(a - median) / median < 0.3).length;
+                // Require 50% consistency
+                if (consistent >= data.months.size * 0.5) {
+                    recurring.push({ 
+                        name, 
+                        monthlyAvg: data.total / data.months.size, 
+                        totalYear: data.total, 
+                        months: data.months.size 
+                    });
+                }
             }
         });
         recurring.sort((a, b) => b.totalYear - a.totalYear);
         const totalYearly = recurring.reduce((s, r) => s + r.totalYear, 0);
         const totalMonthly = recurring.reduce((s, r) => s + r.monthlyAvg, 0);
-        return { recurring: recurring.slice(0, 12), totalMonthly, totalYearly };
+        // Return all recurring items (no limit)
+        return { recurring, totalMonthly, totalYearly, totalCount: recurring.length };
     }, [expenses, merchantRules]);
+    
     if (!recurring.length) return <Empty msg="No recurring costs detected" />;
-    return (<div className="h-full flex flex-col"><div className="flex-1 overflow-auto"><table className="w-full text-[10px]"><thead className="sticky top-0 bg-white"><tr className="text-slate-400 uppercase font-bold"><th className="text-left p-1.5">Merchant</th><th className="text-center p-1.5">Freq</th><th className="text-right p-1.5">Monthly</th><th className="text-right p-1.5">2025</th></tr></thead><tbody className="divide-y divide-slate-50">
-        {recurring.map((r, i) => (<tr key={r.name} className="hover:bg-slate-50"><td className="p-1.5 font-semibold text-slate-700 truncate max-w-[120px]" title={r.name}><span className="inline-flex items-center gap-1"><span className="w-4 h-4 rounded bg-indigo-100 text-indigo-600 flex items-center justify-center text-[8px] font-black">{i+1}</span>{r.name}</span></td><td className="p-1.5 text-center text-slate-500">{r.months}mo</td><td className="p-1.5 text-right font-bold text-slate-700">${r.monthlyAvg.toFixed(0)}</td><td className="p-1.5 text-right font-black text-indigo-600">${r.totalYear.toFixed(0)}</td></tr>))}
-    </tbody></table></div><div className="pt-2 border-t border-slate-100 mt-2 flex justify-between items-center"><div className="text-[10px] text-slate-400">🔄 {recurring.length} recurring</div><div className="text-right"><div className="text-[10px] font-bold text-slate-600">~${totalMonthly.toFixed(0)}/mo</div><div className="text-[11px] font-black text-indigo-600">${totalYearly.toLocaleString(undefined,{maximumFractionDigits:0})} YTD</div></div></div></div>);
+    
+    return (
+        <div className="h-full flex flex-col">
+            <div className="flex-1 overflow-auto">
+                <table className="w-full text-[10px]">
+                    <thead className="sticky top-0 bg-white">
+                        <tr className="text-slate-400 uppercase font-bold">
+                            <th className="text-left p-1.5">Merchant</th>
+                            <th className="text-center p-1.5">Freq</th>
+                            <th className="text-right p-1.5">Monthly</th>
+                            <th className="text-right p-1.5">2025</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                        {recurring.map((r, i) => (
+                            <tr key={r.name} className="hover:bg-slate-50">
+                                <td className="p-1.5 font-semibold text-slate-700 truncate max-w-[150px]" title={r.name}>
+                                    <span className="inline-flex items-center gap-1">
+                                        <span className="w-4 h-4 rounded bg-indigo-100 text-indigo-600 flex items-center justify-center text-[8px] font-black flex-shrink-0">{i+1}</span>
+                                        <span className="truncate">{r.name}</span>
+                                    </span>
+                                </td>
+                                <td className="p-1.5 text-center text-slate-500">{r.months}mo</td>
+                                <td className="p-1.5 text-right font-bold text-slate-700">${r.monthlyAvg.toFixed(0)}</td>
+                                <td className="p-1.5 text-right font-black text-indigo-600">${r.totalYear.toLocaleString(undefined,{maximumFractionDigits:0})}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+            <div className="pt-2 border-t border-slate-100 mt-2 flex justify-between items-center">
+                <div className="text-[10px] text-slate-400">🔄 {totalCount} recurring</div>
+                <div className="text-right">
+                    <div className="text-[10px] font-bold text-slate-600">~${totalMonthly.toLocaleString(undefined,{maximumFractionDigits:0})}/mo</div>
+                    <div className="text-[11px] font-black text-indigo-600">${totalYearly.toLocaleString(undefined,{maximumFractionDigits:0})} YTD</div>
+                </div>
+            </div>
+        </div>
+    );
 };
 
 // Subscriptions - ONLY expenses with isSubscription flag (manually tagged)
@@ -1220,7 +1281,7 @@ const Subscriptions = ({ expenses, merchantRules }) => {
         // Only include expenses with isSubscription flag set to true
         const sp2025 = expenses.filter(e => 
             e.isSubscription === true && 
-            !EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category) && 
+            !DASHBOARD_EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category) && 
             getY(e.date) === 2025
         );
         
@@ -1310,7 +1371,7 @@ const Subscriptions = ({ expenses, merchantRules }) => {
 
 const SmallPurchaseMerchants = ({ expenses, merchantRules }) => {
     const { data, grandTotal } = useMemo(() => {
-        const sp2025 = expenses.filter(e => !EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category) && getY(e.date) === 2025);
+        const sp2025 = expenses.filter(e => !DASHBOARD_EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category) && getY(e.date) === 2025);
         if (!sp2025.length) return { data: [], grandTotal: 0 };
         const byMerchant = {};
         sp2025.forEach(e => { const name = cleanMerchant(e.description); if (!byMerchant[name]) byMerchant[name] = { total: 0, count: 0 }; byMerchant[name].total += safe(e.amount); byMerchant[name].count += 1; });
@@ -1327,7 +1388,7 @@ const SmallPurchaseMerchants = ({ expenses, merchantRules }) => {
 
 const Scatter = ({ expenses, merchantRules }) => {
     const { pts, minD, maxD, maxA } = useMemo(() => {
-        const sp = expenses.filter(e => !EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category) && getY(e.date) === 2025);
+        const sp = expenses.filter(e => !DASHBOARD_EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category) && getY(e.date) === 2025);
         if (!sp.length) return { pts:[], minD:0, maxD:1, maxA:100 };
         const pts = sp.map(e => ({ d:pDate(e.date).getTime(), a:safe(e.amount), desc:e.description }));
         const ds = pts.map(p => p.d), as = pts.map(p => p.a);
@@ -2830,8 +2891,8 @@ const IncomeFlowDashboard = ({ expenses, merchantRules, costTypeOverrides = {} }
         { name: 'Gifts/Other', keywords: ['gift', 'bonus', 'award'], color: '#a3e635' }
     ];
     
-    // Expense categories to exclude
-    const EXCLUDED_FROM_EXPENSES = ['Income', 'TaxIncome', 'Transfer', 'Excluded', 'Venmo'];
+    // Expense categories to exclude (including Stylecom for flow page)
+    const EXCLUDED_FROM_EXPENSES = ['Income', 'TaxIncome', 'Transfer', 'Excluded', 'Venmo', 'Stylecom'];
     
     // Prepare data for 4-STAGE Sankey:
     // Column 1: Income Sources
@@ -2895,37 +2956,40 @@ const IncomeFlowDashboard = ({ expenses, merchantRules, costTypeOverrides = {} }
         const nodeIndices = {};
         let nodeIndex = 0;
         
-        // COLUMN 1: Income Sources (sorted by amount)
+        // COLUMN 1: Income Sources (sorted by amount) - with totals
         const incomeSources = Object.keys(incomeBySource).sort((a, b) => incomeBySource[b] - incomeBySource[a]);
         incomeSources.forEach(source => {
             nodeIndices[`income_${source}`] = nodeIndex++;
-            nodes.push({ name: source, color: incomeColors[source] || '#22c55e' });
+            const amt = incomeBySource[source];
+            nodes.push({ name: `${source} ($${(amt/1000).toFixed(1)}k)`, color: incomeColors[source] || '#22c55e' });
         });
         
-        // COLUMN 2: Total Budget (single aggregator node)
+        // COLUMN 2: Total Budget (single aggregator node) - with total
         const budgetIndex = nodeIndex++;
         nodeIndices['budget'] = budgetIndex;
-        nodes.push({ name: `Total Budget`, color: '#6366f1' }); // Indigo
+        nodes.push({ name: `Total Budget ($${(totalIncome/1000).toFixed(1)}k)`, color: '#6366f1' }); // Indigo
         
-        // COLUMN 3: Cost Structure + Savings (in order: Fixed, Semi-Fixed, Variable, Savings)
+        // COLUMN 3: Cost Structure + Savings (in order: Fixed, Semi-Fixed, Variable, Savings) - ALL with totals
+        // Savings is in this column as requested
         if (byCostType.Fixed > 0) {
             nodeIndices['cost_Fixed'] = nodeIndex++;
-            nodes.push({ name: `Fixed`, color: COST_TYPE_COLORS.Fixed });
+            nodes.push({ name: `Fixed ($${(byCostType.Fixed/1000).toFixed(1)}k)`, color: COST_TYPE_COLORS.Fixed });
         }
         if (byCostType['Semi-Fixed'] > 0) {
             nodeIndices['cost_Semi-Fixed'] = nodeIndex++;
-            nodes.push({ name: `Semi-Fixed`, color: COST_TYPE_COLORS['Semi-Fixed'] });
+            nodes.push({ name: `Semi-Fixed ($${(byCostType['Semi-Fixed']/1000).toFixed(1)}k)`, color: COST_TYPE_COLORS['Semi-Fixed'] });
         }
         if (byCostType.Variable > 0) {
             nodeIndices['cost_Variable'] = nodeIndex++;
-            nodes.push({ name: `Variable`, color: COST_TYPE_COLORS.Variable });
+            nodes.push({ name: `Variable ($${(byCostType.Variable/1000).toFixed(1)}k)`, color: COST_TYPE_COLORS.Variable });
         }
+        // Savings is in Column 3 (same level as cost types)
         if (savings > 0) {
             nodeIndices['savings'] = nodeIndex++;
-            nodes.push({ name: `💰 Savings`, color: '#3b82f6' });
+            nodes.push({ name: `💰 Savings ($${(savings/1000).toFixed(1)}k)`, color: '#3b82f6' });
         }
         
-        // COLUMN 4: Expense Categories (sorted by cost type, then by amount)
+        // COLUMN 4: Expense Categories (sorted by cost type, then by amount) - with totals
         const sortedCategories = Object.keys(expenseByCategory).sort((a, b) => {
             const typeOrder = { Fixed: 0, 'Semi-Fixed': 1, Variable: 2 };
             const aType = categoryToCostType[a];
@@ -2938,7 +3002,8 @@ const IncomeFlowDashboard = ({ expenses, merchantRules, costTypeOverrides = {} }
         
         sortedCategories.forEach(cat => {
             nodeIndices[`cat_${cat}`] = nodeIndex++;
-            nodes.push({ name: cat, color: CAT_COLORS[cat] || '#94a3b8' });
+            const amt = expenseByCategory[cat];
+            nodes.push({ name: `${cat} ($${(amt/1000).toFixed(1)}k)`, color: CAT_COLORS[cat] || '#94a3b8' });
         });
         
         // ========== BUILD LINKS ==========
@@ -4694,11 +4759,11 @@ const App = () => {
 
             {tab === 'dashboard' && (<>
                 <Stats expenses={expenses} merchantRules={merchantRules}/>
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">📊 Where Does It All Go? (2025)</h3><div className="h-56"><Pareto expenses={expenses} merchantRules={merchantRules}/></div></div>
-                    <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">🏪 Top 20 Merchants (2025)</h3><div className="h-80"><TopMerchants expenses={expenses} merchantRules={merchantRules}/></div></div>
-                    <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">🔄 Recurring Costs (2025)</h3><div className="h-56"><RecurringCosts expenses={expenses} merchantRules={merchantRules}/></div></div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">📊 Where Does It All Go? (2025)</h3><div className="h-80"><Pareto expenses={expenses} merchantRules={merchantRules}/></div></div>
+                    <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">🔄 Recurring Costs (2025)</h3><div className="h-80"><RecurringCosts expenses={expenses} merchantRules={merchantRules}/></div></div>
                 </div>
+                <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">🏪 Top 20 Merchants (2025)</h3><div className="h-80"><TopMerchants expenses={expenses} merchantRules={merchantRules}/></div></div>
                 <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">📦 Monthly Cost Structure (2025)</h3><div className="h-56"><CostStructureChart expenses={expenses} merchantRules={merchantRules} costTypeOverrides={costTypeOverrides}/></div></div>
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">📺 Subscriptions (2025)</h3><div className="h-56"><Subscriptions expenses={expenses} merchantRules={merchantRules}/></div></div>
