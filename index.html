@@ -39,10 +39,10 @@ class ErrorBoundary extends Component {
 }
 
 // ============== CONFIGURATION ==============
-const CATEGORIES = ['Groceries','Rent','Daycare','Household','Transportation','Entertainment','Health & Wellness','Shopping','Dining','Travel','Stylecom','Venmo','Income','TaxIncome','Transfer','Other','Excluded'];
+const CATEGORIES = ['Groceries','Rent','Daycare','Household','Transportation','Entertainment','Health & Wellness','Shopping','Dining','Travel','Amazon','Coffee','Subscriptions','Stylecom','Venmo','Income','TaxIncome','Transfer','Other','Excluded'];
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const YEAR_COLORS = { 2021:'#94a3b8', 2022:'#f59e0b', 2023:'#3b82f6', 2024:'#ef4444', 2025:'#10b981', 2026:'#8b5cf6' };
-const CAT_COLORS = { Groceries:'#22c55e', Rent:'#f59e0b', Daycare:'#a855f7', Household:'#3b82f6', Transportation:'#8b5cf6', Entertainment:'#ec4899', 'Health & Wellness':'#14b8a6', Shopping:'#f43f5e', Dining:'#f97316', Travel:'#06b6d4', Stylecom:'#db2777', Venmo:'#008CFF', Other:'#94a3b8', Uncategorized:'#fbbf24', Excluded:'#cbd5e1', Income:'#10b981', TaxIncome:'#059669', Transfer:'#64748b' };
+const CAT_COLORS = { Groceries:'#22c55e', Rent:'#f59e0b', Daycare:'#a855f7', Household:'#3b82f6', Transportation:'#8b5cf6', Entertainment:'#ec4899', 'Health & Wellness':'#14b8a6', Shopping:'#f43f5e', Dining:'#f97316', Travel:'#06b6d4', Amazon:'#ff9900', Coffee:'#6f4e37', Subscriptions:'#7c3aed', Stylecom:'#db2777', Venmo:'#008CFF', Other:'#94a3b8', Uncategorized:'#fbbf24', Excluded:'#cbd5e1', Income:'#10b981', TaxIncome:'#059669', Transfer:'#64748b' };
 
 // SUBSCRIPTION DETECTION - Keywords that indicate recurring subscriptions
 // Maps keyword -> actual category (not "Subscriptions")
@@ -198,6 +198,10 @@ const AUTO_RULES = {
     // Health & Wellness - medical, pharmacy, fitness, mental health, personal care
     'Health & Wellness':['pharmacy','cvs','walgreens','doctor','hospital','medical','dentist','optum','cigna','aetna','united health','clinic','urgent care','emergency','lab','blood','xray','mri','therapy','therapist','counseling','psychiatrist','psychologist','mental health','gym','fitness','yoga','pilates','peloton','crossfit','equinox','planet fitness','orange theory','soulcycle','massage','spa','chiropractor','physical therapy','vision','eye','optical','glasses','contacts','lenscrafters','warby parker','vitamins','supplements','gnc','vitamin shoppe',
         'evavercouteren','shair nyc','every mother','solidstarts','headspace','calm','noom','weight watchers','classpass','strava'],
+    // Amazon - all Amazon purchases
+    Amazon:['amazon','amzn','amz mktplace','prime now','whole foods','amazon fresh','amazon pantry'],
+    // Coffee - coffee shops and cafes
+    Coffee:['starbucks','dunkin','peets','blue bottle','philz','intelligentsia','counter culture','stumptown','la colombe','coffee','cafe','caffe','espresso','latte'],
     Travel:['airline','delta','united','southwest','flight','airbnb','hotel','marriott','hilton','hyatt','expedia','booking.com',
         'thestrabon','wuzipay'],
     // Other - software, news, education subscriptions
@@ -472,9 +476,9 @@ const DEFAULT_MERCHANT_RULES = {
     'ACH AUTOMATIC TRANSFER TO CREDIT ACCOUNT': { category: 'Transfer', scope: 'global' },
     'AIRTABLE.COM/BILL': { category: 'Stylecom', scope: 'global' },
     'ALL BOROUGH PARTY RENTAL': { category: 'Entertainment', scope: 'global' },
-    'AMAZON MKTPL': { category: 'Household', scope: 'global' },
-    'AMAZON PRIME': { category: 'Household', scope: 'global' },
-    'AMAZONPRIMEBE': { category: 'Household', scope: 'global' },
+    'AMAZON MKTPL': { category: 'Amazon', scope: 'global' },
+    'AMAZON PRIME': { category: 'Amazon', scope: 'global' },
+    'AMAZONPRIMEBE': { category: 'Amazon', scope: 'global' },
     'APPLE.COM/BILL': { category: 'Stylecom', scope: 'global' },
     'APPLE.COM/US': { category: 'Stylecom', scope: 'global' },
     'ART OF MONDAYS': { category: 'Stylecom', scope: 'global' },
