@@ -39,10 +39,10 @@ class ErrorBoundary extends Component {
 }
 
 // ============== CONFIGURATION ==============
-const CATEGORIES = ['Groceries','Rent','Daycare','Household','Transportation','Entertainment','Health & Wellness','Shopping','Dining','Travel','Amazon','Coffee','Subscriptions','Stylecom','Venmo','Income','TaxIncome','Transfer','Other','Excluded'];
+const CATEGORIES = ['Groceries','Rent','Daycare','Household','Transportation','Entertainment','Health & Wellness','Shopping','Dining','Travel','Amazon','Coffee','Stylecom','Venmo','Income','TaxIncome','Transfer','Other','Excluded'];
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const YEAR_COLORS = { 2021:'#94a3b8', 2022:'#f59e0b', 2023:'#3b82f6', 2024:'#ef4444', 2025:'#10b981', 2026:'#8b5cf6' };
-const CAT_COLORS = { Groceries:'#22c55e', Rent:'#f59e0b', Daycare:'#a855f7', Household:'#3b82f6', Transportation:'#8b5cf6', Entertainment:'#ec4899', 'Health & Wellness':'#14b8a6', Shopping:'#f43f5e', Dining:'#f97316', Travel:'#06b6d4', Amazon:'#ff9900', Coffee:'#6f4e37', Subscriptions:'#7c3aed', Stylecom:'#db2777', Venmo:'#008CFF', Other:'#94a3b8', Uncategorized:'#fbbf24', Excluded:'#cbd5e1', Income:'#10b981', TaxIncome:'#059669', Transfer:'#64748b' };
+const CAT_COLORS = { Groceries:'#22c55e', Rent:'#f59e0b', Daycare:'#a855f7', Household:'#3b82f6', Transportation:'#8b5cf6', Entertainment:'#ec4899', 'Health & Wellness':'#14b8a6', Shopping:'#f43f5e', Dining:'#f97316', Travel:'#06b6d4', Amazon:'#ff9900', Coffee:'#6f4e37', Stylecom:'#db2777', Venmo:'#008CFF', Other:'#94a3b8', Uncategorized:'#fbbf24', Excluded:'#cbd5e1', Income:'#10b981', TaxIncome:'#059669', Transfer:'#64748b' };
 
 // SUBSCRIPTION DETECTION - Keywords that indicate recurring subscriptions
 // Maps keyword -> actual category (not "Subscriptions")
@@ -89,7 +89,7 @@ const SUBSCRIPTION_RULES = {
     'fitbit premium': 'Health & Wellness',
     'strava': 'Health & Wellness',
     
-    // Household/Utilities subscriptions
+    // Household subscriptions
     'comcast': 'Household',
     'xfinity': 'Household',
     'spectrum': 'Household',
@@ -371,13 +371,13 @@ const fuzzyMatchCSV = v => {
         if (part.includes('restaurant') || part.includes('food') || part.includes('dining')) return 'Dining';
         if (part.includes('taxi') || part.includes('transport') || part.includes('uber') || part.includes('lyft') || part.includes('parking')) return 'Transportation';
         if (part.includes('airline') || part.includes('travel') || part.includes('hotel') || part.includes('lodging') || part.includes('flight')) return 'Travel';
-        if (part.includes('pharmac') || part.includes('medical') || part.includes('health') || part.includes('doctor') || part.includes('hospital')) return 'Healthcare';
+        if (part.includes('pharmac') || part.includes('medical') || part.includes('health') || part.includes('doctor') || part.includes('hospital') || part.includes('healthcare')) return 'Health & Wellness';
         if (part.includes('grocer') || part.includes('supermarket') || part.includes('food store')) return 'Groceries';
         if (part.includes('gas') || part.includes('fuel') || part.includes('petrol')) return 'Transportation';
         if (part.includes('entertain') || part.includes('movie') || part.includes('theatre') || part.includes('theater')) return 'Entertainment';
         if (part.includes('merchan') || part.includes('retail') || part.includes('store') || part.includes('shop')) return 'Shopping';
-        if (part.includes('util') || part.includes('electric') || part.includes('water') || part.includes('internet') || part.includes('phone')) return 'Utilities';
-        if (part.includes('subscription') || part.includes('member')) return 'Subscriptions';
+        if (part.includes('util') || part.includes('electric') || part.includes('water') || part.includes('internet') || part.includes('phone')) return 'Household';
+        if (part.includes('subscription') || part.includes('member')) return 'Other';
     }
     return 'Uncategorized';
 };
@@ -544,7 +544,7 @@ const DEFAULT_MERCHANT_RULES = {
     'SHINN WEST': { category: 'Dining', scope: 'global' },
     'SMARTSUITE': { category: 'Stylecom', scope: 'global' },
     'SOFTR.IO': { category: 'Stylecom', scope: 'global' },
-    'SOLIDSTARTS': { category: 'Subscriptions', scope: 'global' },
+    'SOLIDSTARTS': { category: 'Health & Wellness', scope: 'global' },
     'SP BUDGETNERD': { category: 'TaxIncome', scope: 'global' },
     'SP DORE ROSE': { category: 'Shopping', scope: 'global' },
     'SP MYSALIGHTS': { category: 'Household', scope: 'global' },
@@ -1476,58 +1476,47 @@ const SpendingMagnitude = ({ expenses, merchantRules }) => {
     
     if (totalSpend === 0) return <Empty msg="No 2025 spending data" />;
     
+    const totalTxns = bucketData.reduce((sum, b) => sum + b.count, 0);
+    
     return (
         <div className="h-full flex flex-col">
-            <div className="flex-1 flex gap-4">
-                {/* Bar Chart */}
-                <div className="flex-1 flex flex-col justify-end gap-1">
-                    {bucketData.map(b => (
-                        <div key={b.name} className="flex items-center gap-2">
-                            <div className="w-20 text-[9px] font-semibold text-slate-600 text-right truncate">{b.emoji} {b.name}</div>
-                            <div className="flex-1 h-6 bg-slate-100 rounded overflow-hidden">
-                                <div 
-                                    className="h-full rounded flex items-center justify-end pr-2 transition-all"
-                                    style={{ width: `${maxSum > 0 ? (b.sum / maxSum * 100) : 0}%`, backgroundColor: b.color }}
-                                >
-                                    {b.sum > maxSum * 0.15 && (
-                                        <span className="text-[9px] font-bold text-white">${(b.sum/1000).toFixed(1)}k</span>
-                                    )}
-                                </div>
-                            </div>
-                            {b.sum <= maxSum * 0.15 && (
-                                <span className="text-[9px] font-bold text-slate-600 w-12">${(b.sum/1000).toFixed(1)}k</span>
-                            )}
-                        </div>
-                    ))}
-                </div>
-                
-                {/* Data Table */}
-                <div className="w-36 bg-slate-50 rounded-lg p-2">
-                    <table className="w-full text-[9px]">
-                        <thead>
-                            <tr className="text-slate-400 uppercase font-bold">
-                                <th className="text-left pb-1">Bucket</th>
-                                <th className="text-right pb-1">#</th>
-                                <th className="text-right pb-1">%</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {bucketData.map(b => (
-                                <tr key={b.name} className="border-t border-slate-200">
-                                    <td className="py-1 font-semibold" style={{ color: b.color }}>{b.emoji}</td>
-                                    <td className="py-1 text-right font-bold text-slate-700">{b.count.toLocaleString()}</td>
-                                    <td className="py-1 text-right font-bold" style={{ color: b.color }}>{b.pct.toFixed(1)}%</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
+            {/* Column Headers */}
+            <div className="flex items-center gap-2 pb-2 border-b border-slate-100 mb-2">
+                <div className="w-5"></div>
+                <div className="w-20 text-[9px] font-bold text-slate-400 uppercase">Bucket</div>
+                <div className="flex-1 text-[9px] font-bold text-slate-400 uppercase text-center">Distribution</div>
+                <div className="w-14 text-[9px] font-bold text-slate-400 uppercase text-right">Amount</div>
+                <div className="w-10 text-[9px] font-bold text-slate-400 uppercase text-right">#</div>
+                <div className="w-10 text-[9px] font-bold text-slate-400 uppercase text-right">%</div>
             </div>
-            <div className="pt-2 border-t border-slate-100 mt-2 flex justify-between items-center">
-                <div className="text-[10px] text-slate-400">
-                    🐟 Minnows: {bucketData[0].count + bucketData[1].count} txns = ${((bucketData[0].sum + bucketData[1].sum)/1000).toFixed(1)}k
+            {/* Data Rows */}
+            <div className="flex-1 overflow-auto space-y-1.5">
+                {bucketData.map((b, i) => (
+                    <div key={b.name} className="flex items-center gap-2">
+                        <div className="w-5 text-[10px] font-black text-slate-400">{i + 1}</div>
+                        <div className="w-20 text-[10px] font-semibold text-slate-600 truncate" title={b.name}>{b.emoji} {b.name}</div>
+                        <div className="flex-1 h-5 bg-slate-100 rounded overflow-hidden">
+                            <div 
+                                className="h-full rounded"
+                                style={{ width: `${maxSum > 0 ? (b.sum / maxSum * 100) : 0}%`, backgroundColor: b.color }}
+                            />
+                        </div>
+                        <div className="w-14 text-[9px] font-bold text-slate-700 text-right">${(b.sum/1000).toFixed(1)}k</div>
+                        <div className="w-10 text-[9px] font-semibold text-slate-400 text-right">{b.count.toLocaleString()}</div>
+                        <div className="w-10 text-[9px] font-bold text-right" style={{ color: b.color }}>{b.pct.toFixed(0)}%</div>
+                    </div>
+                ))}
+            </div>
+            <div className="pt-2 border-t border-slate-100 mt-2">
+                <div className="flex justify-between items-center">
+                    <div className="text-[10px] text-slate-400">
+                        🐟 Minnows: {bucketData[0].count + bucketData[1].count} txns = ${((bucketData[0].sum + bucketData[1].sum)/1000).toFixed(1)}k
+                    </div>
+                    <div className="text-[10px] font-bold text-slate-600">
+                        Total: ${totalSpend.toLocaleString(undefined, {maximumFractionDigits: 0})}
+                    </div>
                 </div>
-                <div className="text-[10px] font-bold text-slate-600">
+                <div className="text-[9px] text-slate-400 mt-1">
                     🐳 Whales: {bucketData[4].count + bucketData[5].count} txns = ${((bucketData[4].sum + bucketData[5].sum)/1000).toFixed(1)}k
                 </div>
             </div>
@@ -1581,6 +1570,16 @@ const SmallSpendCategories = ({ expenses, merchantRules }) => {
     
     return (
         <div className="h-full flex flex-col">
+            {/* Column Headers */}
+            <div className="flex items-center gap-2 pb-2 border-b border-slate-100 mb-2">
+                <div className="w-5 text-[9px] font-bold text-slate-400 uppercase">#</div>
+                <div className="w-24 text-[9px] font-bold text-slate-400 uppercase">Category</div>
+                <div className="flex-1 text-[9px] font-bold text-slate-400 uppercase text-center">Distribution</div>
+                <div className="w-14 text-[9px] font-bold text-slate-400 uppercase text-right">Amount</div>
+                <div className="w-10 text-[9px] font-bold text-slate-400 uppercase text-right">Txns</div>
+                <div className="w-10 text-[9px] font-bold text-slate-400 uppercase text-right">%</div>
+            </div>
+            {/* Data Rows */}
             <div className="flex-1 overflow-auto space-y-1.5">
                 {categoryData.map((cat, i) => (
                     <div key={cat.name} className="flex items-center gap-2">
@@ -1616,7 +1615,7 @@ const SmallSpendCategories = ({ expenses, merchantRules }) => {
 };
 
 // ============== $100-$500 BUCKET DEEP DIVE ==============
-// Part A: Treemap visualization (Category > Merchant hierarchy)
+// Part A: Category breakdown with top merchants (redesigned from treemap)
 const MidRangeTreemap = ({ expenses, merchantRules }) => {
     const MIN_AMT = 100;
     const MAX_AMT = 500;
@@ -1660,67 +1659,60 @@ const MidRangeTreemap = ({ expenses, merchantRules }) => {
                 merchants: Object.entries(data.merchants)
                     .map(([mName, mData]) => ({ name: mName, sum: mData.sum, count: mData.count }))
                     .sort((a, b) => b.sum - a.sum)
-                    .slice(0, 5) // Top 5 merchants per category
+                    .slice(0, 3) // Top 3 merchants per category
             }))
-            .sort((a, b) => b.sum - a.sum);
+            .sort((a, b) => b.sum - a.sum)
+            .slice(0, 8); // Top 8 categories
         
         return { categoryData, totalSpend, txnCount };
     }, [expenses, merchantRules]);
     
     if (categoryData.length === 0) return <Empty msg="No $100-$500 transactions found" />;
     
-    // Calculate dimensions for treemap blocks
-    const totalArea = 100; // percentage
+    const maxSum = categoryData[0]?.sum || 1;
     
     return (
         <div className="h-full flex flex-col">
-            {/* Treemap */}
-            <div className="flex-1 flex flex-wrap gap-1 content-start overflow-auto">
-                {categoryData.map(cat => {
-                    const catWidth = Math.max(cat.pct, 8); // Min 8% width for visibility
-                    return (
-                        <div 
-                            key={cat.name}
-                            className="rounded-lg overflow-hidden flex flex-col"
-                            style={{ 
-                                width: `calc(${Math.min(catWidth, 48)}% - 4px)`,
-                                minHeight: '80px',
-                                backgroundColor: cat.color + '20',
-                                border: `2px solid ${cat.color}`
-                            }}
-                        >
-                            {/* Category header */}
-                            <div 
-                                className="px-2 py-1 text-white text-[10px] font-bold truncate"
-                                style={{ backgroundColor: cat.color }}
-                                title={`${cat.name}: $${cat.sum.toLocaleString(undefined, {maximumFractionDigits: 0})} (${cat.count} txns)`}
-                            >
-                                {cat.name} · ${(cat.sum/1000).toFixed(1)}k
+            {/* Column Headers */}
+            <div className="flex items-center gap-2 pb-2 border-b border-slate-100 mb-2">
+                <div className="w-5 text-[9px] font-bold text-slate-400 uppercase">#</div>
+                <div className="w-24 text-[9px] font-bold text-slate-400 uppercase">Category</div>
+                <div className="flex-1 text-[9px] font-bold text-slate-400 uppercase text-center">Distribution</div>
+                <div className="w-14 text-[9px] font-bold text-slate-400 uppercase text-right">Amount</div>
+                <div className="w-10 text-[9px] font-bold text-slate-400 uppercase text-right">Txns</div>
+                <div className="w-10 text-[9px] font-bold text-slate-400 uppercase text-right">%</div>
+            </div>
+            {/* Data Rows */}
+            <div className="flex-1 overflow-auto space-y-2">
+                {categoryData.map((cat, i) => (
+                    <div key={cat.name}>
+                        {/* Category Row */}
+                        <div className="flex items-center gap-2">
+                            <div className="w-5 text-[10px] font-black text-slate-400">{i + 1}</div>
+                            <div className="w-24 text-[10px] font-bold text-slate-700 truncate" title={cat.name}>{cat.name}</div>
+                            <div className="flex-1 h-5 bg-slate-100 rounded overflow-hidden">
+                                <div 
+                                    className="h-full rounded"
+                                    style={{ width: `${cat.sum / maxSum * 100}%`, backgroundColor: cat.color }}
+                                />
                             </div>
-                            {/* Merchant blocks within category */}
-                            <div className="flex-1 p-1 flex flex-wrap gap-0.5 content-start">
-                                {cat.merchants.map(m => {
-                                    const mPct = cat.sum > 0 ? (m.sum / cat.sum * 100) : 0;
-                                    return (
-                                        <div 
-                                            key={m.name}
-                                            className="rounded px-1 py-0.5 text-[8px] font-semibold truncate"
-                                            style={{ 
-                                                backgroundColor: cat.color + '40',
-                                                color: cat.color,
-                                                maxWidth: '100%',
-                                                flex: `0 0 ${Math.max(mPct, 30)}%`
-                                            }}
-                                            title={`${m.name}: $${m.sum.toFixed(0)} (${m.count} txns)`}
-                                        >
-                                            {m.name.substring(0, 12)}{m.name.length > 12 ? '…' : ''} ${m.count}×
-                                        </div>
-                                    );
-                                })}
-                            </div>
+                            <div className="w-14 text-[9px] font-bold text-slate-700 text-right">${(cat.sum/1000).toFixed(1)}k</div>
+                            <div className="w-10 text-[9px] font-semibold text-slate-400 text-right">{cat.count}</div>
+                            <div className="w-10 text-[9px] font-bold text-right" style={{ color: cat.color }}>{cat.pct.toFixed(0)}%</div>
                         </div>
-                    );
-                })}
+                        {/* Top Merchants under this category */}
+                        <div className="ml-7 mt-1 space-y-0.5">
+                            {cat.merchants.map(m => (
+                                <div key={m.name} className="flex items-center gap-2 text-[8px]">
+                                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: cat.color + '60' }}></div>
+                                    <div className="flex-1 text-slate-500 truncate" title={m.name}>{m.name}</div>
+                                    <div className="text-slate-600 font-semibold">${m.sum.toLocaleString(undefined, {maximumFractionDigits: 0})}</div>
+                                    <div className="text-slate-400 w-8 text-right">{m.count}×</div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                ))}
             </div>
             {/* Summary */}
             <div className="pt-2 border-t border-slate-100 mt-2 flex justify-between items-center">
@@ -2268,6 +2260,7 @@ const HighImpactView = ({ expenses, merchantRules, onUpdateRule }) => {
 const CategoryManagement = ({ expenses, merchantRules, onUpdateExpense, onUpdateRule, onDeleteRule, onUpdateSubscription }) => {
     const [viewMode, setViewMode] = useState('highimpact'); // 'highimpact' or 'transactions'
     const [filter, setFilter] = useState('all');
+    const [categoryFilter, setCategoryFilter] = useState('all'); // NEW: category filter
     const [searchTerm, setSearchTerm] = useState('');
     const [editingExpense, setEditingExpense] = useState(null);
     
@@ -2279,6 +2272,15 @@ const CategoryManagement = ({ expenses, merchantRules, onUpdateExpense, onUpdate
         });
         return [...accounts].sort();
     }, [expenses]);
+    
+    // Get all categories present in data
+    const categoriesInData = useMemo(() => {
+        const cats = new Set();
+        expenses.filter(e => isValidYear(e.date)).forEach(e => {
+            cats.add(getEffectiveCategory(e, merchantRules).category);
+        });
+        return ['all', ...CATEGORIES.filter(c => cats.has(c)), 'Uncategorized'].filter((v, i, a) => a.indexOf(v) === i);
+    }, [expenses, merchantRules]);
     
     const filteredExpenses = useMemo(() => {
         // Start with 2024+ expenses only
@@ -2295,12 +2297,16 @@ const CategoryManagement = ({ expenses, merchantRules, onUpdateExpense, onUpdate
         } else if (filter === 'excluded') {
             filtered = filtered.filter(e => EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category));
         }
+        // NEW: Apply category filter
+        if (categoryFilter !== 'all') {
+            filtered = filtered.filter(e => getEffectiveCategory(e, merchantRules).category === categoryFilter);
+        }
         if (searchTerm) {
             const term = searchTerm.toLowerCase();
             filtered = filtered.filter(e => e.description?.toLowerCase().includes(term) || cleanMerchant(e.description).toLowerCase().includes(term));
         }
         return filtered.sort((a, b) => new Date(b.date) - new Date(a.date));
-    }, [expenses, merchantRules, filter, searchTerm]);
+    }, [expenses, merchantRules, filter, categoryFilter, searchTerm]);
 
     const handleSaveCategory = (category, applyToAll, merchant, scope, accounts) => {
         if (applyToAll) {
@@ -2455,6 +2461,17 @@ const CategoryManagement = ({ expenses, merchantRules, onUpdateExpense, onUpdate
                         </button>
                     ))}
                 </div>
+                {/* Category Filter Dropdown */}
+                <select 
+                    value={categoryFilter} 
+                    onChange={e => setCategoryFilter(e.target.value)}
+                    className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm font-semibold outline-none focus:border-indigo-500"
+                >
+                    <option value="all">📁 All Categories</option>
+                    {categoriesInData.filter(c => c !== 'all').map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                </select>
                 <div className="flex-1 min-w-[200px]">
                     <input type="text" placeholder="Search merchant or description..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
                         className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500"/>
@@ -2746,7 +2763,7 @@ const CostTypeManagement = ({ expenses, merchantRules, costTypeOverrides, onUpda
                 <h4 className="font-bold text-blue-800 text-sm mb-2">💡 How Cost Types Work</h4>
                 <ul className="text-xs text-blue-700 space-y-1">
                     <li><strong>Fixed:</strong> Mandatory expenses that don't change (Rent, Insurance, Daycare)</li>
-                    <li><strong>Semi-Fixed:</strong> Necessary but variable amounts (Groceries, Utilities, Household)</li>
+                    <li><strong>Semi-Fixed:</strong> Necessary but variable amounts (Groceries, Household)</li>
                     <li><strong>Variable:</strong> Discretionary spending (Dining, Entertainment, Shopping)</li>
                 </ul>
                 <p className="text-[10px] text-blue-600 mt-3">
@@ -3365,46 +3382,6 @@ const StylecomReimbursement = ({ expenses, merchantRules, paidIds, onTogglePaid 
                 <div className="p-5 border-b border-slate-100">
                     <h3 className="text-sm font-black text-slate-800">📅 Quarterly Gross Spending</h3>
                     <p className="text-[10px] text-slate-500 mt-1">Showing what you advanced (not netted with repayments)</p>
-                </div>
-                
-                {/* Visual Bar Chart */}
-                <div className="p-5 border-b border-slate-100">
-                    <div className="space-y-3">
-                        {quarterlyData.slice(0, 8).map(q => (
-                            <div key={q.key} className="flex items-center gap-3">
-                                <div className="w-16 text-xs font-bold text-slate-600">{q.key}</div>
-                                <div className="flex-1 h-8 bg-slate-100 rounded-lg overflow-hidden relative">
-                                    {/* Gross spending bar */}
-                                    <div 
-                                        className="absolute inset-y-0 left-0 bg-gradient-to-r from-pink-400 to-rose-500 rounded-lg flex items-center justify-end pr-2"
-                                        style={{ width: `${(q.grossTotal / maxQuarterlyGross) * 100}%` }}
-                                    >
-                                        {q.grossTotal > maxQuarterlyGross * 0.2 && (
-                                            <span className="text-[10px] font-bold text-white">${(q.grossTotal/1000).toFixed(1)}k</span>
-                                        )}
-                                    </div>
-                                    {/* Repayment indicator line */}
-                                    {q.repayments > 0 && (
-                                        <div 
-                                            className="absolute top-1 bottom-1 w-1 bg-green-500 rounded"
-                                            style={{ left: `${(q.repayments / maxQuarterlyGross) * 100}%` }}
-                                            title={`Repaid: $${q.repayments.toLocaleString()}`}
-                                        />
-                                    )}
-                                </div>
-                                <div className="w-20 text-right">
-                                    <div className="text-xs font-bold text-slate-700">${q.grossTotal.toLocaleString(undefined, {maximumFractionDigits: 0})}</div>
-                                    {q.repayments > 0 && (
-                                        <div className="text-[9px] text-green-600">↩ ${q.repayments.toLocaleString(undefined, {maximumFractionDigits: 0})}</div>
-                                    )}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                    <div className="flex gap-4 mt-4 text-[9px] text-slate-400">
-                        <span>█ Gross Expenses</span>
-                        <span>│ Repayments Received</span>
-                    </div>
                 </div>
                 
                 {/* Table */}
@@ -4745,7 +4722,7 @@ const AIAnalystExport = ({ expenses, merchantRules }) => {
             lines.push('');
             lines.push('*Expenses are categorized into three cost types for budgeting analysis:*');
             lines.push('- **Fixed:** Mandatory expenses (Rent, Daycare)');
-            lines.push('- **Semi-Fixed:** Necessary but variable (Household, Groceries, Subscriptions)');
+            lines.push('- **Semi-Fixed:** Necessary but variable (Household, Groceries)');
             lines.push('- **Variable:** Discretionary spending (all other categories)');
             lines.push('');
             
@@ -5625,8 +5602,8 @@ const App = () => {
                 </div>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <div className="bg-white p-5 rounded-2xl border border-green-200 shadow-lg">
-                        <h3 className="text-sm font-black text-slate-800 mb-1">🗂️ Category Treemap</h3>
-                        <p className="text-[10px] text-slate-400 mb-3">Hierarchy view: Category → Top Merchants within each</p>
+                        <h3 className="text-sm font-black text-slate-800 mb-1">🗂️ Category Breakdown</h3>
+                        <p className="text-[10px] text-slate-400 mb-3">Categories with their top merchants (hover for details)</p>
                         <div className="h-72"><MidRangeTreemap expenses={expenses} merchantRules={merchantRules}/></div>
                     </div>
                     <div className="bg-white p-5 rounded-2xl border border-green-200 shadow-lg">
