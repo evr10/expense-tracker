@@ -5413,8 +5413,16 @@ const App = () => {
                             }
                         }
                     } else {
-                        transactionType = 'expense';
-                        finalAmount = Math.abs(rawAmount);
+                        // CREDIT CARD: Check if this is a refund (negative amount in CSV)
+                        // Negative rawAmount = refund/credit = store as negative (reduces total spend)
+                        // Positive rawAmount = charge/expense = store as positive
+                        if (rawAmount < 0) {
+                            transactionType = 'refund';
+                            finalAmount = rawAmount; // Keep negative
+                        } else {
+                            transactionType = 'expense';
+                            finalAmount = Math.abs(rawAmount);
+                        }
                     }
                 }
                 
