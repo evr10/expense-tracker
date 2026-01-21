@@ -3290,7 +3290,7 @@ const StylecomReimbursement = ({ expenses, merchantRules, paidIds, onTogglePaid 
                     <p className="text-xs text-green-500 mt-1">{kpis.repaymentCount} repayment wires</p>
                 </div>
                 <div className="bg-white p-5 rounded-2xl border border-amber-200 shadow-lg">
-                    <h3 className="text-[10px] font-bold text-amber-600 uppercase">⚡ Net Owed to Me</h3>
+                    <h3 className="text-[10px] font-bold text-amber-600 uppercase">⚡ Net Owed to Family</h3>
                     <p className={`text-3xl font-black ${kpis.netOwed > 0 ? 'text-amber-600' : 'text-green-600'}`}>
                         ${Math.abs(kpis.netOwed).toLocaleString(undefined, {maximumFractionDigits: 0})}
                     </p>
@@ -3448,6 +3448,42 @@ const StylecomReimbursement = ({ expenses, merchantRules, paidIds, onTogglePaid 
                         📝 {viewMode === 'expenses' ? 'Expenses' : 'Repayments'} {selectedQuarter !== 'all' && `- ${selectedQuarter}`}
                     </h3>
                     <div className="flex gap-2 items-center">
+                        {/* Export Button */}
+                        <button 
+                            onClick={() => {
+                                // Export current view to Excel/CSV
+                                const dataToExport = filteredTransactions.map(e => ({
+                                    Date: e.date,
+                                    Description: e.description,
+                                    Account: e.account,
+                                    Amount: Math.abs(safe(e.amount)).toFixed(2),
+                                    Type: safe(e.amount) < 0 ? 'Repayment' : 'Expense',
+                                    'Marked Paid': viewMode === 'expenses' ? (paidIds.has(e.id) ? 'Yes' : 'No') : 'N/A'
+                                }));
+                                
+                                // Create CSV content
+                                const headers = ['Date', 'Description', 'Account', 'Amount', 'Type', 'Marked Paid'];
+                                const csvContent = [
+                                    headers.join(','),
+                                    ...dataToExport.map(row => 
+                                        headers.map(h => `"${String(row[h] || '').replace(/"/g, '""')}"`).join(',')
+                                    )
+                                ].join('\n');
+                                
+                                // Download
+                                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = `stylecom_${viewMode}_${selectedQuarter === 'all' ? 'all' : selectedQuarter.replace(' ', '_')}_${new Date().toISOString().split('T')[0]}.csv`;
+                                a.click();
+                                URL.revokeObjectURL(url);
+                            }}
+                            className="px-3 py-1 bg-green-100 text-green-700 rounded-lg text-xs font-bold hover:bg-green-200 flex items-center gap-1"
+                            title="Export to Excel/CSV"
+                        >
+                            📥 Export
+                        </button>
                         {/* View Mode Toggle */}
                         <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
                             <button 
@@ -5057,8 +5093,16 @@ const BulkImportDialog = ({ files, onClose, onConfirm, onRemoveFile }) => {
         cat: defaultHeaders.find(h=>/cat/i.test(h))||'' 
     });
     const [accType, setAccType] = useState(isHSBC ? 'checking' : 'credit');
+    // Sign convention for credit cards:
+    // 'pos_expense' = positive = expense, negative = refund (most common: Chase, Amex)
+    // 'neg_expense' = negative = expense, positive = refund (some banks)
+    // 'separate_cols' = separate debit/credit columns (Capital One style)
+    const [signConvention, setSignConvention] = useState('pos_expense');
     
     const headers = defaultHeaders;
+    
+    // Auto-detect if there's a credit column
+    const hasLikelyCreditCol = defaultHeaders.some(h => /^credit$/i.test(h));
     
     return (<div className="fixed inset-0 z-50 flex items-center justify-center p-4"><div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={onClose}/>
         <div className="relative bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden">
@@ -5087,7 +5131,7 @@ const BulkImportDialog = ({ files, onClose, onConfirm, onRemoveFile }) => {
             <div className="p-6 space-y-4 max-h-[50vh] overflow-y-auto">
                 {/* Account Type Selection */}
                 <div>
-                    <label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Account Type (applies to all files)</label>
+                    <label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Account Type</label>
                     <div className="grid grid-cols-2 gap-2">
                         <button onClick={() => setAccType('credit')} className={`p-3 rounded-xl text-sm font-bold border-2 transition-colors ${accType === 'credit' ? 'bg-indigo-50 border-indigo-500 text-indigo-700' : 'bg-slate-50 border-slate-200 text-slate-600'}`}>
                             💳 Credit Card
@@ -5098,32 +5142,67 @@ const BulkImportDialog = ({ files, onClose, onConfirm, onRemoveFile }) => {
                     </div>
                 </div>
                 
+                {/* Sign Convention - Only for Credit Cards */}
+                {accType === 'credit' && (
+                    <div>
+                        <label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Amount Format (How does your bank show charges?)</label>
+                        <div className="space-y-2">
+                            <button 
+                                onClick={() => { setSignConvention('pos_expense'); setMap({...map, credit: ''}); }}
+                                className={`w-full p-3 rounded-xl text-left border-2 transition-colors ${signConvention === 'pos_expense' ? 'bg-indigo-50 border-indigo-500' : 'bg-slate-50 border-slate-200'}`}
+                            >
+                                <div className="text-sm font-bold text-slate-700">➕ Charges are POSITIVE</div>
+                                <div className="text-[10px] text-slate-500 mt-0.5">$50 charge = +50, $20 refund = -20</div>
+                                <div className="text-[9px] text-slate-400">(Chase, Amex, most banks)</div>
+                            </button>
+                            <button 
+                                onClick={() => { setSignConvention('neg_expense'); setMap({...map, credit: ''}); }}
+                                className={`w-full p-3 rounded-xl text-left border-2 transition-colors ${signConvention === 'neg_expense' ? 'bg-amber-50 border-amber-500' : 'bg-slate-50 border-slate-200'}`}
+                            >
+                                <div className="text-sm font-bold text-slate-700">➖ Charges are NEGATIVE</div>
+                                <div className="text-[10px] text-slate-500 mt-0.5">$50 charge = -50, $20 refund = +20</div>
+                                <div className="text-[9px] text-slate-400">(Some European banks, inverted format)</div>
+                            </button>
+                            <button 
+                                onClick={() => setSignConvention('separate_cols')}
+                                className={`w-full p-3 rounded-xl text-left border-2 transition-colors ${signConvention === 'separate_cols' ? 'bg-green-50 border-green-500' : 'bg-slate-50 border-slate-200'}`}
+                            >
+                                <div className="text-sm font-bold text-slate-700">📊 Separate Debit/Credit Columns</div>
+                                <div className="text-[10px] text-slate-500 mt-0.5">Charges in one column, refunds in another (all positive)</div>
+                                <div className="text-[9px] text-slate-400">(Capital One, some banks)</div>
+                            </button>
+                        </div>
+                    </div>
+                )}
+                
                 <div className="grid grid-cols-2 gap-4">
                     <div><label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Date</label><select className="w-full p-3 bg-slate-50 rounded-xl text-sm font-semibold outline-none" value={map.date} onChange={e=>setMap({...map,date:e.target.value})}>{headers.map(h=><option key={h}>{h}</option>)}</select></div>
-                    <div><label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Amount (Debit)</label><select className="w-full p-3 bg-slate-50 rounded-xl text-sm font-semibold outline-none" value={map.amount} onChange={e=>setMap({...map,amount:e.target.value})}>{headers.map(h=><option key={h}>{h}</option>)}</select></div>
+                    <div><label className="text-[10px] font-black uppercase text-slate-400 block mb-2">{signConvention === 'separate_cols' ? 'Debit Column (Charges)' : 'Amount'}</label><select className="w-full p-3 bg-slate-50 rounded-xl text-sm font-semibold outline-none" value={map.amount} onChange={e=>setMap({...map,amount:e.target.value})}>{headers.map(h=><option key={h}>{h}</option>)}</select></div>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                    <div><label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Credit Column (optional)</label><select className="w-full p-3 bg-slate-50 rounded-xl text-sm font-semibold outline-none" value={map.credit||''} onChange={e=>setMap({...map,credit:e.target.value})}><option value="">-- None --</option>{headers.map(h=><option key={h}>{h}</option>)}</select></div>
-                    <div><label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Category Column (optional)</label><select className="w-full p-3 bg-slate-50 rounded-xl text-sm font-semibold outline-none" value={map.cat} onChange={e=>setMap({...map,cat:e.target.value})}><option value="">-- None --</option>{headers.map(h=><option key={h}>{h}</option>)}</select></div>
-                </div>
+                
+                {/* Credit Column - Only show for separate columns mode */}
+                {signConvention === 'separate_cols' && (
+                    <div className="grid grid-cols-2 gap-4">
+                        <div><label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Credit Column (Refunds/Payments)</label><select className="w-full p-3 bg-slate-50 rounded-xl text-sm font-semibold outline-none" value={map.credit||''} onChange={e=>setMap({...map,credit:e.target.value})}><option value="">-- Select --</option>{headers.map(h=><option key={h}>{h}</option>)}</select></div>
+                        <div><label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Category (optional)</label><select className="w-full p-3 bg-slate-50 rounded-xl text-sm font-semibold outline-none" value={map.cat} onChange={e=>setMap({...map,cat:e.target.value})}><option value="">-- None --</option>{headers.map(h=><option key={h}>{h}</option>)}</select></div>
+                    </div>
+                )}
+                
+                {signConvention !== 'separate_cols' && (
+                    <div><label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Category (optional)</label><select className="w-full p-3 bg-slate-50 rounded-xl text-sm font-semibold outline-none" value={map.cat} onChange={e=>setMap({...map,cat:e.target.value})}><option value="">-- None --</option>{headers.map(h=><option key={h}>{h}</option>)}</select></div>
+                )}
+                
                 <div><label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Description</label><select className="w-full p-3 bg-slate-50 rounded-xl text-sm font-semibold outline-none" value={map.desc} onChange={e=>setMap({...map,desc:e.target.value})}>{headers.map(h=><option key={h}>{h}</option>)}</select></div>
                 
                 {/* Info about account names */}
                 <div className="p-3 bg-blue-50 rounded-xl border border-blue-200">
                     <p className="text-xs text-blue-700 font-semibold">📁 Account Names from File Names</p>
-                    <p className="text-[10px] text-blue-600 mt-1">Each file's name (without extension) will be used as the account name for its transactions.</p>
+                    <p className="text-[10px] text-blue-600 mt-1">Each file's name (without extension) will be used as the account name.</p>
                 </div>
-                
-                {map.credit && (
-                    <div className="p-3 bg-green-50 rounded-xl border border-green-200">
-                        <p className="text-xs text-green-700 font-semibold">💳 Separate Debit/Credit Columns</p>
-                        <p className="text-[10px] text-green-600">Debit = expenses, Credit = payments/refunds</p>
-                    </div>
-                )}
             </div>
             <div className="p-6 bg-slate-50 flex gap-4">
                 <button onClick={onClose} className="flex-1 py-3 font-bold text-slate-500 rounded-xl hover:bg-slate-200">Cancel</button>
-                <button onClick={()=>onConfirm({...map, accType})} className="flex-1 py-3 bg-indigo-600 text-white font-black rounded-xl hover:bg-indigo-700">
+                <button onClick={()=>onConfirm({...map, accType, signConvention})} className="flex-1 py-3 bg-indigo-600 text-white font-black rounded-xl hover:bg-indigo-700">
                     Import {files.reduce((sum, f) => sum + f.data.length, 0)} Transactions
                 </button>
             </div>
@@ -5333,7 +5412,8 @@ const App = () => {
     
     const processBulkImport = (map) => {
         const isCheckingAccount = map.accType === 'checking';
-        const hasCreditColumn = map.credit && map.credit !== '';
+        const signConvention = map.signConvention || 'pos_expense'; // Default to positive = expense
+        const hasSeparateCols = signConvention === 'separate_cols' && map.credit && map.credit !== '';
         const importId = `imp-${Date.now()}`;
         const importedAt = new Date().toISOString();
         
@@ -5351,23 +5431,26 @@ const App = () => {
                 const desc = row[map.desc] || '';
                 const descLower = desc.toLowerCase();
                 
-                // Handle separate Debit/Credit columns (Capital One style)
                 let rawAmount = 0;
-                let isCredit = false;
+                let isRefundFromSeparateCol = false;
                 
-                if (hasCreditColumn) {
+                // CASE 1: Separate Debit/Credit columns (Capital One style)
+                if (hasSeparateCols) {
                     const creditRaw = String(row[map.credit]||'').replace(/[^\d.-]/g,'');
                     const debitRaw = String(row[map.amount]||'').replace(/[^\d.-]/g,'');
                     
                     if (creditRaw && creditRaw !== '0' && creditRaw !== '0.00') {
+                        // Credit column = refund/payment (make negative)
                         rawAmount = parseFloat(creditRaw) || 0;
-                        isCredit = true;
+                        isRefundFromSeparateCol = true;
                     } else if (debitRaw && debitRaw !== '0' && debitRaw !== '0.00') {
+                        // Debit column = expense (keep positive)
                         rawAmount = parseFloat(debitRaw) || 0;
                     } else {
                         return null;
                     }
                 } else {
+                    // CASE 2: Single amount column
                     const raw = String(row[map.amount]||'0').replace(/[^\d.-]/g,'');
                     rawAmount = parseFloat(raw) || 0;
                     if (raw === '' || raw === '0' || raw === '0.00') return null;
@@ -5376,8 +5459,9 @@ const App = () => {
                 let transactionType = 'expense';
                 let finalAmount = Math.abs(rawAmount);
                 
-                if (isCredit) {
-                    transactionType = 'payment';
+                // Handle separate column refunds first
+                if (isRefundFromSeparateCol) {
+                    transactionType = 'refund';
                     finalAmount = -Math.abs(rawAmount);
                 }
                 
@@ -5388,7 +5472,7 @@ const App = () => {
                 const isWithdrawal = descLower.includes('withdrawal');
                 const isDeposit = descLower.includes('deposit') && !isWithdrawal && !isOnlineTransfer;
                 
-                if (!isCredit) {
+                if (!isRefundFromSeparateCol) {
                     if (isVenmo) {
                         const isVenmoDeposit = descLower.includes('deposit') || descLower.includes('cashout');
                         if (isVenmoDeposit) {
@@ -5419,15 +5503,25 @@ const App = () => {
                             }
                         }
                     } else {
-                        // CREDIT CARD: Check if this is a refund (negative amount in CSV)
-                        // Negative rawAmount = refund/credit = store as negative (reduces total spend)
-                        // Positive rawAmount = charge/expense = store as positive
-                        if (rawAmount < 0) {
-                            transactionType = 'refund';
-                            finalAmount = rawAmount; // Keep negative
-                        } else {
-                            transactionType = 'expense';
-                            finalAmount = Math.abs(rawAmount);
+                        // CREDIT CARD: Apply sign convention
+                        if (signConvention === 'pos_expense') {
+                            // Positive = expense, Negative = refund (most common: Chase, Amex)
+                            if (rawAmount < 0) {
+                                transactionType = 'refund';
+                                finalAmount = rawAmount; // Keep negative
+                            } else {
+                                transactionType = 'expense';
+                                finalAmount = Math.abs(rawAmount);
+                            }
+                        } else if (signConvention === 'neg_expense') {
+                            // Negative = expense, Positive = refund (inverted)
+                            if (rawAmount > 0) {
+                                transactionType = 'refund';
+                                finalAmount = -Math.abs(rawAmount); // Make negative for our system
+                            } else {
+                                transactionType = 'expense';
+                                finalAmount = Math.abs(rawAmount); // Make positive for our system
+                            }
                         }
                     }
                 }
