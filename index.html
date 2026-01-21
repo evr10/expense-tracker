@@ -1615,6 +1615,295 @@ const SmallSpendCategories = ({ expenses, merchantRules }) => {
     );
 };
 
+// ============== $100-$500 BUCKET DEEP DIVE ==============
+// Part A: Treemap visualization (Category > Merchant hierarchy)
+const MidRangeTreemap = ({ expenses, merchantRules }) => {
+    const MIN_AMT = 100;
+    const MAX_AMT = 500;
+    
+    const { categoryData, totalSpend, txnCount } = useMemo(() => {
+        const sp = expenses.filter(e => {
+            const cat = getEffectiveCategory(e, merchantRules).category;
+            const amt = safe(e.amount);
+            return !DASHBOARD_EXCLUDED_CATEGORIES.includes(cat) && 
+                   getY(e.date) === 2025 && 
+                   amt >= MIN_AMT && 
+                   amt < MAX_AMT;
+        });
+        
+        const totalSpend = sp.reduce((sum, e) => sum + safe(e.amount), 0);
+        const txnCount = sp.length;
+        
+        // Group by category, then by merchant within each category
+        const byCategory = {};
+        sp.forEach(e => {
+            const cat = getEffectiveCategory(e, merchantRules).category;
+            const merchant = cleanMerchant(e.description);
+            if (!byCategory[cat]) byCategory[cat] = { sum: 0, count: 0, merchants: {} };
+            byCategory[cat].sum += safe(e.amount);
+            byCategory[cat].count += 1;
+            if (!byCategory[cat].merchants[merchant]) {
+                byCategory[cat].merchants[merchant] = { sum: 0, count: 0 };
+            }
+            byCategory[cat].merchants[merchant].sum += safe(e.amount);
+            byCategory[cat].merchants[merchant].count += 1;
+        });
+        
+        // Convert to array and sort
+        const categoryData = Object.entries(byCategory)
+            .map(([name, data]) => ({
+                name,
+                sum: data.sum,
+                count: data.count,
+                pct: totalSpend > 0 ? (data.sum / totalSpend * 100) : 0,
+                color: CAT_COLORS[name] || '#94a3b8',
+                merchants: Object.entries(data.merchants)
+                    .map(([mName, mData]) => ({ name: mName, sum: mData.sum, count: mData.count }))
+                    .sort((a, b) => b.sum - a.sum)
+                    .slice(0, 5) // Top 5 merchants per category
+            }))
+            .sort((a, b) => b.sum - a.sum);
+        
+        return { categoryData, totalSpend, txnCount };
+    }, [expenses, merchantRules]);
+    
+    if (categoryData.length === 0) return <Empty msg="No $100-$500 transactions found" />;
+    
+    // Calculate dimensions for treemap blocks
+    const totalArea = 100; // percentage
+    
+    return (
+        <div className="h-full flex flex-col">
+            {/* Treemap */}
+            <div className="flex-1 flex flex-wrap gap-1 content-start overflow-auto">
+                {categoryData.map(cat => {
+                    const catWidth = Math.max(cat.pct, 8); // Min 8% width for visibility
+                    return (
+                        <div 
+                            key={cat.name}
+                            className="rounded-lg overflow-hidden flex flex-col"
+                            style={{ 
+                                width: `calc(${Math.min(catWidth, 48)}% - 4px)`,
+                                minHeight: '80px',
+                                backgroundColor: cat.color + '20',
+                                border: `2px solid ${cat.color}`
+                            }}
+                        >
+                            {/* Category header */}
+                            <div 
+                                className="px-2 py-1 text-white text-[10px] font-bold truncate"
+                                style={{ backgroundColor: cat.color }}
+                                title={`${cat.name}: $${cat.sum.toLocaleString(undefined, {maximumFractionDigits: 0})} (${cat.count} txns)`}
+                            >
+                                {cat.name} · ${(cat.sum/1000).toFixed(1)}k
+                            </div>
+                            {/* Merchant blocks within category */}
+                            <div className="flex-1 p-1 flex flex-wrap gap-0.5 content-start">
+                                {cat.merchants.map(m => {
+                                    const mPct = cat.sum > 0 ? (m.sum / cat.sum * 100) : 0;
+                                    return (
+                                        <div 
+                                            key={m.name}
+                                            className="rounded px-1 py-0.5 text-[8px] font-semibold truncate"
+                                            style={{ 
+                                                backgroundColor: cat.color + '40',
+                                                color: cat.color,
+                                                maxWidth: '100%',
+                                                flex: `0 0 ${Math.max(mPct, 30)}%`
+                                            }}
+                                            title={`${m.name}: $${m.sum.toFixed(0)} (${m.count} txns)`}
+                                        >
+                                            {m.name.substring(0, 12)}{m.name.length > 12 ? '…' : ''} ${m.count}×
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+            {/* Summary */}
+            <div className="pt-2 border-t border-slate-100 mt-2 flex justify-between items-center">
+                <div className="text-[10px] text-slate-400">
+                    📦 {categoryData.length} categories · {txnCount} transactions
+                </div>
+                <div className="text-[10px] font-bold text-green-600">
+                    Total: ${totalSpend.toLocaleString(undefined, {maximumFractionDigits: 0})}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// Part B: Top 15 Merchants bar chart with frequency
+const MidRangeMerchants = ({ expenses, merchantRules }) => {
+    const MIN_AMT = 100;
+    const MAX_AMT = 500;
+    
+    const { merchantData, totalSpend, avgTxn } = useMemo(() => {
+        const sp = expenses.filter(e => {
+            const cat = getEffectiveCategory(e, merchantRules).category;
+            const amt = safe(e.amount);
+            return !DASHBOARD_EXCLUDED_CATEGORIES.includes(cat) && 
+                   getY(e.date) === 2025 && 
+                   amt >= MIN_AMT && 
+                   amt < MAX_AMT;
+        });
+        
+        const totalSpend = sp.reduce((sum, e) => sum + safe(e.amount), 0);
+        const avgTxn = sp.length > 0 ? totalSpend / sp.length : 0;
+        
+        // Group by merchant
+        const byMerchant = {};
+        sp.forEach(e => {
+            const merchant = cleanMerchant(e.description);
+            const cat = getEffectiveCategory(e, merchantRules).category;
+            if (!byMerchant[merchant]) {
+                byMerchant[merchant] = { sum: 0, count: 0, category: cat };
+            }
+            byMerchant[merchant].sum += safe(e.amount);
+            byMerchant[merchant].count += 1;
+        });
+        
+        const merchantData = Object.entries(byMerchant)
+            .map(([name, data]) => ({
+                name,
+                sum: data.sum,
+                count: data.count,
+                avg: data.sum / data.count,
+                category: data.category,
+                color: CAT_COLORS[data.category] || '#94a3b8'
+            }))
+            .sort((a, b) => b.sum - a.sum)
+            .slice(0, 15);
+        
+        return { merchantData, totalSpend, avgTxn };
+    }, [expenses, merchantRules]);
+    
+    if (merchantData.length === 0) return <Empty msg="No $100-$500 transactions found" />;
+    
+    const maxSum = merchantData[0]?.sum || 1;
+    const maxCount = Math.max(...merchantData.map(m => m.count));
+    
+    return (
+        <div className="h-full flex flex-col">
+            <div className="flex-1 overflow-auto space-y-1">
+                {merchantData.map((m, i) => (
+                    <div key={m.name} className="flex items-center gap-2">
+                        <div className="w-4 text-[9px] font-black text-slate-400">{i + 1}</div>
+                        <div className="w-28 text-[9px] font-semibold text-slate-600 truncate" title={`${m.name} (${m.category})`}>
+                            {m.name}
+                        </div>
+                        {/* Amount bar */}
+                        <div className="flex-1 h-5 bg-slate-100 rounded overflow-hidden relative">
+                            <div 
+                                className="h-full rounded"
+                                style={{ width: `${m.sum / maxSum * 100}%`, backgroundColor: m.color }}
+                            />
+                            {/* Count indicator overlay */}
+                            <div 
+                                className="absolute top-0 h-full border-r-2 border-slate-800"
+                                style={{ left: `${m.count / maxCount * 100}%` }}
+                                title={`${m.count} transactions`}
+                            />
+                        </div>
+                        <div className="w-12 text-[9px] font-bold text-slate-700 text-right">${(m.sum/1000).toFixed(1)}k</div>
+                        {/* Transaction count bubble */}
+                        <div 
+                            className="w-8 h-5 rounded-full flex items-center justify-center text-[9px] font-black text-white"
+                            style={{ backgroundColor: m.color }}
+                            title={`${m.count} transactions, avg $${m.avg.toFixed(0)}`}
+                        >
+                            {m.count}×
+                        </div>
+                    </div>
+                ))}
+            </div>
+            {/* Legend & Summary */}
+            <div className="pt-2 border-t border-slate-100 mt-2">
+                <div className="flex justify-between items-center">
+                    <div className="text-[9px] text-slate-400">
+                        <span className="inline-block w-3 h-3 bg-slate-100 rounded mr-1 align-middle"></span>$ spent
+                        <span className="inline-block w-0.5 h-3 bg-slate-800 mx-2 align-middle"></span>frequency
+                    </div>
+                    <div className="text-[10px] font-bold text-slate-600">
+                        Avg txn: ${avgTxn.toFixed(0)}
+                    </div>
+                </div>
+                <div className="text-[9px] text-slate-400 mt-1">
+                    🎯 {merchantData.filter(m => m.count >= 3).length} repeat merchants ({'>'}2× visits)
+                </div>
+            </div>
+        </div>
+    );
+};
+        
+        const totalSmallSpend = sp.reduce((sum, e) => sum + safe(e.amount), 0);
+        const txnCount = sp.length;
+        
+        // Group by category
+        const byCategory = {};
+        sp.forEach(e => {
+            const cat = getEffectiveCategory(e, merchantRules).category;
+            if (!byCategory[cat]) byCategory[cat] = { sum: 0, count: 0 };
+            byCategory[cat].sum += safe(e.amount);
+            byCategory[cat].count += 1;
+        });
+        
+        const categoryData = Object.entries(byCategory)
+            .map(([name, data]) => ({
+                name,
+                sum: data.sum,
+                count: data.count,
+                pct: totalSmallSpend > 0 ? (data.sum / totalSmallSpend * 100) : 0,
+                color: CAT_COLORS[name] || '#94a3b8'
+            }))
+            .sort((a, b) => b.sum - a.sum)
+            .slice(0, 10);
+        
+        return { categoryData, totalSmallSpend, txnCount };
+    }, [expenses, merchantRules]);
+    
+    if (categoryData.length === 0) return <Empty msg="No small transactions found" />;
+    
+    const maxSum = categoryData[0]?.sum || 1;
+    
+    return (
+        <div className="h-full flex flex-col">
+            <div className="flex-1 overflow-auto space-y-1.5">
+                {categoryData.map((cat, i) => (
+                    <div key={cat.name} className="flex items-center gap-2">
+                        <div className="w-5 text-[10px] font-black text-slate-400">{i + 1}</div>
+                        <div className="w-24 text-[10px] font-semibold text-slate-600 truncate" title={cat.name}>{cat.name}</div>
+                        <div className="flex-1 h-5 bg-slate-100 rounded overflow-hidden">
+                            <div 
+                                className="h-full rounded"
+                                style={{ width: `${cat.sum / maxSum * 100}%`, backgroundColor: cat.color }}
+                            />
+                        </div>
+                        <div className="w-14 text-[9px] font-bold text-slate-700 text-right">${(cat.sum/1000).toFixed(1)}k</div>
+                        <div className="w-10 text-[9px] font-semibold text-slate-400 text-right">{cat.count}</div>
+                        <div className="w-10 text-[9px] font-bold text-right" style={{ color: cat.color }}>{cat.pct.toFixed(0)}%</div>
+                    </div>
+                ))}
+            </div>
+            <div className="pt-2 border-t border-slate-100 mt-2">
+                <div className="flex justify-between items-center">
+                    <div className="text-[10px] text-slate-400">
+                        💰 {txnCount.toLocaleString()} transactions under ${THRESHOLD}
+                    </div>
+                    <div className="text-[10px] font-bold text-slate-600">
+                        Total: ${totalSmallSpend.toLocaleString(undefined, {maximumFractionDigits: 0})}
+                    </div>
+                </div>
+                <div className="text-[9px] text-slate-400 mt-1">
+                    Top 3 leaks: {categoryData.slice(0, 3).map(c => c.name).join(', ')}
+                </div>
+            </div>
+        </div>
+    );
+};
+
 // ============== CATEGORY MANAGEMENT PAGE ==============
 const CategoryEditModal = ({ expense, merchantRules, allAccounts, onSave, onClose }) => {
     const merchant = cleanMerchant(expense.description);
@@ -4653,27 +4942,52 @@ const AIAnalystExport = ({ expenses, merchantRules }) => {
 };
 
 // ============== IMPORT DIALOG ==============
-const ImportDialog = ({ headers, onClose, onConfirm, defaultAccountName = '' }) => {
-    const isHSBC = defaultAccountName.toLowerCase().includes('hsbc');
-    const [map, setMap] = useState({ date: headers.find(h=>/date/i.test(h))||headers[0], amount: headers.find(h=>/amount|debit/i.test(h))||headers[1], desc: headers.find(h=>/desc|memo/i.test(h))||headers[2], cat: headers.find(h=>/cat/i.test(h))||'' });
-    const [acc, setAcc] = useState(defaultAccountName);
-    const [accType, setAccType] = useState(isHSBC ? 'checking' : 'credit'); // Auto-detect HSBC as checking
+// ============== BULK IMPORT DIALOG ==============
+const BulkImportDialog = ({ files, onClose, onConfirm, onRemoveFile }) => {
+    // All files share the same settings
+    const firstFile = files[0];
+    const isHSBC = firstFile?.name.toLowerCase().includes('hsbc');
+    const defaultHeaders = firstFile?.headers || [];
+    
+    const [map, setMap] = useState({ 
+        date: defaultHeaders.find(h=>/date/i.test(h))||defaultHeaders[0], 
+        amount: defaultHeaders.find(h=>/amount|debit/i.test(h))||defaultHeaders[1], 
+        desc: defaultHeaders.find(h=>/desc|memo/i.test(h))||defaultHeaders[2], 
+        cat: defaultHeaders.find(h=>/cat/i.test(h))||'' 
+    });
+    const [accType, setAccType] = useState(isHSBC ? 'checking' : 'credit');
+    
+    // Use first file's name as default, user can override
+    const defaultAccName = firstFile?.name.replace(/\.[^/.]+$/, '') || '';
+    const [acc, setAcc] = useState(defaultAccName);
+    
+    const headers = defaultHeaders;
     
     return (<div className="fixed inset-0 z-50 flex items-center justify-center p-4"><div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={onClose}/>
         <div className="relative bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden">
             <div className="p-6 border-b border-slate-100">
-                <h2 className="text-xl font-black text-slate-800">Import CSV</h2>
-                <p className="text-sm text-slate-500 mt-1">📄 {defaultAccountName || 'Unknown file'}</p>
+                <h2 className="text-xl font-black text-slate-800">Import {files.length} CSV File{files.length > 1 ? 's' : ''}</h2>
+                <div className="mt-2 space-y-1">
+                    {files.map((f, i) => (
+                        <div key={i} className="flex items-center justify-between px-3 py-1.5 bg-slate-50 rounded-lg">
+                            <span className="text-xs font-semibold text-slate-600 truncate flex-1">📄 {f.name}</span>
+                            <span className="text-[10px] text-slate-400 mx-2">{f.data.length} rows</span>
+                            {files.length > 1 && (
+                                <button onClick={() => onRemoveFile(i)} className="text-red-400 hover:text-red-600 text-xs font-bold">✕</button>
+                            )}
+                        </div>
+                    ))}
+                </div>
                 {isHSBC && (
                     <div className="mt-2 px-3 py-1.5 bg-green-100 text-green-700 rounded-lg text-xs font-semibold inline-block">
                         ✓ HSBC format detected - columns auto-mapped
                     </div>
                 )}
             </div>
-            <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
+            <div className="p-6 space-y-4 max-h-[50vh] overflow-y-auto">
                 {/* Account Type Selection */}
                 <div>
-                    <label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Account Type</label>
+                    <label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Account Type (applies to all files)</label>
                     <div className="grid grid-cols-2 gap-2">
                         <button onClick={() => setAccType('credit')} className={`p-3 rounded-xl text-sm font-bold border-2 transition-colors ${accType === 'credit' ? 'bg-indigo-50 border-indigo-500 text-indigo-700' : 'bg-slate-50 border-slate-200 text-slate-600'}`}>
                             💳 Credit Card
@@ -4682,9 +4996,6 @@ const ImportDialog = ({ headers, onClose, onConfirm, defaultAccountName = '' }) 
                             🏦 Checking/Debit
                         </button>
                     </div>
-                    <p className="text-[10px] text-slate-400 mt-2">
-                        {accType === 'credit' ? 'All transactions treated as expenses' : 'Handles income, transfers, and Venmo reimbursements'}
-                    </p>
                 </div>
                 
                 <div className="grid grid-cols-2 gap-4">
@@ -4692,39 +5003,100 @@ const ImportDialog = ({ headers, onClose, onConfirm, defaultAccountName = '' }) 
                     <div><label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Amount (Debit)</label><select className="w-full p-3 bg-slate-50 rounded-xl text-sm font-semibold outline-none" value={map.amount} onChange={e=>setMap({...map,amount:e.target.value})}>{headers.map(h=><option key={h}>{h}</option>)}</select></div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                    <div><label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Credit Column (optional)</label><select className="w-full p-3 bg-slate-50 rounded-xl text-sm font-semibold outline-none" value={map.credit||''} onChange={e=>setMap({...map,credit:e.target.value})}><option value="">-- None (single amount column) --</option>{headers.map(h=><option key={h}>{h}</option>)}</select></div>
+                    <div><label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Credit Column (optional)</label><select className="w-full p-3 bg-slate-50 rounded-xl text-sm font-semibold outline-none" value={map.credit||''} onChange={e=>setMap({...map,credit:e.target.value})}><option value="">-- None --</option>{headers.map(h=><option key={h}>{h}</option>)}</select></div>
                     <div><label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Category Column (optional)</label><select className="w-full p-3 bg-slate-50 rounded-xl text-sm font-semibold outline-none" value={map.cat} onChange={e=>setMap({...map,cat:e.target.value})}><option value="">-- None --</option>{headers.map(h=><option key={h}>{h}</option>)}</select></div>
                 </div>
                 <div><label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Description</label><select className="w-full p-3 bg-slate-50 rounded-xl text-sm font-semibold outline-none" value={map.desc} onChange={e=>setMap({...map,desc:e.target.value})}>{headers.map(h=><option key={h}>{h}</option>)}</select></div>
-                <div><label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Account Name (from filename)</label><input type="text" placeholder="e.g., Chase Checking, Amex Gold" value={acc} onChange={e=>setAcc(e.target.value)} className="w-full p-3 bg-slate-50 rounded-xl text-sm font-semibold outline-none border-2 border-transparent focus:border-indigo-500"/></div>
+                <div><label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Account Name</label><input type="text" placeholder="e.g., Chase Checking, Amex Gold" value={acc} onChange={e=>setAcc(e.target.value)} className="w-full p-3 bg-slate-50 rounded-xl text-sm font-semibold outline-none border-2 border-transparent focus:border-indigo-500"/></div>
                 
-                {/* Info box for Credit column */}
                 {map.credit && (
                     <div className="p-3 bg-green-50 rounded-xl border border-green-200">
-                        <p className="text-xs text-green-700 font-semibold">💳 Separate Debit/Credit Columns (Capital One style)</p>
-                        <ul className="text-[10px] text-green-600 mt-1 space-y-0.5">
-                            <li>• Debit column = expenses (charges)</li>
-                            <li>• Credit column = payments/refunds (will be negative)</li>
-                        </ul>
-                    </div>
-                )}
-                
-                {/* Info box for checking accounts */}
-                {accType === 'checking' && !map.credit && (
-                    <div className="p-3 bg-blue-50 rounded-xl border border-blue-200">
-                        <p className="text-xs text-blue-700 font-semibold">💡 Checking Account Import</p>
-                        <ul className="text-[10px] text-blue-600 mt-1 space-y-0.5">
-                            <li>• Negative amounts = expenses (kept positive)</li>
-                            <li>• Positive amounts = income/deposits (auto-categorized)</li>
-                            <li>• Venmo incoming = reimbursement (shown as credit)</li>
-                            <li>• Credit card payments auto-excluded</li>
-                        </ul>
+                        <p className="text-xs text-green-700 font-semibold">💳 Separate Debit/Credit Columns</p>
+                        <p className="text-[10px] text-green-600">Debit = expenses, Credit = payments/refunds</p>
                     </div>
                 )}
             </div>
-            <div className="p-6 bg-slate-50 flex gap-4"><button onClick={onClose} className="flex-1 py-3 font-bold text-slate-500 rounded-xl hover:bg-slate-200">Cancel</button><button onClick={()=>onConfirm({...map, acc, accType})} className="flex-1 py-3 bg-indigo-600 text-white font-black rounded-xl hover:bg-indigo-700">Import</button></div>
+            <div className="p-6 bg-slate-50 flex gap-4">
+                <button onClick={onClose} className="flex-1 py-3 font-bold text-slate-500 rounded-xl hover:bg-slate-200">Cancel</button>
+                <button onClick={()=>onConfirm({...map, acc, accType})} className="flex-1 py-3 bg-indigo-600 text-white font-black rounded-xl hover:bg-indigo-700">
+                    Import {files.reduce((sum, f) => sum + f.data.length, 0)} Transactions
+                </button>
+            </div>
         </div>
     </div>);
+};
+
+// ============== IMPORT HISTORY PANEL ==============
+const ImportHistoryPanel = ({ importHistory, onDeleteImport, onClose }) => {
+    const totalTxns = importHistory.reduce((sum, h) => sum + h.count, 0);
+    
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={onClose}/>
+            <div className="relative bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden">
+                <div className="p-6 border-b border-slate-100">
+                    <h2 className="text-xl font-black text-slate-800">📚 Import History</h2>
+                    <p className="text-sm text-slate-500 mt-1">{importHistory.length} imports · {totalTxns.toLocaleString()} total transactions</p>
+                </div>
+                <div className="p-6 max-h-[60vh] overflow-y-auto">
+                    {importHistory.length === 0 ? (
+                        <div className="text-center py-12 text-slate-400">
+                            <div className="text-4xl mb-2">📭</div>
+                            <p className="font-semibold">No imports yet</p>
+                            <p className="text-xs mt-1">Import CSV files to see them here</p>
+                        </div>
+                    ) : (
+                        <div className="space-y-2">
+                            {importHistory.map((h, i) => (
+                                <div key={h.id} className="flex items-center gap-4 p-4 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors">
+                                    <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-black text-sm">
+                                        {i + 1}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="font-bold text-slate-800 truncate">{h.fileName}</div>
+                                        <div className="text-[10px] text-slate-400 flex gap-3 mt-0.5">
+                                            <span>📅 {new Date(h.importedAt).toLocaleDateString()}</span>
+                                            <span>💳 {h.account}</span>
+                                            <span>📊 {h.count} txns</span>
+                                        </div>
+                                    </div>
+                                    <div className="text-right">
+                                        <div className="text-sm font-black text-slate-700">${h.totalAmount.toLocaleString(undefined, {maximumFractionDigits: 0})}</div>
+                                        <div className="text-[10px] text-slate-400">{h.accountType}</div>
+                                    </div>
+                                    <button 
+                                        onClick={() => {
+                                            if (confirm(`Delete all ${h.count} transactions from "${h.fileName}"?`)) {
+                                                onDeleteImport(h.id);
+                                            }
+                                        }}
+                                        className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                        title="Delete this import"
+                                    >
+                                        🗑️
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+                <div className="p-6 bg-slate-50 flex justify-between items-center">
+                    <button 
+                        onClick={() => {
+                            if (importHistory.length > 0 && confirm(`Delete ALL ${totalTxns} transactions from ${importHistory.length} imports?`)) {
+                                importHistory.forEach(h => onDeleteImport(h.id));
+                            }
+                        }}
+                        className="px-4 py-2 text-red-500 font-bold text-sm hover:bg-red-50 rounded-xl"
+                        disabled={importHistory.length === 0}
+                    >
+                        🗑️ Delete All
+                    </button>
+                    <button onClick={onClose} className="px-6 py-3 bg-indigo-600 text-white font-black rounded-xl hover:bg-indigo-700">Done</button>
+                </div>
+            </div>
+        </div>
+    );
 };
 
 // ============== MAIN APP ==============
@@ -4733,8 +5105,9 @@ const App = () => {
     const [merchantRules, setMerchantRules] = useState({});
     const [paidStylecomIds, setPaidStylecomIds] = useState(new Set());
     const [costTypeOverrides, setCostTypeOverrides] = useState({});
-    const [importData, setImportData] = useState(null);
-    const [importFileName, setImportFileName] = useState('');
+    const [pendingFiles, setPendingFiles] = useState([]); // Array of {name, data, headers}
+    const [importHistory, setImportHistory] = useState([]); // Track imports for deletion
+    const [showImportHistory, setShowImportHistory] = useState(false);
     const [msg, setMsg] = useState('');
     const [tab, setTab] = useState('dashboard');
 
@@ -4747,12 +5120,18 @@ const App = () => {
             const saved = localStorage.getItem('stylecom_paid_ids');
             if (saved) setPaidStylecomIds(new Set(JSON.parse(saved)));
         } catch {}
+        // Load import history
+        try {
+            const savedHistory = localStorage.getItem('import_history');
+            if (savedHistory) setImportHistory(JSON.parse(savedHistory));
+        } catch {}
     }, []);
     
     useEffect(() => { localStorage.setItem('expense_v9', JSON.stringify(expenses)); }, [expenses]);
     useEffect(() => { localStorage.setItem('merchant_rules_v2', JSON.stringify(merchantRules)); }, [merchantRules]);
     useEffect(() => { localStorage.setItem('cost_type_overrides', JSON.stringify(costTypeOverrides)); }, [costTypeOverrides]);
     useEffect(() => { localStorage.setItem('stylecom_paid_ids', JSON.stringify([...paidStylecomIds])); }, [paidStylecomIds]);
+    useEffect(() => { localStorage.setItem('import_history', JSON.stringify(importHistory)); }, [importHistory]);
 
     const toggleStylecomPaid = (id) => {
         setPaidStylecomIds(prev => {
@@ -4783,200 +5162,211 @@ const App = () => {
         setTimeout(() => setMsg(''), 3000);
     };
 
-    const handleFile = e => { 
-        const f = e.target.files[0]; 
-        if (!f) return; 
-        // Extract filename without extension for default account name
-        const fileName = f.name.replace(/\.[^/.]+$/, ''); // Remove extension
-        setImportFileName(fileName);
+    const handleFiles = e => { 
+        const fileList = Array.from(e.target.files).slice(0, 5); // Max 5 files
+        if (!fileList.length) return;
         
-        // Check if this is an HSBC file (no headers)
-        const isHSBC = fileName.toLowerCase().includes('hsbc');
-        
-        if (isHSBC) {
-            // HSBC files have no headers - parse without header row
-            Papa.parse(f, { 
-                header: false, 
-                skipEmptyLines: true, 
-                complete: r => { 
-                    if (r.data.length) {
-                        // Transform headerless data to have consistent structure
-                        // HSBC format: Date, Description, Amount, Balance
-                        const headers = ['Date', 'Description', 'Amount', 'Balance'];
-                        const transformedData = r.data.map(row => {
-                            const obj = {};
-                            headers.forEach((h, i) => {
-                                let value = row[i] || '';
-                                // Clean up the data
-                                if (h === 'Description') {
-                                    // Strip excessive whitespace and normalize
-                                    value = value.replace(/\s+/g, ' ').trim();
-                                } else if (h === 'Amount' || h === 'Balance') {
-                                    // Remove commas from numbers (they're in quotes like "1,234.56")
-                                    value = String(value).replace(/,/g, '');
-                                }
-                                obj[h] = value;
+        // Parse all files
+        const parsePromises = fileList.map(f => new Promise((resolve) => {
+            const fileName = f.name.replace(/\.[^/.]+$/, '');
+            const isHSBC = fileName.toLowerCase().includes('hsbc');
+            
+            if (isHSBC) {
+                Papa.parse(f, { 
+                    header: false, 
+                    skipEmptyLines: true, 
+                    complete: r => { 
+                        if (r.data.length) {
+                            const headers = ['Date', 'Description', 'Amount', 'Balance'];
+                            const transformedData = r.data.map(row => {
+                                const obj = {};
+                                headers.forEach((h, i) => {
+                                    let value = row[i] || '';
+                                    if (h === 'Description') {
+                                        value = value.replace(/\s+/g, ' ').trim();
+                                    } else if (h === 'Amount' || h === 'Balance') {
+                                        value = String(value).replace(/,/g, '');
+                                    }
+                                    obj[h] = value;
+                                });
+                                return obj;
                             });
-                            return obj;
-                        });
-                        
-                        // Create a result object that looks like PapaParse with headers
-                        setImportData({
-                            data: transformedData,
-                            meta: { fields: headers }
-                        });
-                    }
-                } 
-            });
-        } else {
-            // Standard CSV with headers
-            Papa.parse(f, { header: true, skipEmptyLines: true, complete: r => { if (r.data.length) setImportData(r); } }); 
-        }
+                            resolve({ name: f.name, data: transformedData, headers });
+                        } else {
+                            resolve(null);
+                        }
+                    } 
+                });
+            } else {
+                Papa.parse(f, { 
+                    header: true, 
+                    skipEmptyLines: true, 
+                    complete: r => { 
+                        if (r.data.length) {
+                            resolve({ name: f.name, data: r.data, headers: r.meta.fields });
+                        } else {
+                            resolve(null);
+                        }
+                    } 
+                });
+            }
+        }));
+        
+        Promise.all(parsePromises).then(results => {
+            const validFiles = results.filter(Boolean);
+            if (validFiles.length) {
+                setPendingFiles(validFiles);
+            }
+        });
+        
         e.target.value = ''; 
     };
     
-    const processImport = (map) => {
+    const removePendingFile = (index) => {
+        setPendingFiles(prev => prev.filter((_, i) => i !== index));
+    };
+    
+    const processBulkImport = (map) => {
         const isCheckingAccount = map.accType === 'checking';
-        const isHSBC = (map.acc || '').toLowerCase().includes('hsbc');
         const hasCreditColumn = map.credit && map.credit !== '';
+        const importId = `imp-${Date.now()}`;
+        const importedAt = new Date().toISOString();
         
-        const newExp = importData.data.map((row, i) => {
-            const desc = row[map.desc] || '';
-            const descLower = desc.toLowerCase();
+        let allNewExp = [];
+        const newHistoryEntries = [];
+        
+        // Process each file
+        pendingFiles.forEach((file, fileIdx) => {
+            const fileImportId = `${importId}-${fileIdx}`;
+            const isHSBC = file.name.toLowerCase().includes('hsbc');
             
-            // Handle separate Debit/Credit columns (Capital One style)
-            let rawAmount = 0;
-            let isCredit = false;
-            
-            if (hasCreditColumn) {
-                // Check if this row has a credit (payment/refund)
-                const creditRaw = String(row[map.credit]||'').replace(/[^\d.-]/g,'');
-                const debitRaw = String(row[map.amount]||'').replace(/[^\d.-]/g,'');
+            const newExp = file.data.map((row, i) => {
+                const desc = row[map.desc] || '';
+                const descLower = desc.toLowerCase();
                 
-                if (creditRaw && creditRaw !== '0' && creditRaw !== '0.00') {
-                    // This is a credit (payment/refund) - make it negative
-                    rawAmount = parseFloat(creditRaw) || 0;
-                    isCredit = true;
-                } else if (debitRaw && debitRaw !== '0' && debitRaw !== '0.00') {
-                    // This is a debit (expense) - keep positive
-                    rawAmount = parseFloat(debitRaw) || 0;
-                } else {
-                    // Both empty - skip
-                    return null;
-                }
-            } else {
-                // Single amount column
-                const raw = String(row[map.amount]||'0').replace(/[^\d.-]/g,'');
-                rawAmount = parseFloat(raw) || 0;
+                // Handle separate Debit/Credit columns (Capital One style)
+                let rawAmount = 0;
+                let isCredit = false;
                 
-                // Only skip truly zero amounts (not small ones like 0.01)
-                if (raw === '' || raw === '0' || raw === '0.00') return null;
-            }
-            
-            // Determine transaction type and final amount
-            let transactionType = 'expense';
-            let finalAmount = Math.abs(rawAmount);
-            
-            // If this is a credit from separate column, make it negative
-            if (isCredit) {
-                transactionType = 'payment';
-                finalAmount = -Math.abs(rawAmount);
-            }
-            
-            // Check if this is a Venmo transaction (by description, not amount sign)
-            const isVenmo = descLower.includes('venmo');
-            
-            // Check for ONLINE TRANSFER (HSBC style) - these are internal transfers
-            const isOnlineTransfer = descLower.includes('online transfer to') || 
-                                     descLower.includes('online transfer from') ||
-                                     descLower.includes('ach payment to');
-            
-            // CRITICAL: Check if description indicates a WITHDRAWAL (money going OUT)
-            // This overrides the raw amount sign for checking accounts
-            const isWithdrawal = descLower.includes('withdrawal');
-            const isDeposit = descLower.includes('deposit') && !isWithdrawal && !isOnlineTransfer;
-            
-            // Only apply these rules if NOT already handled by separate credit column
-            if (!isCredit) {
-                if (isVenmo) {
-                    // Venmo: Use description keywords to determine direction
-                    // "Withdrawal" = money going OUT = expense (positive)
-                    // "Deposit" or "Cashout" = money coming IN = reimbursement (negative)
-                    const isVenmoDeposit = descLower.includes('deposit') || descLower.includes('cashout');
+                if (hasCreditColumn) {
+                    const creditRaw = String(row[map.credit]||'').replace(/[^\d.-]/g,'');
+                    const debitRaw = String(row[map.amount]||'').replace(/[^\d.-]/g,'');
                     
-                    if (isVenmoDeposit) {
-                        // Venmo deposit/cashout = reimbursement = NEGATIVE expense
-                        transactionType = 'venmo-reimbursement';
-                        finalAmount = -Math.abs(rawAmount);
+                    if (creditRaw && creditRaw !== '0' && creditRaw !== '0.00') {
+                        rawAmount = parseFloat(creditRaw) || 0;
+                        isCredit = true;
+                    } else if (debitRaw && debitRaw !== '0' && debitRaw !== '0.00') {
+                        rawAmount = parseFloat(debitRaw) || 0;
                     } else {
-                        // Venmo withdrawal/payment or unspecified = expense = POSITIVE
-                        transactionType = 'venmo-payment';
-                        finalAmount = Math.abs(rawAmount);
+                        return null;
                     }
-                } else if (isOnlineTransfer) {
-                    // HSBC Online Transfers - categorize as transfer (excluded from expenses)
-                    transactionType = 'transfer';
-                    finalAmount = Math.abs(rawAmount);
-                } else if (isCheckingAccount) {
-                    // Checking account: Use DESCRIPTION to determine direction, not amount sign
-                    // "Withdrawal" = money OUT = expense (regardless of sign in CSV)
-                    // "Deposit" = money IN = income
-                    
-                    if (isWithdrawal) {
-                        // ALL withdrawals are EXPENSES (money leaving account)
-                        transactionType = 'expense';
-                        finalAmount = Math.abs(rawAmount);
-                    } else if (isDeposit) {
-                        // Deposits are income - store as NEGATIVE so they reduce total expenses
-                        transactionType = 'income';
-                        finalAmount = -Math.abs(rawAmount);
-                    } else {
-                        // Fallback: use raw amount sign
-                        const isIncoming = rawAmount > 0;
-                        if (isIncoming) {
-                            transactionType = 'income';
-                            finalAmount = -Math.abs(rawAmount); // Income = negative
+                } else {
+                    const raw = String(row[map.amount]||'0').replace(/[^\d.-]/g,'');
+                    rawAmount = parseFloat(raw) || 0;
+                    if (raw === '' || raw === '0' || raw === '0.00') return null;
+                }
+                
+                let transactionType = 'expense';
+                let finalAmount = Math.abs(rawAmount);
+                
+                if (isCredit) {
+                    transactionType = 'payment';
+                    finalAmount = -Math.abs(rawAmount);
+                }
+                
+                const isVenmo = descLower.includes('venmo');
+                const isOnlineTransfer = descLower.includes('online transfer to') || 
+                                         descLower.includes('online transfer from') ||
+                                         descLower.includes('ach payment to');
+                const isWithdrawal = descLower.includes('withdrawal');
+                const isDeposit = descLower.includes('deposit') && !isWithdrawal && !isOnlineTransfer;
+                
+                if (!isCredit) {
+                    if (isVenmo) {
+                        const isVenmoDeposit = descLower.includes('deposit') || descLower.includes('cashout');
+                        if (isVenmoDeposit) {
+                            transactionType = 'venmo-reimbursement';
+                            finalAmount = -Math.abs(rawAmount);
                         } else {
-                            transactionType = 'expense';
+                            transactionType = 'venmo-payment';
                             finalAmount = Math.abs(rawAmount);
                         }
+                    } else if (isOnlineTransfer) {
+                        transactionType = 'transfer';
+                        finalAmount = Math.abs(rawAmount);
+                    } else if (isCheckingAccount) {
+                        if (isWithdrawal) {
+                            transactionType = 'expense';
+                            finalAmount = Math.abs(rawAmount);
+                        } else if (isDeposit) {
+                            transactionType = 'income';
+                            finalAmount = -Math.abs(rawAmount);
+                        } else {
+                            const isIncoming = rawAmount > 0;
+                            if (isIncoming) {
+                                transactionType = 'income';
+                                finalAmount = -Math.abs(rawAmount);
+                            } else {
+                                transactionType = 'expense';
+                                finalAmount = Math.abs(rawAmount);
+                            }
+                        }
+                    } else {
+                        transactionType = 'expense';
+                        finalAmount = Math.abs(rawAmount);
                     }
-                } else {
-                    // Credit card: all transactions are expenses (positive amounts)
-                    transactionType = 'expense';
-                    finalAmount = Math.abs(rawAmount);
                 }
-            }
+                
+                const csvCategory = map.cat && row[map.cat] ? fuzzyMatchCSV(row[map.cat]) : 'Uncategorized';
+                const cleanedDesc = cleanDescription(desc);
+                const subscriptionDetection = detectSubscription(cleanedDesc);
+                
+                return { 
+                    id: `e-${Date.now()}-${fileIdx}-${i}`, 
+                    importId: fileImportId,  // Track which import this came from
+                    date: row[map.date] || new Date().toISOString().split('T')[0], 
+                    description: cleanedDesc,
+                    rawDescription: desc,
+                    amount: finalAmount,
+                    rawAmount: rawAmount,
+                    transactionType: transactionType,
+                    accountType: map.accType || 'credit',
+                    csvCategory: csvCategory,
+                    manualCategory: null,
+                    isSubscription: subscriptionDetection.isSubscription,
+                    account: map.acc || 'Imported' 
+                };
+            }).filter(Boolean);
             
-            // Store original CSV category
-            const csvCategory = map.cat && row[map.cat] ? fuzzyMatchCSV(row[map.cat]) : 'Uncategorized';
+            allNewExp = [...allNewExp, ...newExp];
             
-            // Clean the description by stripping payment processor prefixes
-            const cleanedDesc = cleanDescription(desc);
-            
-            // Detect if this is a subscription
-            const subscriptionDetection = detectSubscription(cleanedDesc);
-            
-            return { 
-                id: `e-${Date.now()}-${i}`, 
-                date: row[map.date] || new Date().toISOString().split('T')[0], 
-                description: cleanedDesc,  // Use cleaned description for display and categorization
-                rawDescription: desc,      // Keep original for auditing
-                amount: finalAmount,
-                rawAmount: rawAmount,  // Keep original signed amount for reference
-                transactionType: transactionType,  // expense, income, venmo-payment, venmo-reimbursement
-                accountType: map.accType || 'credit',  // credit or checking
-                csvCategory: csvCategory,
-                manualCategory: null,
-                isSubscription: subscriptionDetection.isSubscription,  // Subscription flag
-                account: map.acc || 'Imported' 
-            };
-        }).filter(Boolean);
+            // Create history entry for this file
+            const totalAmount = newExp.reduce((sum, e) => sum + Math.abs(e.amount), 0);
+            newHistoryEntries.push({
+                id: fileImportId,
+                fileName: file.name,
+                account: map.acc || 'Imported',
+                accountType: map.accType || 'credit',
+                count: newExp.length,
+                totalAmount,
+                importedAt
+            });
+        });
         
-        setExpenses([...expenses, ...newExp]);
-        setImportData(null);
-        setMsg(`✅ Imported ${newExp.length} transactions`);
+        setExpenses([...expenses, ...allNewExp]);
+        setImportHistory([...importHistory, ...newHistoryEntries]);
+        setPendingFiles([]);
+        setMsg(`✅ Imported ${allNewExp.length} transactions from ${pendingFiles.length} file${pendingFiles.length > 1 ? 's' : ''}`);
         setTimeout(() => setMsg(''), 4000);
+    };
+    
+    const deleteImport = (importId) => {
+        // Remove all expenses with this importId
+        setExpenses(expenses.filter(e => e.importId !== importId));
+        // Remove from history
+        setImportHistory(importHistory.filter(h => h.id !== importId));
+        setMsg(`🗑️ Deleted import`);
+        setTimeout(() => setMsg(''), 3000);
     };
 
     const updateExpenseCategory = (id, category) => {
@@ -5049,7 +5439,19 @@ const App = () => {
     return (<div className="min-h-screen pb-20">
         <header className="bg-white/90 backdrop-blur-lg border-b border-slate-100 h-14 flex items-center px-4 justify-between sticky top-0 z-40">
             <div className="flex items-center gap-2"><div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-indigo-700 rounded-xl flex items-center justify-center text-white font-black text-sm">S</div><h1 className="text-lg font-black text-slate-800">Smart<span className="text-indigo-600">Expense</span></h1></div>
-            <div className="flex gap-2"><button onClick={exportCSV} className="bg-slate-100 text-slate-600 px-3 py-2 rounded-xl font-bold text-xs">📥</button><label className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-black text-xs cursor-pointer">📤 Import<input type="file" className="hidden" accept=".csv" onChange={handleFile}/></label></div>
+            <div className="flex gap-2">
+                <button onClick={exportCSV} className="bg-slate-100 text-slate-600 px-3 py-2 rounded-xl font-bold text-xs" title="Export CSV">📥</button>
+                <button onClick={() => setShowImportHistory(true)} className="bg-slate-100 text-slate-600 px-3 py-2 rounded-xl font-bold text-xs relative" title="Import History">
+                    📚
+                    {importHistory.length > 0 && (
+                        <span className="absolute -top-1 -right-1 w-4 h-4 bg-indigo-500 text-white text-[9px] font-black rounded-full flex items-center justify-center">{importHistory.length}</span>
+                    )}
+                </button>
+                <label className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-black text-xs cursor-pointer hover:bg-indigo-700 transition-colors" title="Import up to 5 CSV files">
+                    📤 Import
+                    <input type="file" className="hidden" accept=".csv" multiple onChange={handleFiles}/>
+                </label>
+            </div>
         </header>
 
         <div className="max-w-7xl mx-auto px-4 mt-4">
@@ -5089,6 +5491,24 @@ const App = () => {
                         <h3 className="text-sm font-black text-slate-800 mb-1">🔍 Small Spend Categories (2025)</h3>
                         <p className="text-[10px] text-slate-400 mb-3">The Long Tail: Where do transactions under $50 go?</p>
                         <div className="h-56"><SmallSpendCategories expenses={expenses} merchantRules={merchantRules}/></div>
+                    </div>
+                </div>
+                
+                {/* $100-$500 Bucket Deep Dive */}
+                <div className="bg-gradient-to-r from-green-500 to-emerald-600 text-white p-4 rounded-2xl">
+                    <h2 className="text-lg font-black">🐋 $100–$500 Bucket Deep Dive</h2>
+                    <p className="text-green-100 text-xs mt-1">Analyzing the mid-range spending zone: Are these habits or one-offs?</p>
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="bg-white p-5 rounded-2xl border border-green-200 shadow-lg">
+                        <h3 className="text-sm font-black text-slate-800 mb-1">🗂️ Category Treemap</h3>
+                        <p className="text-[10px] text-slate-400 mb-3">Hierarchy view: Category → Top Merchants within each</p>
+                        <div className="h-72"><MidRangeTreemap expenses={expenses} merchantRules={merchantRules}/></div>
+                    </div>
+                    <div className="bg-white p-5 rounded-2xl border border-green-200 shadow-lg">
+                        <h3 className="text-sm font-black text-slate-800 mb-1">🏆 Top 15 Merchants</h3>
+                        <p className="text-[10px] text-slate-400 mb-3">Frequency vs. Value: Bar = $ spent, Bubble = # transactions</p>
+                        <div className="h-72"><MidRangeMerchants expenses={expenses} merchantRules={merchantRules}/></div>
                     </div>
                 </div>
             </>)}
@@ -5149,7 +5569,7 @@ const App = () => {
                     expenses={expenses} 
                     merchantRules={merchantRules} 
                     onDelete={del}
-                    onClearAll={() => { if(confirm("Delete all data?")) setExpenses([]); }}
+                    onClearAll={() => { if(confirm("Delete all data?")) { setExpenses([]); setImportHistory([]); } }}
                 />
             )}
 
@@ -5162,7 +5582,24 @@ const App = () => {
             )}
         </main>
         
-        {importData && <ImportDialog headers={importData.meta.fields} onClose={()=>{setImportData(null); setImportFileName('');}} onConfirm={processImport} defaultAccountName={importFileName}/>}
+        {/* Bulk Import Dialog */}
+        {pendingFiles.length > 0 && (
+            <BulkImportDialog 
+                files={pendingFiles} 
+                onClose={() => setPendingFiles([])} 
+                onConfirm={processBulkImport}
+                onRemoveFile={removePendingFile}
+            />
+        )}
+        
+        {/* Import History Panel */}
+        {showImportHistory && (
+            <ImportHistoryPanel 
+                importHistory={importHistory}
+                onDeleteImport={deleteImport}
+                onClose={() => setShowImportHistory(false)}
+            />
+        )}
     </div>);
 };
 
