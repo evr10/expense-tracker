@@ -5058,10 +5058,6 @@ const BulkImportDialog = ({ files, onClose, onConfirm, onRemoveFile }) => {
     });
     const [accType, setAccType] = useState(isHSBC ? 'checking' : 'credit');
     
-    // Use first file's name as default, user can override
-    const defaultAccName = firstFile?.name.replace(/\.[^/.]+$/, '') || '';
-    const [acc, setAcc] = useState(defaultAccName);
-    
     const headers = defaultHeaders;
     
     return (<div className="fixed inset-0 z-50 flex items-center justify-center p-4"><div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={onClose}/>
@@ -5071,7 +5067,10 @@ const BulkImportDialog = ({ files, onClose, onConfirm, onRemoveFile }) => {
                 <div className="mt-2 space-y-1">
                     {files.map((f, i) => (
                         <div key={i} className="flex items-center justify-between px-3 py-1.5 bg-slate-50 rounded-lg">
-                            <span className="text-xs font-semibold text-slate-600 truncate flex-1">📄 {f.name}</span>
+                            <div className="flex-1 min-w-0">
+                                <span className="text-xs font-semibold text-slate-600 truncate block">📄 {f.name}</span>
+                                <span className="text-[9px] text-indigo-500">→ Account: {f.name.replace(/\.[^/.]+$/, '')}</span>
+                            </div>
                             <span className="text-[10px] text-slate-400 mx-2">{f.data.length} rows</span>
                             {files.length > 1 && (
                                 <button onClick={() => onRemoveFile(i)} className="text-red-400 hover:text-red-600 text-xs font-bold">✕</button>
@@ -5108,7 +5107,12 @@ const BulkImportDialog = ({ files, onClose, onConfirm, onRemoveFile }) => {
                     <div><label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Category Column (optional)</label><select className="w-full p-3 bg-slate-50 rounded-xl text-sm font-semibold outline-none" value={map.cat} onChange={e=>setMap({...map,cat:e.target.value})}><option value="">-- None --</option>{headers.map(h=><option key={h}>{h}</option>)}</select></div>
                 </div>
                 <div><label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Description</label><select className="w-full p-3 bg-slate-50 rounded-xl text-sm font-semibold outline-none" value={map.desc} onChange={e=>setMap({...map,desc:e.target.value})}>{headers.map(h=><option key={h}>{h}</option>)}</select></div>
-                <div><label className="text-[10px] font-black uppercase text-slate-400 block mb-2">Account Name</label><input type="text" placeholder="e.g., Chase Checking, Amex Gold" value={acc} onChange={e=>setAcc(e.target.value)} className="w-full p-3 bg-slate-50 rounded-xl text-sm font-semibold outline-none border-2 border-transparent focus:border-indigo-500"/></div>
+                
+                {/* Info about account names */}
+                <div className="p-3 bg-blue-50 rounded-xl border border-blue-200">
+                    <p className="text-xs text-blue-700 font-semibold">📁 Account Names from File Names</p>
+                    <p className="text-[10px] text-blue-600 mt-1">Each file's name (without extension) will be used as the account name for its transactions.</p>
+                </div>
                 
                 {map.credit && (
                     <div className="p-3 bg-green-50 rounded-xl border border-green-200">
@@ -5119,7 +5123,7 @@ const BulkImportDialog = ({ files, onClose, onConfirm, onRemoveFile }) => {
             </div>
             <div className="p-6 bg-slate-50 flex gap-4">
                 <button onClick={onClose} className="flex-1 py-3 font-bold text-slate-500 rounded-xl hover:bg-slate-200">Cancel</button>
-                <button onClick={()=>onConfirm({...map, acc, accType})} className="flex-1 py-3 bg-indigo-600 text-white font-black rounded-xl hover:bg-indigo-700">
+                <button onClick={()=>onConfirm({...map, accType})} className="flex-1 py-3 bg-indigo-600 text-white font-black rounded-xl hover:bg-indigo-700">
                     Import {files.reduce((sum, f) => sum + f.data.length, 0)} Transactions
                 </button>
             </div>
@@ -5340,6 +5344,8 @@ const App = () => {
         pendingFiles.forEach((file, fileIdx) => {
             const fileImportId = `${importId}-${fileIdx}`;
             const isHSBC = file.name.toLowerCase().includes('hsbc');
+            // Use file name (without extension) as account name for each file
+            const fileAccountName = file.name.replace(/\.[^/.]+$/, '') || 'Imported';
             
             const newExp = file.data.map((row, i) => {
                 const desc = row[map.desc] || '';
@@ -5443,7 +5449,7 @@ const App = () => {
                     csvCategory: csvCategory,
                     manualCategory: null,
                     isSubscription: subscriptionDetection.isSubscription,
-                    account: map.acc || 'Imported' 
+                    account: fileAccountName  // Use file name as account
                 };
             }).filter(Boolean);
             
@@ -5454,7 +5460,7 @@ const App = () => {
             newHistoryEntries.push({
                 id: fileImportId,
                 fileName: file.name,
-                account: map.acc || 'Imported',
+                account: fileAccountName,  // Use file name as account
                 accountType: map.accType || 'credit',
                 count: newExp.length,
                 totalAmount,
