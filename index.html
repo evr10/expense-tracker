@@ -619,6 +619,12 @@ const getEffectiveCategory = (expense, merchantRules) => {
     const account = expense.account || '';
     const transactionType = expense.transactionType || 'expense';
     
+    // Priority 0: Manual Override (one-off single transaction) - HIGHEST PRIORITY
+    // This allows exceptions to any merchant rule
+    if (expense.manualCategory) {
+        return { category: expense.manualCategory, source: 'manual' };
+    }
+    
     // Priority 1: Multi-Account Rule (check if this account is in the rule's accounts list)
     const accountsKey = getAccountsRuleKey(merchant);
     if (merchantRules[accountsKey]) {
@@ -641,18 +647,13 @@ const getEffectiveCategory = (expense, merchantRules) => {
         return { category: merchantRules[merchant].category, source: 'rule-global' };
     }
     
-    // Priority 3: Manual Override (single transaction)
-    if (expense.manualCategory) {
-        return { category: expense.manualCategory, source: 'manual' };
-    }
-    
-    // Priority 4: Auto-detected rule (with transaction type awareness)
+    // Priority 3: Auto-detected rule (with transaction type awareness)
     const autoCategory = autoRuleMatch(expense.description, transactionType);
     if (autoCategory) {
         return { category: autoCategory, source: 'auto' };
     }
     
-    // Priority 5: CSV Category (fuzzy matched)
+    // Priority 4: CSV Category (fuzzy matched)
     if (expense.csvCategory && expense.csvCategory !== 'Uncategorized') {
         return { category: expense.csvCategory, source: 'csv' };
     }
@@ -1430,6 +1431,184 @@ const Scatter = ({ expenses, merchantRules }) => {
         <div className="absolute left-0 right-0 border-t border-dashed border-red-300" style={{bottom:`${20/maxA*100}%`}}><span className="absolute -top-2 left-1 text-[8px] font-bold text-red-400">$20</span></div>
         {pts.map((p,i) => <div key={i} className={`absolute w-2 h-2 rounded-full ${p.a<20?'bg-red-400':'bg-indigo-400'}`} style={{left:`${(p.d-minD)/range*100}%`,bottom:`${p.a/maxA*100}%`,opacity:.7}} title={`$${p.a.toFixed(2)}`}/>)}
     </div><div className="text-[10px] text-slate-400 text-center pt-2 border-t border-slate-100 mt-2">🔴 {pct}% under $20</div></div>);
+};
+
+// ============== SPENDING MAGNITUDE DISTRIBUTION (Whale vs Minnow) ==============
+const SpendingMagnitude = ({ expenses, merchantRules }) => {
+    const BUCKETS = [
+        { name: 'Under $20', min: 0, max: 20, color: '#ef4444', emoji: '🐟' },
+        { name: '$20 – $50', min: 20, max: 50, color: '#f97316', emoji: '🐠' },
+        { name: '$50 – $100', min: 50, max: 100, color: '#eab308', emoji: '🦈' },
+        { name: '$100 – $500', min: 100, max: 500, color: '#22c55e', emoji: '🐋' },
+        { name: '$500 – $1k', min: 500, max: 1000, color: '#3b82f6', emoji: '🐳' },
+        { name: 'Over $1k', min: 1000, max: Infinity, color: '#8b5cf6', emoji: '🏔️' }
+    ];
+    
+    const { bucketData, totalSpend, maxSum } = useMemo(() => {
+        const sp = expenses.filter(e => {
+            const cat = getEffectiveCategory(e, merchantRules).category;
+            return !DASHBOARD_EXCLUDED_CATEGORIES.includes(cat) && getY(e.date) === 2025 && safe(e.amount) > 0;
+        });
+        
+        const totalSpend = sp.reduce((sum, e) => sum + safe(e.amount), 0);
+        
+        const bucketData = BUCKETS.map(bucket => {
+            const txns = sp.filter(e => {
+                const amt = safe(e.amount);
+                return amt >= bucket.min && amt < bucket.max;
+            });
+            const sum = txns.reduce((s, e) => s + safe(e.amount), 0);
+            return {
+                ...bucket,
+                count: txns.length,
+                sum,
+                pct: totalSpend > 0 ? (sum / totalSpend * 100) : 0
+            };
+        });
+        
+        const maxSum = Math.max(...bucketData.map(b => b.sum));
+        return { bucketData, totalSpend, maxSum };
+    }, [expenses, merchantRules]);
+    
+    if (totalSpend === 0) return <Empty msg="No 2025 spending data" />;
+    
+    return (
+        <div className="h-full flex flex-col">
+            <div className="flex-1 flex gap-4">
+                {/* Bar Chart */}
+                <div className="flex-1 flex flex-col justify-end gap-1">
+                    {bucketData.map(b => (
+                        <div key={b.name} className="flex items-center gap-2">
+                            <div className="w-20 text-[9px] font-semibold text-slate-600 text-right truncate">{b.emoji} {b.name}</div>
+                            <div className="flex-1 h-6 bg-slate-100 rounded overflow-hidden">
+                                <div 
+                                    className="h-full rounded flex items-center justify-end pr-2 transition-all"
+                                    style={{ width: `${maxSum > 0 ? (b.sum / maxSum * 100) : 0}%`, backgroundColor: b.color }}
+                                >
+                                    {b.sum > maxSum * 0.15 && (
+                                        <span className="text-[9px] font-bold text-white">${(b.sum/1000).toFixed(1)}k</span>
+                                    )}
+                                </div>
+                            </div>
+                            {b.sum <= maxSum * 0.15 && (
+                                <span className="text-[9px] font-bold text-slate-600 w-12">${(b.sum/1000).toFixed(1)}k</span>
+                            )}
+                        </div>
+                    ))}
+                </div>
+                
+                {/* Data Table */}
+                <div className="w-36 bg-slate-50 rounded-lg p-2">
+                    <table className="w-full text-[9px]">
+                        <thead>
+                            <tr className="text-slate-400 uppercase font-bold">
+                                <th className="text-left pb-1">Bucket</th>
+                                <th className="text-right pb-1">#</th>
+                                <th className="text-right pb-1">%</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {bucketData.map(b => (
+                                <tr key={b.name} className="border-t border-slate-200">
+                                    <td className="py-1 font-semibold" style={{ color: b.color }}>{b.emoji}</td>
+                                    <td className="py-1 text-right font-bold text-slate-700">{b.count.toLocaleString()}</td>
+                                    <td className="py-1 text-right font-bold" style={{ color: b.color }}>{b.pct.toFixed(1)}%</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div className="pt-2 border-t border-slate-100 mt-2 flex justify-between items-center">
+                <div className="text-[10px] text-slate-400">
+                    🐟 Minnows: {bucketData[0].count + bucketData[1].count} txns = ${((bucketData[0].sum + bucketData[1].sum)/1000).toFixed(1)}k
+                </div>
+                <div className="text-[10px] font-bold text-slate-600">
+                    🐳 Whales: {bucketData[4].count + bucketData[5].count} txns = ${((bucketData[4].sum + bucketData[5].sum)/1000).toFixed(1)}k
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ============== SMALL SPEND CATEGORY ANALYSIS (Long Tail) ==============
+const SmallSpendCategories = ({ expenses, merchantRules }) => {
+    const THRESHOLD = 50; // Transactions under $50
+    
+    const { categoryData, totalSmallSpend, txnCount } = useMemo(() => {
+        const sp = expenses.filter(e => {
+            const cat = getEffectiveCategory(e, merchantRules).category;
+            const amt = safe(e.amount);
+            return !DASHBOARD_EXCLUDED_CATEGORIES.includes(cat) && 
+                   getY(e.date) === 2025 && 
+                   amt > 0 && 
+                   amt < THRESHOLD;
+        });
+        
+        const totalSmallSpend = sp.reduce((sum, e) => sum + safe(e.amount), 0);
+        const txnCount = sp.length;
+        
+        // Group by category
+        const byCategory = {};
+        sp.forEach(e => {
+            const cat = getEffectiveCategory(e, merchantRules).category;
+            if (!byCategory[cat]) byCategory[cat] = { sum: 0, count: 0 };
+            byCategory[cat].sum += safe(e.amount);
+            byCategory[cat].count += 1;
+        });
+        
+        const categoryData = Object.entries(byCategory)
+            .map(([name, data]) => ({
+                name,
+                sum: data.sum,
+                count: data.count,
+                pct: totalSmallSpend > 0 ? (data.sum / totalSmallSpend * 100) : 0,
+                color: CAT_COLORS[name] || '#94a3b8'
+            }))
+            .sort((a, b) => b.sum - a.sum)
+            .slice(0, 10);
+        
+        return { categoryData, totalSmallSpend, txnCount };
+    }, [expenses, merchantRules]);
+    
+    if (categoryData.length === 0) return <Empty msg="No small transactions found" />;
+    
+    const maxSum = categoryData[0]?.sum || 1;
+    
+    return (
+        <div className="h-full flex flex-col">
+            <div className="flex-1 overflow-auto space-y-1.5">
+                {categoryData.map((cat, i) => (
+                    <div key={cat.name} className="flex items-center gap-2">
+                        <div className="w-5 text-[10px] font-black text-slate-400">{i + 1}</div>
+                        <div className="w-24 text-[10px] font-semibold text-slate-600 truncate" title={cat.name}>{cat.name}</div>
+                        <div className="flex-1 h-5 bg-slate-100 rounded overflow-hidden">
+                            <div 
+                                className="h-full rounded"
+                                style={{ width: `${cat.sum / maxSum * 100}%`, backgroundColor: cat.color }}
+                            />
+                        </div>
+                        <div className="w-14 text-[9px] font-bold text-slate-700 text-right">${(cat.sum/1000).toFixed(1)}k</div>
+                        <div className="w-10 text-[9px] font-semibold text-slate-400 text-right">{cat.count}</div>
+                        <div className="w-10 text-[9px] font-bold text-right" style={{ color: cat.color }}>{cat.pct.toFixed(0)}%</div>
+                    </div>
+                ))}
+            </div>
+            <div className="pt-2 border-t border-slate-100 mt-2">
+                <div className="flex justify-between items-center">
+                    <div className="text-[10px] text-slate-400">
+                        💰 {txnCount.toLocaleString()} transactions under ${THRESHOLD}
+                    </div>
+                    <div className="text-[10px] font-bold text-slate-600">
+                        Total: ${totalSmallSpend.toLocaleString(undefined, {maximumFractionDigits: 0})}
+                    </div>
+                </div>
+                <div className="text-[9px] text-slate-400 mt-1">
+                    Top 3 leaks: {categoryData.slice(0, 3).map(c => c.name).join(', ')}
+                </div>
+            </div>
+        </div>
+    );
 };
 
 // ============== CATEGORY MANAGEMENT PAGE ==============
@@ -4894,6 +5073,19 @@ const App = () => {
                     <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">📺 Subscriptions (2025)</h3><div className="h-56"><Subscriptions expenses={expenses} merchantRules={merchantRules}/></div></div>
                     <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">☕ Small Purchase Leaks (2025)</h3><div className="h-56"><SmallPurchaseMerchants expenses={expenses} merchantRules={merchantRules}/></div></div>
                     <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">💸 Death by 1000 Cuts (2025)</h3><div className="h-56"><Scatter expenses={expenses} merchantRules={merchantRules}/></div></div>
+                </div>
+                {/* NEW: Spending Magnitude & Long Tail Analysis */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg">
+                        <h3 className="text-sm font-black text-slate-800 mb-1">🐳 Spending Magnitude (2025)</h3>
+                        <p className="text-[10px] text-slate-400 mb-3">Whale vs. Minnow: How your transactions stack up by size</p>
+                        <div className="h-56"><SpendingMagnitude expenses={expenses} merchantRules={merchantRules}/></div>
+                    </div>
+                    <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg">
+                        <h3 className="text-sm font-black text-slate-800 mb-1">🔍 Small Spend Categories (2025)</h3>
+                        <p className="text-[10px] text-slate-400 mb-3">The Long Tail: Where do transactions under $50 go?</p>
+                        <div className="h-56"><SmallSpendCategories expenses={expenses} merchantRules={merchantRules}/></div>
+                    </div>
                 </div>
             </>)}
 
