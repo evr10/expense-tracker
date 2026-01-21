@@ -1837,72 +1837,6 @@ const MidRangeMerchants = ({ expenses, merchantRules }) => {
         </div>
     );
 };
-        
-        const totalSmallSpend = sp.reduce((sum, e) => sum + safe(e.amount), 0);
-        const txnCount = sp.length;
-        
-        // Group by category
-        const byCategory = {};
-        sp.forEach(e => {
-            const cat = getEffectiveCategory(e, merchantRules).category;
-            if (!byCategory[cat]) byCategory[cat] = { sum: 0, count: 0 };
-            byCategory[cat].sum += safe(e.amount);
-            byCategory[cat].count += 1;
-        });
-        
-        const categoryData = Object.entries(byCategory)
-            .map(([name, data]) => ({
-                name,
-                sum: data.sum,
-                count: data.count,
-                pct: totalSmallSpend > 0 ? (data.sum / totalSmallSpend * 100) : 0,
-                color: CAT_COLORS[name] || '#94a3b8'
-            }))
-            .sort((a, b) => b.sum - a.sum)
-            .slice(0, 10);
-        
-        return { categoryData, totalSmallSpend, txnCount };
-    }, [expenses, merchantRules]);
-    
-    if (categoryData.length === 0) return <Empty msg="No small transactions found" />;
-    
-    const maxSum = categoryData[0]?.sum || 1;
-    
-    return (
-        <div className="h-full flex flex-col">
-            <div className="flex-1 overflow-auto space-y-1.5">
-                {categoryData.map((cat, i) => (
-                    <div key={cat.name} className="flex items-center gap-2">
-                        <div className="w-5 text-[10px] font-black text-slate-400">{i + 1}</div>
-                        <div className="w-24 text-[10px] font-semibold text-slate-600 truncate" title={cat.name}>{cat.name}</div>
-                        <div className="flex-1 h-5 bg-slate-100 rounded overflow-hidden">
-                            <div 
-                                className="h-full rounded"
-                                style={{ width: `${cat.sum / maxSum * 100}%`, backgroundColor: cat.color }}
-                            />
-                        </div>
-                        <div className="w-14 text-[9px] font-bold text-slate-700 text-right">${(cat.sum/1000).toFixed(1)}k</div>
-                        <div className="w-10 text-[9px] font-semibold text-slate-400 text-right">{cat.count}</div>
-                        <div className="w-10 text-[9px] font-bold text-right" style={{ color: cat.color }}>{cat.pct.toFixed(0)}%</div>
-                    </div>
-                ))}
-            </div>
-            <div className="pt-2 border-t border-slate-100 mt-2">
-                <div className="flex justify-between items-center">
-                    <div className="text-[10px] text-slate-400">
-                        💰 {txnCount.toLocaleString()} transactions under ${THRESHOLD}
-                    </div>
-                    <div className="text-[10px] font-bold text-slate-600">
-                        Total: ${totalSmallSpend.toLocaleString(undefined, {maximumFractionDigits: 0})}
-                    </div>
-                </div>
-                <div className="text-[9px] text-slate-400 mt-1">
-                    Top 3 leaks: {categoryData.slice(0, 3).map(c => c.name).join(', ')}
-                </div>
-            </div>
-        </div>
-    );
-};
 
 // ============== CATEGORY MANAGEMENT PAGE ==============
 const CategoryEditModal = ({ expense, merchantRules, allAccounts, onSave, onClose }) => {
@@ -3185,28 +3119,63 @@ const TransactionsTable = ({ expenses, merchantRules, onDelete, onClearAll }) =>
 // ============== STYLECOM REIMBURSEMENT DASHBOARD ==============
 const StylecomReimbursement = ({ expenses, merchantRules, paidIds, onTogglePaid }) => {
     const [selectedQuarter, setSelectedQuarter] = useState('all');
+    const [viewMode, setViewMode] = useState('expenses'); // 'expenses' or 'repayments'
     
-    // Filter to only Stylecom transactions
-    const stylecomExpenses = useMemo(() => {
-        return expenses.filter(e => {
+    // Separate Stylecom into EXPENSES (positive) and REPAYMENTS (negative)
+    const { stylecomExpenses, stylecomRepayments } = useMemo(() => {
+        const allStylecom = expenses.filter(e => {
             const effective = getEffectiveCategory(e, merchantRules);
             return effective.category === 'Stylecom' && isValidYear(e.date);
-        }).sort((a, b) => new Date(b.date) - new Date(a.date));
+        });
+        
+        // Expenses = positive amounts (money you put out)
+        const stylecomExpenses = allStylecom
+            .filter(e => safe(e.amount) > 0)
+            .sort((a, b) => new Date(b.date) - new Date(a.date));
+        
+        // Repayments = negative amounts (money coming back)
+        const stylecomRepayments = allStylecom
+            .filter(e => safe(e.amount) < 0)
+            .sort((a, b) => new Date(b.date) - new Date(a.date));
+        
+        return { stylecomExpenses, stylecomRepayments };
     }, [expenses, merchantRules]);
     
-    // Calculate KPIs
+    // Calculate KPIs using GROSS amounts (expenses only, no netting)
     const kpis = useMemo(() => {
-        const totalSpend = stylecomExpenses.reduce((sum, e) => sum + safe(e.amount), 0);
-        const paidExpenses = stylecomExpenses.filter(e => paidIds.has(e.id));
-        const totalPaid = paidExpenses.reduce((sum, e) => sum + safe(e.amount), 0);
-        const outstanding = totalSpend - totalPaid;
-        return { totalSpend, totalPaid, outstanding, totalCount: stylecomExpenses.length, paidCount: paidExpenses.length };
-    }, [stylecomExpenses, paidIds]);
+        // GROSS lifetime spend (only positive expenses)
+        const grossSpend = stylecomExpenses.reduce((sum, e) => sum + safe(e.amount), 0);
+        
+        // Total actually repaid (sum of negative amounts, shown as positive)
+        const totalRepaid = Math.abs(stylecomRepayments.reduce((sum, e) => sum + safe(e.amount), 0));
+        
+        // Claims marked as paid (user checkbox)
+        const markedAsPaid = stylecomExpenses.filter(e => paidIds.has(e.id));
+        const totalMarkedPaid = markedAsPaid.reduce((sum, e) => sum + safe(e.amount), 0);
+        
+        // Outstanding balance = Gross Spend - Actual Repayments
+        const netOwed = grossSpend - totalRepaid;
+        
+        // Reconciliation delta = What's marked as paid - What's actually received
+        const reconciliationDelta = totalMarkedPaid - totalRepaid;
+        
+        return { 
+            grossSpend, 
+            totalRepaid, 
+            totalMarkedPaid,
+            netOwed,
+            reconciliationDelta,
+            expenseCount: stylecomExpenses.length,
+            repaymentCount: stylecomRepayments.length,
+            markedPaidCount: markedAsPaid.length
+        };
+    }, [stylecomExpenses, stylecomRepayments, paidIds]);
     
-    // Group by quarter
+    // Group EXPENSES by quarter (GROSS only, no repayments mixed in)
     const quarterlyData = useMemo(() => {
         const byQuarter = {};
         
+        // Process expenses
         stylecomExpenses.forEach(e => {
             const date = pDate(e.date);
             const year = date.getFullYear();
@@ -3215,40 +3184,58 @@ const StylecomReimbursement = ({ expenses, merchantRules, paidIds, onTogglePaid 
             
             if (!byQuarter[key]) {
                 byQuarter[key] = { 
-                    key, 
-                    year, 
-                    quarter, 
-                    total: 0, 
-                    paid: 0, 
-                    outstanding: 0, 
-                    transactions: [] 
+                    key, year, quarter, 
+                    grossTotal: 0, markedPaid: 0, notMarked: 0, 
+                    transactions: [],
+                    repayments: 0, repaymentTxns: []
                 };
             }
             
             const amount = safe(e.amount);
-            byQuarter[key].total += amount;
+            byQuarter[key].grossTotal += amount;
             byQuarter[key].transactions.push(e);
             
             if (paidIds.has(e.id)) {
-                byQuarter[key].paid += amount;
+                byQuarter[key].markedPaid += amount;
             } else {
-                byQuarter[key].outstanding += amount;
+                byQuarter[key].notMarked += amount;
             }
         });
         
-        // Sort by year and quarter descending
+        // Process repayments separately
+        stylecomRepayments.forEach(e => {
+            const date = pDate(e.date);
+            const year = date.getFullYear();
+            const quarter = Math.floor(date.getMonth() / 3) + 1;
+            const key = `Q${quarter} ${year}`;
+            
+            if (!byQuarter[key]) {
+                byQuarter[key] = { 
+                    key, year, quarter, 
+                    grossTotal: 0, markedPaid: 0, notMarked: 0, 
+                    transactions: [],
+                    repayments: 0, repaymentTxns: []
+                };
+            }
+            byQuarter[key].repayments += Math.abs(safe(e.amount));
+            byQuarter[key].repaymentTxns.push(e);
+        });
+        
         return Object.values(byQuarter).sort((a, b) => {
             if (a.year !== b.year) return b.year - a.year;
             return b.quarter - a.quarter;
         });
-    }, [stylecomExpenses, paidIds]);
+    }, [stylecomExpenses, stylecomRepayments, paidIds]);
     
-    // Filter transactions by selected quarter
+    // Filter transactions by selected quarter and view mode
     const filteredTransactions = useMemo(() => {
-        if (selectedQuarter === 'all') return stylecomExpenses;
+        const txns = viewMode === 'expenses' ? stylecomExpenses : stylecomRepayments;
+        if (selectedQuarter === 'all') return txns;
+        
         const q = quarterlyData.find(q => q.key === selectedQuarter);
-        return q ? q.transactions : [];
-    }, [stylecomExpenses, quarterlyData, selectedQuarter]);
+        if (!q) return [];
+        return viewMode === 'expenses' ? q.transactions : (q.repaymentTxns || []);
+    }, [stylecomExpenses, stylecomRepayments, quarterlyData, selectedQuarter, viewMode]);
     
     // Mark all in quarter as paid
     const markQuarterPaid = (quarterKey) => {
@@ -3262,55 +3249,174 @@ const StylecomReimbursement = ({ expenses, merchantRules, paidIds, onTogglePaid 
         }
     };
     
+    // Get max for bar chart scaling
+    const maxQuarterlyGross = Math.max(...quarterlyData.map(q => q.grossTotal), 1);
+    
     return (
         <div className="space-y-6">
             {/* Header */}
             <div className="bg-gradient-to-r from-pink-500 to-rose-600 text-white p-6 rounded-2xl">
                 <h2 className="text-xl font-black">👗 Stylecom Reimbursement Tracker</h2>
-                <p className="text-pink-100 text-sm mt-1">Track business expenses owed by your partner</p>
+                <p className="text-pink-100 text-sm mt-1">Track business expenses and reimbursements separately</p>
             </div>
             
-            {/* KPI Cards */}
+            {/* KPI Cards - Row 1: Gross Metrics */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg">
-                    <h3 className="text-[10px] font-bold text-slate-400 uppercase">Total Lifetime Spend</h3>
-                    <p className="text-2xl font-black text-slate-900">${kpis.totalSpend.toLocaleString(undefined, {maximumFractionDigits: 2})}</p>
-                    <p className="text-xs text-slate-500 mt-1">{kpis.totalCount} transactions</p>
+                    <h3 className="text-[10px] font-bold text-slate-400 uppercase">💸 Gross Lifetime Spend</h3>
+                    <p className="text-2xl font-black text-slate-900">${kpis.grossSpend.toLocaleString(undefined, {maximumFractionDigits: 0})}</p>
+                    <p className="text-xs text-slate-500 mt-1">{kpis.expenseCount} expense transactions</p>
                 </div>
                 <div className="bg-white p-5 rounded-2xl border border-green-200 shadow-lg">
-                    <h3 className="text-[10px] font-bold text-green-600 uppercase">Total Repaid ✓</h3>
-                    <p className="text-2xl font-black text-green-600">${kpis.totalPaid.toLocaleString(undefined, {maximumFractionDigits: 2})}</p>
-                    <p className="text-xs text-green-500 mt-1">{kpis.paidCount} settled</p>
+                    <h3 className="text-[10px] font-bold text-green-600 uppercase">💰 Total Repaid</h3>
+                    <p className="text-2xl font-black text-green-600">${kpis.totalRepaid.toLocaleString(undefined, {maximumFractionDigits: 0})}</p>
+                    <p className="text-xs text-green-500 mt-1">{kpis.repaymentCount} repayment wires</p>
                 </div>
                 <div className="bg-white p-5 rounded-2xl border border-amber-200 shadow-lg">
-                    <h3 className="text-[10px] font-bold text-amber-600 uppercase">Outstanding Balance</h3>
-                    <p className="text-3xl font-black text-amber-600">${kpis.outstanding.toLocaleString(undefined, {maximumFractionDigits: 2})}</p>
-                    <p className="text-xs text-amber-500 mt-1">{kpis.totalCount - kpis.paidCount} pending</p>
+                    <h3 className="text-[10px] font-bold text-amber-600 uppercase">⚡ Net Owed to Me</h3>
+                    <p className={`text-3xl font-black ${kpis.netOwed > 0 ? 'text-amber-600' : 'text-green-600'}`}>
+                        ${Math.abs(kpis.netOwed).toLocaleString(undefined, {maximumFractionDigits: 0})}
+                    </p>
+                    <p className="text-xs text-amber-500 mt-1">Gross Spend - Repaid</p>
                 </div>
-                <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg">
-                    <h3 className="text-[10px] font-bold text-slate-400 uppercase">Repayment Progress</h3>
-                    <p className="text-2xl font-black text-indigo-600">{kpis.totalSpend > 0 ? Math.round((kpis.totalPaid / kpis.totalSpend) * 100) : 0}%</p>
+                <div className="bg-white p-5 rounded-2xl border border-indigo-200 shadow-lg">
+                    <h3 className="text-[10px] font-bold text-indigo-500 uppercase">📊 Repayment Rate</h3>
+                    <p className="text-2xl font-black text-indigo-600">
+                        {kpis.grossSpend > 0 ? Math.round((kpis.totalRepaid / kpis.grossSpend) * 100) : 0}%
+                    </p>
                     <div className="h-2 bg-slate-100 rounded-full mt-2 overflow-hidden">
-                        <div className="h-full bg-gradient-to-r from-green-400 to-emerald-500 rounded-full transition-all duration-500"
-                            style={{ width: `${kpis.totalSpend > 0 ? (kpis.totalPaid / kpis.totalSpend) * 100 : 0}%` }}/>
+                        <div className="h-full bg-gradient-to-r from-indigo-400 to-indigo-600 rounded-full"
+                            style={{ width: `${kpis.grossSpend > 0 ? (kpis.totalRepaid / kpis.grossSpend) * 100 : 0}%` }}/>
                     </div>
                 </div>
             </div>
             
-            {/* Quarterly Breakdown */}
+            {/* NEW: Reimbursement Reconciliation Section */}
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-lg overflow-hidden">
+                <div className="p-5 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-slate-100">
+                    <h3 className="text-sm font-black text-slate-800">🔍 Reimbursement Reconciliation</h3>
+                    <p className="text-[10px] text-slate-500 mt-1">Compare what you've marked as paid vs what you've actually received</p>
+                </div>
+                <div className="p-6">
+                    <div className="flex items-center gap-4">
+                        {/* Claims (Left) */}
+                        <div className="flex-1 text-center">
+                            <div className="text-[10px] font-bold text-slate-400 uppercase mb-2">📋 Marked as Paid</div>
+                            <div className="text-3xl font-black text-blue-600">${kpis.totalMarkedPaid.toLocaleString(undefined, {maximumFractionDigits: 0})}</div>
+                            <div className="text-xs text-slate-500 mt-1">{kpis.markedPaidCount} expenses checked off</div>
+                        </div>
+                        
+                        {/* Progress Bar */}
+                        <div className="flex-1">
+                            <div className="relative h-8 bg-slate-100 rounded-full overflow-hidden">
+                                {/* Marked as Paid (full bar) */}
+                                <div className="absolute inset-0 bg-blue-200 rounded-full" style={{ width: '100%' }}/>
+                                {/* Actually Received (overlay) */}
+                                <div 
+                                    className="absolute inset-y-0 left-0 bg-green-500 rounded-full transition-all"
+                                    style={{ width: `${kpis.totalMarkedPaid > 0 ? Math.min((kpis.totalRepaid / kpis.totalMarkedPaid) * 100, 100) : 0}%` }}
+                                />
+                                {/* Center line marker */}
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                    <span className="text-[10px] font-black text-white drop-shadow-md">
+                                        {kpis.totalMarkedPaid > 0 ? Math.round((kpis.totalRepaid / kpis.totalMarkedPaid) * 100) : 0}% received
+                                    </span>
+                                </div>
+                            </div>
+                            <div className="flex justify-between mt-1 text-[9px] text-slate-400">
+                                <span>🟦 Claimed</span>
+                                <span>🟩 Received</span>
+                            </div>
+                        </div>
+                        
+                        {/* Received (Right) */}
+                        <div className="flex-1 text-center">
+                            <div className="text-[10px] font-bold text-slate-400 uppercase mb-2">💰 Actually Received</div>
+                            <div className="text-3xl font-black text-green-600">${kpis.totalRepaid.toLocaleString(undefined, {maximumFractionDigits: 0})}</div>
+                            <div className="text-xs text-slate-500 mt-1">{kpis.repaymentCount} wire transfers</div>
+                        </div>
+                    </div>
+                    
+                    {/* Delta */}
+                    <div className={`mt-4 p-4 rounded-xl ${kpis.reconciliationDelta > 0 ? 'bg-red-50 border border-red-200' : kpis.reconciliationDelta < 0 ? 'bg-green-50 border border-green-200' : 'bg-slate-50 border border-slate-200'}`}>
+                        <div className="flex justify-between items-center">
+                            <div>
+                                <span className="text-xs font-bold text-slate-600">Reconciliation Delta:</span>
+                                {kpis.reconciliationDelta > 0 && (
+                                    <span className="ml-2 text-xs text-red-600">⚠️ You're owed more than received</span>
+                                )}
+                                {kpis.reconciliationDelta < 0 && (
+                                    <span className="ml-2 text-xs text-green-600">✓ Received more than marked</span>
+                                )}
+                                {kpis.reconciliationDelta === 0 && (
+                                    <span className="ml-2 text-xs text-slate-500">✓ Perfectly balanced</span>
+                                )}
+                            </div>
+                            <div className={`text-xl font-black ${kpis.reconciliationDelta > 0 ? 'text-red-600' : kpis.reconciliationDelta < 0 ? 'text-green-600' : 'text-slate-600'}`}>
+                                {kpis.reconciliationDelta > 0 ? '-' : kpis.reconciliationDelta < 0 ? '+' : ''}${Math.abs(kpis.reconciliationDelta).toLocaleString(undefined, {maximumFractionDigits: 0})}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            {/* Quarterly Breakdown - GROSS SPENDING ONLY (no negative bars) */}
             <div className="bg-white rounded-2xl border border-slate-100 shadow-lg overflow-hidden">
                 <div className="p-5 border-b border-slate-100">
-                    <h3 className="text-sm font-black text-slate-800">📅 Quarterly Breakdown</h3>
+                    <h3 className="text-sm font-black text-slate-800">📅 Quarterly Gross Spending</h3>
+                    <p className="text-[10px] text-slate-500 mt-1">Showing what you advanced (not netted with repayments)</p>
                 </div>
+                
+                {/* Visual Bar Chart */}
+                <div className="p-5 border-b border-slate-100">
+                    <div className="space-y-3">
+                        {quarterlyData.slice(0, 8).map(q => (
+                            <div key={q.key} className="flex items-center gap-3">
+                                <div className="w-16 text-xs font-bold text-slate-600">{q.key}</div>
+                                <div className="flex-1 h-8 bg-slate-100 rounded-lg overflow-hidden relative">
+                                    {/* Gross spending bar */}
+                                    <div 
+                                        className="absolute inset-y-0 left-0 bg-gradient-to-r from-pink-400 to-rose-500 rounded-lg flex items-center justify-end pr-2"
+                                        style={{ width: `${(q.grossTotal / maxQuarterlyGross) * 100}%` }}
+                                    >
+                                        {q.grossTotal > maxQuarterlyGross * 0.2 && (
+                                            <span className="text-[10px] font-bold text-white">${(q.grossTotal/1000).toFixed(1)}k</span>
+                                        )}
+                                    </div>
+                                    {/* Repayment indicator line */}
+                                    {q.repayments > 0 && (
+                                        <div 
+                                            className="absolute top-1 bottom-1 w-1 bg-green-500 rounded"
+                                            style={{ left: `${(q.repayments / maxQuarterlyGross) * 100}%` }}
+                                            title={`Repaid: $${q.repayments.toLocaleString()}`}
+                                        />
+                                    )}
+                                </div>
+                                <div className="w-20 text-right">
+                                    <div className="text-xs font-bold text-slate-700">${q.grossTotal.toLocaleString(undefined, {maximumFractionDigits: 0})}</div>
+                                    {q.repayments > 0 && (
+                                        <div className="text-[9px] text-green-600">↩ ${q.repayments.toLocaleString(undefined, {maximumFractionDigits: 0})}</div>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="flex gap-4 mt-4 text-[9px] text-slate-400">
+                        <span>█ Gross Expenses</span>
+                        <span>│ Repayments Received</span>
+                    </div>
+                </div>
+                
+                {/* Table */}
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                         <thead className="bg-slate-50 text-slate-400 uppercase text-[10px] font-bold">
                             <tr>
                                 <th className="p-4 text-left">Quarter</th>
-                                <th className="p-4 text-right">Total</th>
-                                <th className="p-4 text-right">Paid</th>
-                                <th className="p-4 text-right">Outstanding</th>
-                                <th className="p-4 text-center">Status</th>
+                                <th className="p-4 text-right">Gross Spend</th>
+                                <th className="p-4 text-right">Marked Paid</th>
+                                <th className="p-4 text-right">Repaid</th>
+                                <th className="p-4 text-center">Claim Status</th>
                                 <th className="p-4 text-center">Actions</th>
                             </tr>
                         </thead>
@@ -3318,18 +3424,18 @@ const StylecomReimbursement = ({ expenses, merchantRules, paidIds, onTogglePaid 
                             {quarterlyData.length === 0 ? (
                                 <tr><td colSpan={6} className="p-12 text-center text-slate-400">No Stylecom expenses found</td></tr>
                             ) : quarterlyData.map(q => {
-                                const isFullyPaid = q.outstanding === 0;
-                                const progress = q.total > 0 ? (q.paid / q.total) * 100 : 0;
+                                const allMarked = q.notMarked === 0 && q.grossTotal > 0;
+                                const progress = q.grossTotal > 0 ? (q.markedPaid / q.grossTotal) * 100 : 0;
                                 return (
-                                    <tr key={q.key} className={`hover:bg-slate-50 ${isFullyPaid ? 'bg-green-50/50' : ''}`}>
+                                    <tr key={q.key} className={`hover:bg-slate-50 ${allMarked ? 'bg-green-50/50' : ''}`}>
                                         <td className="p-4 font-bold text-slate-800">{q.key}</td>
-                                        <td className="p-4 text-right font-semibold text-slate-600">${q.total.toLocaleString(undefined, {maximumFractionDigits: 2})}</td>
-                                        <td className="p-4 text-right font-semibold text-green-600">${q.paid.toLocaleString(undefined, {maximumFractionDigits: 2})}</td>
-                                        <td className="p-4 text-right font-bold text-amber-600">${q.outstanding.toLocaleString(undefined, {maximumFractionDigits: 2})}</td>
+                                        <td className="p-4 text-right font-semibold text-pink-600">${q.grossTotal.toLocaleString(undefined, {maximumFractionDigits: 0})}</td>
+                                        <td className="p-4 text-right font-semibold text-blue-600">${q.markedPaid.toLocaleString(undefined, {maximumFractionDigits: 0})}</td>
+                                        <td className="p-4 text-right font-semibold text-green-600">${(q.repayments || 0).toLocaleString(undefined, {maximumFractionDigits: 0})}</td>
                                         <td className="p-4 text-center">
                                             <div className="flex items-center gap-2">
                                                 <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
-                                                    <div className="h-full bg-green-500 rounded-full" style={{ width: `${progress}%` }}/>
+                                                    <div className="h-full bg-blue-500 rounded-full" style={{ width: `${progress}%` }}/>
                                                 </div>
                                                 <span className="text-[10px] font-bold text-slate-500 w-10">{Math.round(progress)}%</span>
                                             </div>
@@ -3337,15 +3443,15 @@ const StylecomReimbursement = ({ expenses, merchantRules, paidIds, onTogglePaid 
                                         <td className="p-4 text-center">
                                             <div className="flex gap-2 justify-center">
                                                 <button 
-                                                    onClick={() => setSelectedQuarter(selectedQuarter === q.key ? 'all' : q.key)}
-                                                    className={`px-3 py-1 rounded-lg text-xs font-bold ${selectedQuarter === q.key ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
-                                                    {selectedQuarter === q.key ? 'Hide' : 'View'}
+                                                    onClick={() => { setSelectedQuarter(selectedQuarter === q.key ? 'all' : q.key); setViewMode('expenses'); }}
+                                                    className={`px-3 py-1 rounded-lg text-xs font-bold ${selectedQuarter === q.key && viewMode === 'expenses' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                                                    View
                                                 </button>
-                                                {!isFullyPaid && (
+                                                {!allMarked && (
                                                     <button 
                                                         onClick={() => markQuarterPaid(q.key)}
                                                         className="px-3 py-1 bg-green-100 text-green-600 rounded-lg text-xs font-bold hover:bg-green-200">
-                                                        Mark All Paid
+                                                        Mark All
                                                     </button>
                                                 )}
                                             </div>
@@ -3358,26 +3464,38 @@ const StylecomReimbursement = ({ expenses, merchantRules, paidIds, onTogglePaid 
                 </div>
             </div>
             
-            {/* Transaction List */}
+            {/* Transaction List with Toggle */}
             <div className="bg-white rounded-2xl border border-slate-100 shadow-lg overflow-hidden">
                 <div className="p-5 border-b border-slate-100 flex justify-between items-center">
                     <h3 className="text-sm font-black text-slate-800">
-                        📝 Transactions {selectedQuarter !== 'all' && `- ${selectedQuarter}`}
+                        📝 {viewMode === 'expenses' ? 'Expenses' : 'Repayments'} {selectedQuarter !== 'all' && `- ${selectedQuarter}`}
                     </h3>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 items-center">
+                        {/* View Mode Toggle */}
+                        <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
+                            <button 
+                                onClick={() => setViewMode('expenses')}
+                                className={`px-3 py-1 rounded text-xs font-bold ${viewMode === 'expenses' ? 'bg-white text-pink-600 shadow' : 'text-slate-500'}`}>
+                                💸 Expenses ({stylecomExpenses.length})
+                            </button>
+                            <button 
+                                onClick={() => setViewMode('repayments')}
+                                className={`px-3 py-1 rounded text-xs font-bold ${viewMode === 'repayments' ? 'bg-white text-green-600 shadow' : 'text-slate-500'}`}>
+                                💰 Repayments ({stylecomRepayments.length})
+                            </button>
+                        </div>
                         {selectedQuarter !== 'all' && (
                             <button onClick={() => setSelectedQuarter('all')} className="px-3 py-1 bg-slate-100 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-200">
                                 Show All
                             </button>
                         )}
-                        <span className="text-xs text-slate-500">{filteredTransactions.length} items</span>
                     </div>
                 </div>
                 <div className="overflow-x-auto max-h-[50vh]">
                     <table className="w-full text-sm">
                         <thead className="bg-slate-50 text-slate-400 uppercase text-[10px] font-bold sticky top-0">
                             <tr>
-                                <th className="p-3 text-center w-16">Paid</th>
+                                {viewMode === 'expenses' && <th className="p-3 text-center w-16">Paid</th>}
                                 <th className="p-3 text-left">Date</th>
                                 <th className="p-3 text-left">Description</th>
                                 <th className="p-3 text-left">Account</th>
@@ -3386,29 +3504,35 @@ const StylecomReimbursement = ({ expenses, merchantRules, paidIds, onTogglePaid 
                         </thead>
                         <tbody className="divide-y divide-slate-50">
                             {filteredTransactions.length === 0 ? (
-                                <tr><td colSpan={5} className="p-12 text-center text-slate-400">No transactions found</td></tr>
+                                <tr><td colSpan={viewMode === 'expenses' ? 5 : 4} className="p-12 text-center text-slate-400">No {viewMode} found</td></tr>
                             ) : filteredTransactions.map(e => {
                                 const isPaid = paidIds.has(e.id);
+                                const amount = safe(e.amount);
+                                const isRepayment = amount < 0;
                                 return (
-                                    <tr key={e.id} className={`group hover:bg-slate-50 ${isPaid ? 'bg-green-50/50' : ''}`}>
-                                        <td className="p-3 text-center">
-                                            <button 
-                                                onClick={() => onTogglePaid(e.id)}
-                                                className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${
-                                                    isPaid 
-                                                        ? 'bg-green-500 border-green-500 text-white' 
-                                                        : 'border-slate-300 hover:border-green-400 text-transparent hover:text-green-400'
-                                                }`}>
-                                                ✓
-                                            </button>
-                                        </td>
+                                    <tr key={e.id} className={`group hover:bg-slate-50 ${isPaid ? 'bg-green-50/50' : ''} ${isRepayment ? 'bg-emerald-50/50' : ''}`}>
+                                        {viewMode === 'expenses' && (
+                                            <td className="p-3 text-center">
+                                                <button 
+                                                    onClick={() => onTogglePaid(e.id)}
+                                                    className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${
+                                                        isPaid 
+                                                            ? 'bg-green-500 border-green-500 text-white' 
+                                                            : 'border-slate-300 hover:border-green-400 text-transparent hover:text-green-400'
+                                                    }`}>
+                                                    ✓
+                                                </button>
+                                            </td>
+                                        )}
                                         <td className={`p-3 text-slate-500 text-xs whitespace-nowrap ${isPaid ? 'line-through' : ''}`}>{e.date}</td>
-                                        <td className={`p-3 ${isPaid ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
-                                            <div className="font-semibold text-xs truncate max-w-[250px]" title={e.description}>{e.description}</div>
+                                        <td className={`p-3 ${isPaid ? 'text-slate-400 line-through' : isRepayment ? 'text-emerald-700' : 'text-slate-700'}`}>
+                                            <div className="font-semibold text-xs truncate max-w-[250px]" title={e.description}>
+                                                {isRepayment && '↩️ '}{e.description}
+                                            </div>
                                         </td>
                                         <td className="p-3 text-slate-500 text-xs">{e.account}</td>
-                                        <td className={`p-3 text-right font-bold ${isPaid ? 'text-green-600' : 'text-slate-900'}`}>
-                                            ${safe(e.amount).toFixed(2)}
+                                        <td className={`p-3 text-right font-bold ${isRepayment ? 'text-green-600' : isPaid ? 'text-blue-600' : 'text-slate-900'}`}>
+                                            {isRepayment ? '+' : ''}${Math.abs(amount).toFixed(2)}
                                         </td>
                                     </tr>
                                 );
