@@ -2258,7 +2258,7 @@ const HighImpactView = ({ expenses, merchantRules, onUpdateRule }) => {
 };
 
 const CategoryManagement = ({ expenses, merchantRules, onUpdateExpense, onUpdateRule, onDeleteRule, onUpdateSubscription }) => {
-    const [viewMode, setViewMode] = useState('highimpact'); // 'highimpact' or 'transactions'
+    const [viewMode, setViewMode] = useState('transactions'); // 'highimpact' or 'transactions' - default to transactions
     const [filter, setFilter] = useState('all');
     const [categoryFilter, setCategoryFilter] = useState('all'); // NEW: category filter
     const [searchTerm, setSearchTerm] = useState('');
@@ -2364,6 +2364,56 @@ const CategoryManagement = ({ expenses, merchantRules, onUpdateExpense, onUpdate
     }
 
     // Transaction View
+    // State for column filters
+    const [colFilters, setColFilters] = useState({
+        date: '',
+        merchant: '',
+        description: '',
+        account: '',
+        amount: '',
+        category: '',
+        recurring: ''
+    });
+    
+    // Get unique values for filter dropdowns
+    const uniqueAccounts = useMemo(() => {
+        const accs = new Set();
+        expenses.filter(e => isValidYear(e.date)).forEach(e => {
+            if (e.account) accs.add(e.account);
+        });
+        return ['', ...Array.from(accs).sort()];
+    }, [expenses]);
+    
+    const uniqueCategories = useMemo(() => {
+        const cats = new Set();
+        expenses.filter(e => isValidYear(e.date)).forEach(e => {
+            cats.add(getEffectiveCategory(e, merchantRules).category);
+        });
+        return ['', ...Array.from(cats).sort()];
+    }, [expenses, merchantRules]);
+    
+    // Apply column filters on top of existing filters
+    const fullyFilteredExpenses = useMemo(() => {
+        return filteredExpenses.filter(e => {
+            const effective = getEffectiveCategory(e, merchantRules);
+            const merchant = cleanMerchant(e.description).toLowerCase();
+            const desc = (e.description || '').toLowerCase();
+            const account = (e.account || '').toLowerCase();
+            const date = e.date || '';
+            const isSubscription = e.isSubscription || false;
+            
+            if (colFilters.date && !date.includes(colFilters.date)) return false;
+            if (colFilters.merchant && !merchant.includes(colFilters.merchant.toLowerCase())) return false;
+            if (colFilters.description && !desc.includes(colFilters.description.toLowerCase())) return false;
+            if (colFilters.account && account !== colFilters.account.toLowerCase()) return false;
+            if (colFilters.category && effective.category !== colFilters.category) return false;
+            if (colFilters.recurring === 'yes' && !isSubscription) return false;
+            if (colFilters.recurring === 'no' && isSubscription) return false;
+            
+            return true;
+        });
+    }, [filteredExpenses, colFilters, merchantRules]);
+    
     return (
         <div className="space-y-6">
             {/* Mode Toggle */}
@@ -2406,51 +2456,6 @@ const CategoryManagement = ({ expenses, merchantRules, onUpdateExpense, onUpdate
                 </div>
             </div>
 
-            {/* Merchant Rules Summary */}
-            {Object.keys(merchantRules).length > 0 && (
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-lg overflow-hidden">
-                    <div className="p-4 border-b border-slate-100 flex justify-between items-center">
-                        <h3 className="font-black text-slate-800">🏷️ Active Merchant Rules</h3>
-                        <button onClick={() => { if(confirm("Delete all merchant rules?")) Object.keys(merchantRules).forEach(m => onDeleteRule(m)); }}
-                            className="text-xs font-bold text-red-500 bg-red-50 px-3 py-1.5 rounded-lg hover:bg-red-100">Clear All Rules</button>
-                    </div>
-                    <div className="p-4 flex flex-wrap gap-2 max-h-40 overflow-auto">
-                        {Object.entries(merchantRules).map(([ruleKey, ruleData]) => {
-                            const isAccountRule = ruleKey.includes('|||');
-                            const isMultiAccountRule = ruleData?.scope === 'accounts';
-                            const displayName = isAccountRule ? ruleKey.split('|||')[0] : ruleKey;
-                            const accountName = isAccountRule && !isMultiAccountRule ? ruleKey.split('|||')[1] : null;
-                            const accountsList = isMultiAccountRule && ruleData?.accounts ? ruleData.accounts : null;
-                            const category = ruleData?.category || ruleData;
-                            const scope = ruleData?.scope || 'global';
-                            
-                            // Format accounts display
-                            const accountsDisplay = accountsList 
-                                ? (accountsList.length > 2 
-                                    ? `${accountsList.slice(0, 2).join(', ')} +${accountsList.length - 2}` 
-                                    : accountsList.join(', '))
-                                : accountName;
-                            
-                            return (
-                                <div key={ruleKey} className={`flex items-center gap-2 rounded-lg px-3 py-2 group ${isAccountRule ? 'bg-cyan-50' : 'bg-purple-50'}`}>
-                                    <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded ${isAccountRule ? 'bg-cyan-200 text-cyan-700' : 'bg-purple-200 text-purple-700'}`}>
-                                        {isAccountRule ? '💳' : '🌍'}
-                                    </span>
-                                    <span className="text-xs font-semibold text-slate-600 max-w-[120px] truncate" title={displayName}>{displayName}</span>
-                                    {isAccountRule && accountsDisplay && (
-                                        <span className="text-[9px] text-slate-400 max-w-[100px] truncate" title={accountsList ? accountsList.join(', ') : accountName}>
-                                            ({accountsDisplay})
-                                        </span>
-                                    )}
-                                    <span className="text-[10px] font-bold text-white px-2 py-0.5 rounded" style={{backgroundColor: CAT_COLORS[category] || '#6366f1'}}>{category}</span>
-                                    <button onClick={() => onDeleteRule(ruleKey)} className="text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 text-xs">✕</button>
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
-            )}
-
             {/* Filters & Search */}
             <div className="flex flex-wrap gap-4 items-center">
                 <div className="flex gap-1 bg-slate-100 p-1 rounded-xl">
@@ -2476,27 +2481,122 @@ const CategoryManagement = ({ expenses, merchantRules, onUpdateExpense, onUpdate
                     <input type="text" placeholder="Search merchant or description..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
                         className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500"/>
                 </div>
-                <div className="text-sm text-slate-500">{filteredExpenses.length} transactions</div>
+                <div className="text-sm text-slate-500">{fullyFilteredExpenses.length} transactions</div>
+                {Object.values(colFilters).some(v => v) && (
+                    <button 
+                        onClick={() => setColFilters({ date: '', merchant: '', description: '', account: '', amount: '', category: '', recurring: '' })}
+                        className="px-3 py-1.5 bg-red-100 text-red-600 rounded-lg text-xs font-bold hover:bg-red-200"
+                    >
+                        ✕ Clear Column Filters
+                    </button>
+                )}
             </div>
 
-            {/* Transactions Table */}
+            {/* Transactions Table with Column Filters */}
             <div className="bg-white rounded-2xl border border-slate-100 shadow-lg overflow-hidden">
                 <div className="overflow-x-auto max-h-[60vh]">
                     <table className="w-full text-left text-sm">
-                        <thead className="bg-slate-50 text-slate-400 uppercase text-[10px] font-bold sticky top-0">
+                        <thead className="bg-slate-50 text-slate-400 uppercase text-[10px] font-bold sticky top-0 z-10">
                             <tr>
-                                <th className="p-3">Date</th>
-                                <th className="p-3">Merchant</th>
-                                <th className="p-3">Amount</th>
-                                <th className="p-3">Category</th>
-                                <th className="p-3">Recurring</th>
-                                <th className="p-3 w-20">Action</th>
+                                <th className="p-2">
+                                    <div className="space-y-1">
+                                        <span>Date</span>
+                                        <input 
+                                            type="text" 
+                                            placeholder="Filter..." 
+                                            value={colFilters.date}
+                                            onChange={e => setColFilters({...colFilters, date: e.target.value})}
+                                            className="w-full px-2 py-1 text-[10px] font-normal normal-case bg-white border border-slate-200 rounded outline-none"
+                                        />
+                                    </div>
+                                </th>
+                                <th className="p-2">
+                                    <div className="space-y-1">
+                                        <span>Merchant</span>
+                                        <input 
+                                            type="text" 
+                                            placeholder="Filter..." 
+                                            value={colFilters.merchant}
+                                            onChange={e => setColFilters({...colFilters, merchant: e.target.value})}
+                                            className="w-full px-2 py-1 text-[10px] font-normal normal-case bg-white border border-slate-200 rounded outline-none"
+                                        />
+                                    </div>
+                                </th>
+                                <th className="p-2">
+                                    <div className="space-y-1">
+                                        <span>Description</span>
+                                        <input 
+                                            type="text" 
+                                            placeholder="Filter..." 
+                                            value={colFilters.description}
+                                            onChange={e => setColFilters({...colFilters, description: e.target.value})}
+                                            className="w-full px-2 py-1 text-[10px] font-normal normal-case bg-white border border-slate-200 rounded outline-none"
+                                        />
+                                    </div>
+                                </th>
+                                <th className="p-2">
+                                    <div className="space-y-1">
+                                        <span>Account</span>
+                                        <select 
+                                            value={colFilters.account}
+                                            onChange={e => setColFilters({...colFilters, account: e.target.value})}
+                                            className="w-full px-2 py-1 text-[10px] font-normal normal-case bg-white border border-slate-200 rounded outline-none"
+                                        >
+                                            <option value="">All</option>
+                                            {uniqueAccounts.filter(a => a).map(acc => (
+                                                <option key={acc} value={acc}>{acc}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </th>
+                                <th className="p-2">
+                                    <div className="space-y-1">
+                                        <span>Amount</span>
+                                        <input 
+                                            type="text" 
+                                            placeholder="Filter..." 
+                                            value={colFilters.amount}
+                                            onChange={e => setColFilters({...colFilters, amount: e.target.value})}
+                                            className="w-full px-2 py-1 text-[10px] font-normal normal-case bg-white border border-slate-200 rounded outline-none"
+                                        />
+                                    </div>
+                                </th>
+                                <th className="p-2">
+                                    <div className="space-y-1">
+                                        <span>Category</span>
+                                        <select 
+                                            value={colFilters.category}
+                                            onChange={e => setColFilters({...colFilters, category: e.target.value})}
+                                            className="w-full px-2 py-1 text-[10px] font-normal normal-case bg-white border border-slate-200 rounded outline-none"
+                                        >
+                                            <option value="">All</option>
+                                            {uniqueCategories.filter(c => c).map(cat => (
+                                                <option key={cat} value={cat}>{cat}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </th>
+                                <th className="p-2">
+                                    <div className="space-y-1">
+                                        <span>Recurring</span>
+                                        <select 
+                                            value={colFilters.recurring}
+                                            onChange={e => setColFilters({...colFilters, recurring: e.target.value})}
+                                            className="w-full px-2 py-1 text-[10px] font-normal normal-case bg-white border border-slate-200 rounded outline-none"
+                                        >
+                                            <option value="">All</option>
+                                            <option value="yes">Yes</option>
+                                            <option value="no">No</option>
+                                        </select>
+                                    </div>
+                                </th>
+                                <th className="p-2 w-16">Action</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50">
-                            {filteredExpenses.length === 0 ? (
-                                <tr><td colSpan={6} className="p-12 text-center text-slate-400">No transactions found</td></tr>
-                            ) : filteredExpenses.map(e => {
+                            {fullyFilteredExpenses.length === 0 ? (
+                                <tr><td colSpan={8} className="p-12 text-center text-slate-400">No transactions found</td></tr>
+                            ) : fullyFilteredExpenses.slice(0, 500).map(e => {
                                 const effective = getEffectiveCategory(e, merchantRules);
                                 const isExcluded = EXCLUDED_CATEGORIES.includes(effective.category);
                                 const isVenmo = effective.category === 'Venmo';
@@ -2504,20 +2604,21 @@ const CategoryManagement = ({ expenses, merchantRules, onUpdateExpense, onUpdate
                                 const isSubscription = e.isSubscription || false;
                                 return (
                                     <tr key={e.id} className={`group ${isExcluded ? 'bg-slate-50 opacity-60' : isVenmo ? 'bg-blue-50/30' : 'hover:bg-slate-50'}`}>
-                                        <td className="p-3 text-slate-500 text-xs">{e.date}</td>
-                                        <td className="p-3">
+                                        <td className="p-2 text-slate-500 text-xs whitespace-nowrap">{e.date}</td>
+                                        <td className="p-2">
                                             <div className={`font-semibold text-xs ${isExcluded ? 'text-slate-400 line-through' : 'text-slate-700'}`} title={e.description}>
                                                 {isVenmo && <span className="text-blue-500 mr-1">💸</span>}
                                                 {cleanMerchant(e.description)}
                                             </div>
-                                            <div className="text-[10px] text-slate-400 truncate max-w-[200px]">{e.description}</div>
                                         </td>
-                                        <td className={`p-3 font-bold ${isExcluded ? 'text-slate-400' : isNegative ? 'text-green-600' : isVenmo ? 'text-blue-700' : 'text-slate-900'}`}>
+                                        <td className="p-2 text-[10px] text-slate-400 max-w-[180px] truncate" title={e.description}>{e.description}</td>
+                                        <td className="p-2 text-[10px] text-slate-500 whitespace-nowrap">{e.account || '-'}</td>
+                                        <td className={`p-2 font-bold text-xs ${isExcluded ? 'text-slate-400' : isNegative ? 'text-green-600' : isVenmo ? 'text-blue-700' : 'text-slate-900'}`}>
                                             {isNegative ? `-$${Math.abs(e.amount).toFixed(2)}` : `$${e.amount.toFixed(2)}`}
                                         </td>
-                                        <td className="p-3">
-                                            <div className="flex items-center" title={`Original CSV: ${e.csvCategory || 'None'}`}>
-                                                <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${
+                                        <td className="p-2">
+                                            <div className="flex items-center gap-1" title={`Original CSV: ${e.csvCategory || 'None'}`}>
+                                                <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
                                                     isExcluded ? 'bg-slate-200 text-slate-500' :
                                                     isVenmo ? 'bg-blue-100 text-blue-700' :
                                                     effective.category === 'Uncategorized' ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700'
@@ -2527,10 +2628,10 @@ const CategoryManagement = ({ expenses, merchantRules, onUpdateExpense, onUpdate
                                                 {getCategoryBadge(effective.source)}
                                             </div>
                                         </td>
-                                        <td className="p-3">
+                                        <td className="p-2">
                                             <button
                                                 onClick={() => onUpdateSubscription && onUpdateSubscription(e.id, !isSubscription)}
-                                                className={`px-2 py-1 rounded text-[10px] font-bold transition-all ${
+                                                className={`px-2 py-0.5 rounded text-[9px] font-bold transition-all ${
                                                     isSubscription 
                                                         ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' 
                                                         : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
@@ -2540,9 +2641,9 @@ const CategoryManagement = ({ expenses, merchantRules, onUpdateExpense, onUpdate
                                                 {isSubscription ? '🔄 Yes' : '—'}
                                             </button>
                                         </td>
-                                        <td className="p-3">
+                                        <td className="p-2">
                                             <button onClick={() => setEditingExpense(e)}
-                                                className="px-3 py-1.5 bg-indigo-100 text-indigo-600 rounded-lg text-xs font-bold hover:bg-indigo-200">
+                                                className="px-2 py-1 bg-indigo-100 text-indigo-600 rounded text-[10px] font-bold hover:bg-indigo-200">
                                                 Edit
                                             </button>
                                         </td>
@@ -2552,7 +2653,56 @@ const CategoryManagement = ({ expenses, merchantRules, onUpdateExpense, onUpdate
                         </tbody>
                     </table>
                 </div>
+                {fullyFilteredExpenses.length > 500 && (
+                    <div className="p-3 bg-amber-50 text-amber-700 text-xs text-center font-semibold">
+                        Showing first 500 of {fullyFilteredExpenses.length} transactions. Use filters to narrow down.
+                    </div>
+                )}
             </div>
+
+            {/* Merchant Rules Summary - MOVED TO BOTTOM */}
+            {Object.keys(merchantRules).length > 0 && (
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-lg overflow-hidden">
+                    <div className="p-4 border-b border-slate-100 flex justify-between items-center">
+                        <h3 className="font-black text-slate-800">🏷️ Active Merchant Rules ({Object.keys(merchantRules).length})</h3>
+                        <button onClick={() => { if(confirm("Delete all merchant rules?")) Object.keys(merchantRules).forEach(m => onDeleteRule(m)); }}
+                            className="text-xs font-bold text-red-500 bg-red-50 px-3 py-1.5 rounded-lg hover:bg-red-100">Clear All Rules</button>
+                    </div>
+                    <div className="p-4 flex flex-wrap gap-2 max-h-40 overflow-auto">
+                        {Object.entries(merchantRules).map(([ruleKey, ruleData]) => {
+                            const isAccountRule = ruleKey.includes('|||');
+                            const isMultiAccountRule = ruleData?.scope === 'accounts';
+                            const displayName = isAccountRule ? ruleKey.split('|||')[0] : ruleKey;
+                            const accountName = isAccountRule && !isMultiAccountRule ? ruleKey.split('|||')[1] : null;
+                            const accountsList = isMultiAccountRule && ruleData?.accounts ? ruleData.accounts : null;
+                            const category = ruleData?.category || ruleData;
+                            const scope = ruleData?.scope || 'global';
+                            
+                            const accountsDisplay = accountsList 
+                                ? (accountsList.length > 2 
+                                    ? `${accountsList.slice(0, 2).join(', ')} +${accountsList.length - 2}` 
+                                    : accountsList.join(', '))
+                                : accountName;
+                            
+                            return (
+                                <div key={ruleKey} className={`flex items-center gap-2 rounded-lg px-3 py-2 group ${isAccountRule ? 'bg-cyan-50' : 'bg-purple-50'}`}>
+                                    <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded ${isAccountRule ? 'bg-cyan-200 text-cyan-700' : 'bg-purple-200 text-purple-700'}`}>
+                                        {isAccountRule ? '💳' : '🌍'}
+                                    </span>
+                                    <span className="text-xs font-semibold text-slate-600 max-w-[120px] truncate" title={displayName}>{displayName}</span>
+                                    {isAccountRule && accountsDisplay && (
+                                        <span className="text-[9px] text-slate-400 max-w-[100px] truncate" title={accountsList ? accountsList.join(', ') : accountName}>
+                                            ({accountsDisplay})
+                                        </span>
+                                    )}
+                                    <span className="text-[10px] font-bold text-white px-2 py-0.5 rounded" style={{backgroundColor: CAT_COLORS[category] || '#6366f1'}}>{category}</span>
+                                    <button onClick={() => onDeleteRule(ruleKey)} className="text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 text-xs">✕</button>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
 
             {editingExpense && (
                 <CategoryEditModal
@@ -4693,29 +4843,27 @@ const AIAnalystExport = ({ expenses, merchantRules }) => {
     const generateReport = () => {
         setGenerating(true);
         
-        // Small delay for UX feedback
         setTimeout(() => {
             const lines = [];
             const now = new Date();
             
-            // Helper to format currency
+            // Helpers
             const fmt = (n) => '$' + n.toLocaleString(undefined, { maximumFractionDigits: 0 });
             const fmtPct = (n) => n.toFixed(1) + '%';
+            const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
             
-            // Filter to 2024 and 2025 only
+            // Filter data
             const validYears = [2024, 2025];
             
-            // Filter valid expenses (exclude transfers, income for spending analysis)
             const allExpenses = expenses.filter(e => {
                 const cat = getEffectiveCategory(e, merchantRules).category;
                 const year = getY(e.date);
-                return !EXCLUDED_CATEGORIES.includes(cat) && validYears.includes(year);
+                return !EXCLUDED_CATEGORIES.includes(cat) && validYears.includes(year) && safe(e.amount) > 0;
             });
             
-            const incomeExpenses = expenses.filter(e => {
+            const incomeData = expenses.filter(e => {
                 const cat = getEffectiveCategory(e, merchantRules).category;
-                const year = getY(e.date);
-                return (cat === 'Income' || cat === 'TaxIncome') && validYears.includes(year);
+                return (cat === 'Income' || cat === 'TaxIncome') && validYears.includes(getY(e.date));
             });
             
             // Separate by year
@@ -4725,268 +4873,327 @@ const AIAnalystExport = ({ expenses, merchantRules }) => {
             const total2025 = exp2025.reduce((s, e) => s + safe(e.amount), 0);
             
             // === HEADER ===
-            lines.push('# 📊 Personal Finance Report (2024-2025)');
+            lines.push('# 📊 Personal Finance Report - 2025 Focus');
             lines.push('');
             lines.push(`**Generated:** ${now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`);
-            lines.push(`**Focus Period:** 2024-2025 (with emphasis on 2025 insights)`);
-            lines.push(`**Total Transactions Analyzed:** ${allExpenses.length.toLocaleString()}`);
+            lines.push(`**Analysis Period:** 2024-2025 with emphasis on 2025`);
+            lines.push(`**Total Transactions:** ${allExpenses.length.toLocaleString()} (${exp2025.length} in 2025)`);
             lines.push('');
             lines.push('---');
             lines.push('');
             
-            // === ANNUAL COMPARISON ===
-            lines.push('## 📅 2024 vs 2025 Overview');
+            // === EXECUTIVE SUMMARY ===
+            lines.push('## 📋 Executive Summary');
             lines.push('');
-            lines.push('| Metric | 2024 | 2025 | Change |');
-            lines.push('|--------|------|------|--------|');
             
-            const months2024 = new Set(exp2024.map(e => getM(e.date))).size || 1;
             const months2025 = new Set(exp2025.map(e => getM(e.date))).size || 1;
-            const monthlyAvg2024 = total2024 / months2024;
             const monthlyAvg2025 = total2025 / months2025;
+            const income2025 = incomeData.filter(e => getY(e.date) === 2025);
+            const totalIncome2025 = income2025.reduce((s, e) => s + Math.abs(safe(e.amount)), 0);
+            const savingsRate = totalIncome2025 > 0 ? ((totalIncome2025 - total2025) / totalIncome2025) * 100 : 0;
             const yoyChange = total2024 > 0 ? ((total2025 - total2024) / total2024) * 100 : 0;
-            const monthlyChange = monthlyAvg2024 > 0 ? ((monthlyAvg2025 - monthlyAvg2024) / monthlyAvg2024) * 100 : 0;
             
-            lines.push(`| Total Spending | ${fmt(total2024)} | ${fmt(total2025)} | ${yoyChange >= 0 ? '+' : ''}${fmtPct(yoyChange)} |`);
-            lines.push(`| Transactions | ${exp2024.length} | ${exp2025.length} | ${exp2025.length - exp2024.length >= 0 ? '+' : ''}${exp2025.length - exp2024.length} |`);
-            lines.push(`| Monthly Average | ${fmt(monthlyAvg2024)} | ${fmt(monthlyAvg2025)} | ${monthlyChange >= 0 ? '+' : ''}${fmtPct(monthlyChange)} |`);
-            lines.push(`| Avg Transaction | ${fmt(exp2024.length > 0 ? total2024/exp2024.length : 0)} | ${fmt(exp2025.length > 0 ? total2025/exp2025.length : 0)} | |`);
+            lines.push(`| Key Metric | Value |`);
+            lines.push(`|------------|-------|`);
+            lines.push(`| 2025 Total Spending | **${fmt(total2025)}** |`);
+            lines.push(`| Monthly Average (2025) | ${fmt(monthlyAvg2025)} |`);
+            lines.push(`| 2025 Total Income | ${fmt(totalIncome2025)} |`);
+            lines.push(`| Net Savings (2025) | **${fmt(totalIncome2025 - total2025)}** |`);
+            lines.push(`| Savings Rate | ${fmtPct(savingsRate)} |`);
+            lines.push(`| YoY Spending Change | ${yoyChange >= 0 ? '+' : ''}${fmtPct(yoyChange)} |`);
             lines.push('');
             
-            // === COST STRUCTURE ANALYSIS (2025 Focus) ===
+            // === COST STRUCTURE (Fixed/Semi-Fixed/Variable) ===
             lines.push('## 📦 2025 Cost Structure Analysis');
             lines.push('');
-            lines.push('*Expenses are categorized into three cost types for budgeting analysis:*');
-            lines.push('- **Fixed:** Mandatory expenses (Rent, Daycare)');
-            lines.push('- **Semi-Fixed:** Necessary but variable (Household, Groceries)');
-            lines.push('- **Variable:** Discretionary spending (all other categories)');
+            lines.push('Categorization: Fixed (Rent, Daycare), Semi-Fixed (Groceries, Household), Variable (everything else)');
             lines.push('');
             
-            // Calculate cost structure for 2025
-            const costStructure2025 = { Fixed: 0, 'Semi-Fixed': 0, Variable: 0 };
+            const costStructure = { Fixed: 0, 'Semi-Fixed': 0, Variable: 0 };
+            const costStructure2024 = { Fixed: 0, 'Semi-Fixed': 0, Variable: 0 };
+            
             exp2025.forEach(e => {
                 const cat = getEffectiveCategory(e, merchantRules).category;
-                const costType = getCostType(cat);
-                costStructure2025[costType] += safe(e.amount);
+                costStructure[getCostType(cat)] += safe(e.amount);
             });
-            
-            const costStructure2024 = { Fixed: 0, 'Semi-Fixed': 0, Variable: 0 };
             exp2024.forEach(e => {
                 const cat = getEffectiveCategory(e, merchantRules).category;
-                const costType = getCostType(cat);
-                costStructure2024[costType] += safe(e.amount);
+                costStructure2024[getCostType(cat)] += safe(e.amount);
             });
             
-            lines.push('| Cost Type | 2024 | 2025 | % of 2025 | YoY Change |');
-            lines.push('|-----------|------|------|-----------|------------|');
+            lines.push('| Cost Type | 2025 Amount | % of Total | vs 2024 |');
+            lines.push('|-----------|-------------|------------|---------|');
             ['Fixed', 'Semi-Fixed', 'Variable'].forEach(type => {
-                const val2024 = costStructure2024[type];
-                const val2025 = costStructure2025[type];
-                const pct2025 = total2025 > 0 ? (val2025 / total2025) * 100 : 0;
-                const change = val2024 > 0 ? ((val2025 - val2024) / val2024) * 100 : 0;
-                lines.push(`| **${type}** | ${fmt(val2024)} | ${fmt(val2025)} | ${fmtPct(pct2025)} | ${change >= 0 ? '+' : ''}${fmtPct(change)} |`);
+                const val = costStructure[type];
+                const prev = costStructure2024[type];
+                const pct = total2025 > 0 ? (val / total2025) * 100 : 0;
+                const change = prev > 0 ? ((val - prev) / prev) * 100 : 0;
+                lines.push(`| **${type}** | ${fmt(val)} | ${fmtPct(pct)} | ${prev > 0 ? (change >= 0 ? '+' : '') + fmtPct(change) : 'N/A'} |`);
             });
-            lines.push(`| **TOTAL** | ${fmt(total2024)} | ${fmt(total2025)} | 100% | ${yoyChange >= 0 ? '+' : ''}${fmtPct(yoyChange)} |`);
             lines.push('');
             
-            // Cost structure insight
-            const fixedPct = total2025 > 0 ? (costStructure2025.Fixed / total2025) * 100 : 0;
-            const semiFixedPct = total2025 > 0 ? (costStructure2025['Semi-Fixed'] / total2025) * 100 : 0;
-            const variablePct = total2025 > 0 ? (costStructure2025.Variable / total2025) * 100 : 0;
-            
-            lines.push('### 🔍 Cost Structure Insights');
-            lines.push(`- **${fmtPct(fixedPct + semiFixedPct)}** of spending is Fixed or Semi-Fixed (committed costs)`);
-            lines.push(`- **${fmtPct(variablePct)}** is Variable (discretionary - potential savings area)`);
-            if (variablePct > 50) {
-                lines.push(`- ⚠️ Variable spending is over 50% - high discretionary spending`);
-            }
-            if (fixedPct > 40) {
-                lines.push(`- ⚠️ Fixed costs are over 40% - limited budget flexibility`);
-            }
+            const fixedPct = total2025 > 0 ? ((costStructure.Fixed + costStructure['Semi-Fixed']) / total2025) * 100 : 0;
+            const variablePct = total2025 > 0 ? (costStructure.Variable / total2025) * 100 : 0;
+            lines.push(`**Key Insight:** ${fmtPct(fixedPct)} of spending is committed (Fixed + Semi-Fixed), ${fmtPct(variablePct)} is discretionary.`);
             lines.push('');
             
-            // === MONTHLY COST STRUCTURE (2025) ===
-            lines.push('## 📈 2025 Monthly Cost Structure');
+            // === SPENDING BY CATEGORY (2025) ===
+            lines.push('## 🏷️ 2025 Spending by Category');
             lines.push('');
             
-            const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-            const monthlyCostStructure = {};
+            const byCategory = {};
+            const byCategory2024 = {};
             
             exp2025.forEach(e => {
-                const month = getM(e.date);
                 const cat = getEffectiveCategory(e, merchantRules).category;
-                const costType = getCostType(cat);
-                if (!monthlyCostStructure[month]) {
-                    monthlyCostStructure[month] = { Fixed: 0, 'Semi-Fixed': 0, Variable: 0, total: 0 };
-                }
-                monthlyCostStructure[month][costType] += safe(e.amount);
-                monthlyCostStructure[month].total += safe(e.amount);
+                if (!byCategory[cat]) byCategory[cat] = { total: 0, count: 0 };
+                byCategory[cat].total += safe(e.amount);
+                byCategory[cat].count += 1;
+            });
+            
+            exp2024.forEach(e => {
+                const cat = getEffectiveCategory(e, merchantRules).category;
+                if (!byCategory2024[cat]) byCategory2024[cat] = { total: 0 };
+                byCategory2024[cat].total += safe(e.amount);
+            });
+            
+            const sortedCats = Object.entries(byCategory)
+                .map(([cat, data]) => ({ cat, ...data, pct: (data.total / total2025) * 100, prev: byCategory2024[cat]?.total || 0 }))
+                .sort((a, b) => b.total - a.total);
+            
+            lines.push('| Category | Amount | % | Txns | vs 2024 |');
+            lines.push('|----------|--------|---|------|---------|');
+            sortedCats.slice(0, 12).forEach(({ cat, total, pct, count, prev }) => {
+                const change = prev > 0 ? ((total - prev) / prev) * 100 : 0;
+                lines.push(`| ${cat} | ${fmt(total)} | ${fmtPct(pct)} | ${count} | ${prev > 0 ? (change >= 0 ? '+' : '') + fmtPct(change) : 'New'} |`);
+            });
+            lines.push('');
+            
+            // === MONTHLY SPENDING TREND (2025) ===
+            lines.push('## 📈 2025 Monthly Spending Trend');
+            lines.push('');
+            
+            const monthlySpend = {};
+            exp2025.forEach(e => {
+                const m = getM(e.date);
+                if (!monthlySpend[m]) monthlySpend[m] = { Fixed: 0, 'Semi-Fixed': 0, Variable: 0, total: 0 };
+                const costType = getCostType(getEffectiveCategory(e, merchantRules).category);
+                monthlySpend[m][costType] += safe(e.amount);
+                monthlySpend[m].total += safe(e.amount);
             });
             
             lines.push('| Month | Fixed | Semi-Fixed | Variable | Total |');
             lines.push('|-------|-------|------------|----------|-------|');
-            for (let m = 0; m < 12; m++) {
-                if (monthlyCostStructure[m]) {
-                    const mc = monthlyCostStructure[m];
-                    lines.push(`| ${monthNames[m]} | ${fmt(mc.Fixed)} | ${fmt(mc['Semi-Fixed'])} | ${fmt(mc.Variable)} | ${fmt(mc.total)} |`);
-                }
-            }
+            Object.keys(monthlySpend).sort((a, b) => a - b).forEach(m => {
+                const ms = monthlySpend[m];
+                lines.push(`| ${monthNames[m]} | ${fmt(ms.Fixed)} | ${fmt(ms['Semi-Fixed'])} | ${fmt(ms.Variable)} | **${fmt(ms.total)}** |`);
+            });
             lines.push('');
             
             // Monthly stats
-            const monthlyTotals = Object.values(monthlyCostStructure).map(m => m.total);
-            if (monthlyTotals.length > 0) {
-                const avgMonthly = monthlyTotals.reduce((a, b) => a + b, 0) / monthlyTotals.length;
-                const maxMonthVal = Math.max(...monthlyTotals);
-                const minMonthVal = Math.min(...monthlyTotals);
-                const maxMonthIdx = Object.entries(monthlyCostStructure).find(([k, v]) => v.total === maxMonthVal)?.[0];
-                const minMonthIdx = Object.entries(monthlyCostStructure).find(([k, v]) => v.total === minMonthVal)?.[0];
-                
-                lines.push(`- **Average Monthly:** ${fmt(avgMonthly)}`);
-                lines.push(`- **Highest:** ${monthNames[maxMonthIdx]} (${fmt(maxMonthVal)})`);
-                lines.push(`- **Lowest:** ${monthNames[minMonthIdx]} (${fmt(minMonthVal)})`);
-                lines.push(`- **Variance:** ${fmt(maxMonthVal - minMonthVal)} spread`);
+            const monthlyTotals = Object.values(monthlySpend).map(m => m.total);
+            if (monthlyTotals.length > 1) {
+                const avgMo = monthlyTotals.reduce((a, b) => a + b, 0) / monthlyTotals.length;
+                const maxMo = Math.max(...monthlyTotals);
+                const minMo = Math.min(...monthlyTotals);
+                lines.push(`**Monthly Stats:** Avg ${fmt(avgMo)}, High ${fmt(maxMo)}, Low ${fmt(minMo)}, Variance ${fmt(maxMo - minMo)}`);
                 lines.push('');
             }
             
-            // === 2025 CATEGORY BREAKDOWN ===
-            if (exp2025.length > 0) {
-                lines.push('## 🏷️ 2025 Spending by Category');
-                lines.push('');
-                
-                const byCategory = {};
-                exp2025.forEach(e => {
-                    const cat = getEffectiveCategory(e, merchantRules).category;
-                    if (!byCategory[cat]) byCategory[cat] = { total: 0, count: 0 };
-                    byCategory[cat].total += safe(e.amount);
-                    byCategory[cat].count += 1;
-                });
-                
-                // Also get 2024 for comparison
-                const byCategory2024 = {};
-                exp2024.forEach(e => {
-                    const cat = getEffectiveCategory(e, merchantRules).category;
-                    if (!byCategory2024[cat]) byCategory2024[cat] = { total: 0 };
-                    byCategory2024[cat].total += safe(e.amount);
-                });
-                
-                const sortedCats = Object.entries(byCategory)
-                    .map(([cat, data]) => ({ 
-                        cat, 
-                        ...data, 
-                        pct: (data.total / total2025) * 100,
-                        costType: getCostType(cat),
-                        prev: byCategory2024[cat]?.total || 0
-                    }))
-                    .sort((a, b) => b.total - a.total);
-                
-                lines.push('| Category | Cost Type | 2025 Amount | % of Total | vs 2024 |');
-                lines.push('|----------|-----------|-------------|------------|---------|');
-                sortedCats.forEach(({ cat, costType, total, pct, prev }) => {
-                    const change = prev > 0 ? ((total - prev) / prev) * 100 : 0;
-                    const changeStr = prev > 0 ? `${change >= 0 ? '+' : ''}${fmtPct(change)}` : 'New';
-                    lines.push(`| ${cat} | ${costType} | ${fmt(total)} | ${fmtPct(pct)} | ${changeStr} |`);
-                });
-                lines.push(`| **TOTAL** | | **${fmt(total2025)}** | **100%** | |`);
-                lines.push('');
-            }
+            // === SPENDING MAGNITUDE DISTRIBUTION (2025) ===
+            lines.push('## 💳 2025 Transaction Size Distribution');
+            lines.push('');
             
-            // === INCOME VS EXPENSES (2025) ===
-            const income2025 = incomeExpenses.filter(e => getY(e.date) === 2025);
-            const totalIncome2025 = income2025.reduce((s, e) => s + Math.abs(safe(e.amount)), 0);
+            const buckets = [
+                { name: 'Under $20', min: 0, max: 20 },
+                { name: '$20-$50', min: 20, max: 50 },
+                { name: '$50-$100', min: 50, max: 100 },
+                { name: '$100-$500', min: 100, max: 500 },
+                { name: '$500-$1k', min: 500, max: 1000 },
+                { name: 'Over $1k', min: 1000, max: Infinity }
+            ];
             
-            if (totalIncome2025 > 0 && total2025 > 0) {
-                lines.push('## 💰 2025 Income vs Expenses');
-                lines.push('');
-                lines.push('| Metric | Amount |');
-                lines.push('|--------|--------|');
-                lines.push(`| Total Income | ${fmt(totalIncome2025)} |`);
-                lines.push(`| Total Expenses | ${fmt(total2025)} |`);
-                lines.push(`| **Net Savings** | **${fmt(totalIncome2025 - total2025)}** |`);
-                lines.push(`| Savings Rate | ${fmtPct(((totalIncome2025 - total2025) / totalIncome2025) * 100)} |`);
-                lines.push(`| Fixed Cost Ratio | ${fmtPct((costStructure2025.Fixed / totalIncome2025) * 100)} of income |`);
-                lines.push(`| Committed Cost Ratio | ${fmtPct(((costStructure2025.Fixed + costStructure2025['Semi-Fixed']) / totalIncome2025) * 100)} of income |`);
-                lines.push('');
-            }
+            lines.push('| Size Bucket | # Txns | Total $ | % of Spend |');
+            lines.push('|-------------|--------|---------|------------|');
+            buckets.forEach(b => {
+                const txns = exp2025.filter(e => safe(e.amount) >= b.min && safe(e.amount) < b.max);
+                const sum = txns.reduce((s, e) => s + safe(e.amount), 0);
+                const pct = total2025 > 0 ? (sum / total2025) * 100 : 0;
+                lines.push(`| ${b.name} | ${txns.length} | ${fmt(sum)} | ${fmtPct(pct)} |`);
+            });
+            lines.push('');
+            
+            const smallTxns = exp2025.filter(e => safe(e.amount) < 50);
+            const smallTotal = smallTxns.reduce((s, e) => s + safe(e.amount), 0);
+            lines.push(`**Small Purchase Insight:** ${smallTxns.length} transactions under $50 totaling ${fmt(smallTotal)} (${fmtPct((smallTotal / total2025) * 100)} of spend)`);
+            lines.push('');
             
             // === TOP MERCHANTS (2025) ===
-            if (exp2025.length > 0) {
-                lines.push('## 🏪 2025 Top 10 Spending Areas');
-                lines.push('');
-                
-                const byMerchant = {};
-                exp2025.forEach(e => {
-                    const name = cleanMerchant(e.description);
-                    const cat = getEffectiveCategory(e, merchantRules).category;
-                    if (!byMerchant[name]) byMerchant[name] = { total: 0, count: 0, category: cat };
-                    byMerchant[name].total += safe(e.amount);
-                    byMerchant[name].count += 1;
-                });
-                
-                const topMerchants = Object.entries(byMerchant)
-                    .map(([name, data]) => ({ name, ...data, costType: getCostType(data.category) }))
-                    .sort((a, b) => b.total - a.total)
-                    .slice(0, 10);
-                
-                lines.push('| Rank | Merchant | Category | Cost Type | Total | Visits |');
-                lines.push('|------|----------|----------|-----------|-------|--------|');
-                topMerchants.forEach((m, i) => {
-                    lines.push(`| ${i + 1} | ${m.name} | ${m.category} | ${m.costType} | ${fmt(m.total)} | ${m.count} |`);
-                });
-                lines.push('');
-            }
+            lines.push('## 🏪 2025 Top 15 Merchants');
+            lines.push('');
             
-            // === RECURRING EXPENSES (2025) ===
-            const subscriptionLikely = [];
-            const merchantMonthly = {};
+            const byMerchant = {};
             exp2025.forEach(e => {
                 const name = cleanMerchant(e.description);
-                const month = getM(e.date);
-                if (!merchantMonthly[name]) merchantMonthly[name] = new Set();
-                merchantMonthly[name].add(month);
+                const cat = getEffectiveCategory(e, merchantRules).category;
+                if (!byMerchant[name]) byMerchant[name] = { total: 0, count: 0, category: cat };
+                byMerchant[name].total += safe(e.amount);
+                byMerchant[name].count += 1;
             });
             
-            Object.entries(merchantMonthly).forEach(([name, months]) => {
-                if (months.size >= 3) {
-                    const total = exp2025.filter(e => cleanMerchant(e.description) === name)
-                        .reduce((s, e) => s + safe(e.amount), 0);
-                    const monthly = total / months.size;
-                    if (monthly > 5 && monthly < 500) {
-                        subscriptionLikely.push({ name, months: months.size, monthly, annual: monthly * 12 });
-                    }
-                }
+            const topMerchants = Object.entries(byMerchant)
+                .map(([name, data]) => ({ name, ...data }))
+                .sort((a, b) => b.total - a.total)
+                .slice(0, 15);
+            
+            lines.push('| # | Merchant | Category | Total | Visits | Avg |');
+            lines.push('|---|----------|----------|-------|--------|-----|');
+            topMerchants.forEach((m, i) => {
+                lines.push(`| ${i + 1} | ${m.name} | ${m.category} | ${fmt(m.total)} | ${m.count} | ${fmt(m.total / m.count)} |`);
+            });
+            lines.push('');
+            
+            // === SMALL SPEND CATEGORIES (Under $50) ===
+            lines.push('## 🔍 Small Spend Analysis (Under $50)');
+            lines.push('');
+            lines.push('Where do the small transactions go?');
+            lines.push('');
+            
+            const smallByCategory = {};
+            smallTxns.forEach(e => {
+                const cat = getEffectiveCategory(e, merchantRules).category;
+                if (!smallByCategory[cat]) smallByCategory[cat] = { total: 0, count: 0 };
+                smallByCategory[cat].total += safe(e.amount);
+                smallByCategory[cat].count += 1;
             });
             
-            if (subscriptionLikely.length > 0) {
-                subscriptionLikely.sort((a, b) => b.annual - a.annual);
-                const topSubs = subscriptionLikely.slice(0, 8);
-                const totalSubsAnnual = topSubs.reduce((s, sub) => s + sub.annual, 0);
+            const smallCatsSorted = Object.entries(smallByCategory)
+                .map(([cat, data]) => ({ cat, ...data, pct: (data.total / smallTotal) * 100 }))
+                .sort((a, b) => b.total - a.total)
+                .slice(0, 8);
+            
+            lines.push('| Category | Amount | % of Small | Txns |');
+            lines.push('|----------|--------|------------|------|');
+            smallCatsSorted.forEach(c => {
+                lines.push(`| ${c.cat} | ${fmt(c.total)} | ${fmtPct(c.pct)} | ${c.count} |`);
+            });
+            lines.push('');
+            
+            // === RECURRING/SUBSCRIPTION COSTS ===
+            lines.push('## 🔄 Likely Recurring Expenses (2025)');
+            lines.push('');
+            
+            const merchantMonths = {};
+            exp2025.forEach(e => {
+                const name = cleanMerchant(e.description);
+                const m = getM(e.date);
+                if (!merchantMonths[name]) merchantMonths[name] = { months: new Set(), total: 0 };
+                merchantMonths[name].months.add(m);
+                merchantMonths[name].total += safe(e.amount);
+            });
+            
+            const recurring = Object.entries(merchantMonths)
+                .filter(([_, data]) => data.months.size >= 3)
+                .map(([name, data]) => ({
+                    name,
+                    monthCount: data.months.size,
+                    monthly: data.total / data.months.size,
+                    annual: (data.total / data.months.size) * 12
+                }))
+                .filter(r => r.monthly > 5 && r.monthly < 1000)
+                .sort((a, b) => b.annual - a.annual)
+                .slice(0, 10);
+            
+            if (recurring.length > 0) {
+                const totalRecurringAnnual = recurring.reduce((s, r) => s + r.annual, 0);
                 
-                lines.push('## 🔄 Likely Recurring Expenses (2025)');
-                lines.push('');
                 lines.push('| Service | Est. Monthly | Est. Annual | Frequency |');
                 lines.push('|---------|--------------|-------------|-----------|');
-                topSubs.forEach(sub => {
-                    lines.push(`| ${sub.name} | ${fmt(sub.monthly)} | ${fmt(sub.annual)} | ${sub.months} months |`);
+                recurring.forEach(r => {
+                    lines.push(`| ${r.name} | ${fmt(r.monthly)} | ${fmt(r.annual)} | ${r.monthCount} months |`);
                 });
-                lines.push(`| **Subtotal** | **${fmt(totalSubsAnnual / 12)}** | **${fmt(totalSubsAnnual)}** | |`);
+                lines.push(`| **Total Recurring** | **${fmt(totalRecurringAnnual / 12)}** | **${fmt(totalRecurringAnnual)}** | |`);
                 lines.push('');
             }
             
-            // === FOOTER / PROMPT ===
+            // === STYLECOM SUMMARY (if applicable) ===
+            const stylecomExp = expenses.filter(e => {
+                const cat = getEffectiveCategory(e, merchantRules).category;
+                return cat === 'Stylecom' && getY(e.date) === 2025;
+            });
+            
+            if (stylecomExp.length > 0) {
+                const stylecomGross = stylecomExp.filter(e => safe(e.amount) > 0).reduce((s, e) => s + safe(e.amount), 0);
+                const stylecomRepaid = stylecomExp.filter(e => safe(e.amount) < 0).reduce((s, e) => s + Math.abs(safe(e.amount)), 0);
+                const stylecomNet = stylecomGross - stylecomRepaid;
+                
+                lines.push('## 👔 Stylecom (Family Expenses) - 2025');
+                lines.push('');
+                lines.push(`| Metric | Amount |`);
+                lines.push(`|--------|--------|`);
+                lines.push(`| Gross Advanced | ${fmt(stylecomGross)} |`);
+                lines.push(`| Repaid | ${fmt(stylecomRepaid)} |`);
+                lines.push(`| Net Owed to Family | **${fmt(stylecomNet)}** |`);
+                lines.push(`| Repayment Rate | ${fmtPct(stylecomGross > 0 ? (stylecomRepaid / stylecomGross) * 100 : 0)} |`);
+                lines.push('');
+            }
+            
+            // === YOY CATEGORY EVOLUTION ===
+            lines.push('## 📊 Year-over-Year Category Changes');
+            lines.push('');
+            lines.push('Categories with largest changes from 2024 to 2025:');
+            lines.push('');
+            
+            const catChanges = sortedCats
+                .filter(c => c.prev > 500) // Only categories with significant 2024 spend
+                .map(c => ({ ...c, change: c.prev > 0 ? ((c.total - c.prev) / c.prev) * 100 : 0 }))
+                .sort((a, b) => Math.abs(b.change) - Math.abs(a.change))
+                .slice(0, 8);
+            
+            lines.push('| Category | 2024 | 2025 | Change |');
+            lines.push('|----------|------|------|--------|');
+            catChanges.forEach(c => {
+                const arrow = c.change > 10 ? '📈' : c.change < -10 ? '📉' : '➡️';
+                lines.push(`| ${c.cat} | ${fmt(c.prev)} | ${fmt(c.total)} | ${arrow} ${c.change >= 0 ? '+' : ''}${fmtPct(c.change)} |`);
+            });
+            lines.push('');
+            
+            // === ACCOUNTS SUMMARY ===
+            const accountTotals = {};
+            exp2025.forEach(e => {
+                const acc = e.account || 'Unknown';
+                if (!accountTotals[acc]) accountTotals[acc] = 0;
+                accountTotals[acc] += safe(e.amount);
+            });
+            
+            if (Object.keys(accountTotals).length > 1) {
+                lines.push('## 💳 2025 Spending by Account');
+                lines.push('');
+                lines.push('| Account | Total | % |');
+                lines.push('|---------|-------|---|');
+                Object.entries(accountTotals)
+                    .sort((a, b) => b[1] - a[1])
+                    .forEach(([acc, total]) => {
+                        lines.push(`| ${acc} | ${fmt(total)} | ${fmtPct((total / total2025) * 100)} |`);
+                    });
+                lines.push('');
+            }
+            
+            // === AI QUESTIONS ===
             lines.push('---');
             lines.push('');
-            lines.push('## 🤖 Suggested Questions to Ask AI');
+            lines.push('## 🤖 Suggested Analysis Questions');
             lines.push('');
-            lines.push('1. "Based on my cost structure, how can I reduce my fixed costs?"');
-            lines.push('2. "My variable spending is X% - is this healthy? Where can I cut?"');
-            lines.push('3. "Which categories grew the most from 2024 to 2025 and why?"');
-            lines.push('4. "Help me create a budget that reduces my committed costs ratio."');
-            lines.push('5. "What\'s a healthy ratio of Fixed/Semi-Fixed/Variable spending?"');
-            lines.push('6. "Are there any concerning trends in my monthly spending pattern?"');
+            lines.push('1. "Based on my cost structure, where can I reduce fixed or semi-fixed costs?"');
+            lines.push('2. "My small purchases under $50 total X - how can I reduce this leakage?"');
+            lines.push('3. "Which categories show concerning growth from 2024 to 2025?"');
+            lines.push('4. "Create a monthly budget based on my spending patterns"');
+            lines.push('5. "What subscription services should I consider cutting?"');
+            lines.push('6. "My savings rate is X% - is this healthy for my income level?"');
+            lines.push('7. "Identify the top 3 areas where I can realistically cut 20%"');
             lines.push('');
             lines.push('---');
-            lines.push('*This report contains aggregated 2024-2025 data only. No individual transaction details or bank descriptions are included for privacy.*');
+            lines.push('*Report contains aggregated 2024-2025 data. No individual transaction details included for privacy.*');
             
             setReport(lines.join('\n'));
             setGenerating(false);
