@@ -351,8 +351,12 @@ const cleanMerchant = (desc) => {
     if (!desc) return 'Unknown';
     // First clean any processor prefixes
     let name = cleanDescription(desc);
-    // Then apply merchant name extraction
-    name = name.split(/\s{2,}|\t|\*|#|\d{10,}/)[0].trim();
+    
+    // Special handling for patterns like "UBER *EATS" - replace * with space to keep as one name
+    name = name.replace(/\s*\*\s*/g, ' ');
+    
+    // Then apply merchant name extraction - split on multiple spaces, tabs, hashes, or long numbers
+    name = name.split(/\s{2,}|\t|#|\d{10,}/)[0].trim();
     name = name.substring(0, 40).toUpperCase();
     return name || 'Unknown';
 };
@@ -2697,16 +2701,23 @@ const CategoryManagement = ({ expenses, merchantRules, onUpdateExpense, onUpdate
     }
 
     // Transaction View
-    // State for column filters
+    // State for smart column filters
     const [colFilters, setColFilters] = useState({
-        date: '',
+        year: '',
+        month: '',
         merchant: '',
         description: '',
-        account: '',
-        amount: '',
+        accounts: [], // multi-select
+        amountMin: '',
+        amountMax: '',
         category: '',
         recurring: ''
     });
+    
+    // State for multi-select
+    const [selectedIds, setSelectedIds] = useState(new Set());
+    const [showBulkEdit, setShowBulkEdit] = useState(false);
+    const [bulkCategory, setBulkCategory] = useState('');
     
     // Get unique values for filter dropdowns
     const uniqueAccounts = useMemo(() => {
@@ -2714,7 +2725,7 @@ const CategoryManagement = ({ expenses, merchantRules, onUpdateExpense, onUpdate
         expenses.filter(e => isValidYear(e.date)).forEach(e => {
             if (e.account) accs.add(e.account);
         });
-        return ['', ...Array.from(accs).sort()];
+        return Array.from(accs).sort();
     }, [expenses]);
     
     const uniqueCategories = useMemo(() => {
@@ -2725,27 +2736,114 @@ const CategoryManagement = ({ expenses, merchantRules, onUpdateExpense, onUpdate
         return ['', ...Array.from(cats).sort()];
     }, [expenses, merchantRules]);
     
+    // Get unique years and months from data
+    const { uniqueYears, uniqueMonths } = useMemo(() => {
+        const years = new Set();
+        const months = new Set();
+        expenses.filter(e => isValidYear(e.date)).forEach(e => {
+            const y = getY(e.date);
+            const m = getM(e.date);
+            if (y) years.add(y);
+            if (m !== undefined) months.add(m);
+        });
+        return {
+            uniqueYears: Array.from(years).sort((a, b) => b - a),
+            uniqueMonths: Array.from(months).sort((a, b) => a - b)
+        };
+    }, [expenses]);
+    
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    
     // Apply column filters on top of existing filters
     const fullyFilteredExpenses = useMemo(() => {
         return filteredExpenses.filter(e => {
             const effective = getEffectiveCategory(e, merchantRules);
             const merchant = cleanMerchant(e.description).toLowerCase();
             const desc = (e.description || '').toLowerCase();
-            const account = (e.account || '').toLowerCase();
-            const date = e.date || '';
+            const account = e.account || '';
+            const year = getY(e.date);
+            const month = getM(e.date);
+            const amount = safe(e.amount);
             const isSubscription = e.isSubscription || false;
             
-            if (colFilters.date && !date.includes(colFilters.date)) return false;
+            // Year filter
+            if (colFilters.year && year !== parseInt(colFilters.year)) return false;
+            // Month filter
+            if (colFilters.month !== '' && month !== parseInt(colFilters.month)) return false;
+            // Merchant text filter
             if (colFilters.merchant && !merchant.includes(colFilters.merchant.toLowerCase())) return false;
+            // Description text filter
             if (colFilters.description && !desc.includes(colFilters.description.toLowerCase())) return false;
-            if (colFilters.account && account !== colFilters.account.toLowerCase()) return false;
+            // Multi-account filter
+            if (colFilters.accounts.length > 0 && !colFilters.accounts.includes(account)) return false;
+            // Amount range filter
+            if (colFilters.amountMin !== '' && amount < parseFloat(colFilters.amountMin)) return false;
+            if (colFilters.amountMax !== '' && amount > parseFloat(colFilters.amountMax)) return false;
+            // Category filter
             if (colFilters.category && effective.category !== colFilters.category) return false;
+            // Recurring filter
             if (colFilters.recurring === 'yes' && !isSubscription) return false;
             if (colFilters.recurring === 'no' && isSubscription) return false;
             
             return true;
         });
     }, [filteredExpenses, colFilters, merchantRules]);
+    
+    // Toggle account in multi-select
+    const toggleAccountFilter = (acc) => {
+        setColFilters(prev => ({
+            ...prev,
+            accounts: prev.accounts.includes(acc)
+                ? prev.accounts.filter(a => a !== acc)
+                : [...prev.accounts, acc]
+        }));
+    };
+    
+    // Clear all column filters
+    const clearColFilters = () => {
+        setColFilters({
+            year: '', month: '', merchant: '', description: '',
+            accounts: [], amountMin: '', amountMax: '', category: '', recurring: ''
+        });
+    };
+    
+    // Check if any filter is active
+    const hasActiveFilters = colFilters.year || colFilters.month !== '' || colFilters.merchant || 
+        colFilters.description || colFilters.accounts.length > 0 || colFilters.amountMin !== '' || 
+        colFilters.amountMax !== '' || colFilters.category || colFilters.recurring;
+    
+    // Selection handlers
+    const toggleSelect = (id) => {
+        setSelectedIds(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    };
+    
+    const selectAll = () => {
+        const visibleIds = fullyFilteredExpenses.slice(0, 500).map(e => e.id);
+        setSelectedIds(new Set(visibleIds));
+    };
+    
+    const selectNone = () => {
+        setSelectedIds(new Set());
+    };
+    
+    // Bulk edit handler
+    const handleBulkCategoryChange = () => {
+        if (!bulkCategory || selectedIds.size === 0) return;
+        
+        // Apply category to all selected transactions as one-off changes
+        selectedIds.forEach(id => {
+            onUpdateExpense(id, bulkCategory);
+        });
+        
+        setSelectedIds(new Set());
+        setShowBulkEdit(false);
+        setBulkCategory('');
+    };
     
     return (
         <div className="space-y-6">
@@ -2815,34 +2913,99 @@ const CategoryManagement = ({ expenses, merchantRules, onUpdateExpense, onUpdate
                         className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500"/>
                 </div>
                 <div className="text-sm text-slate-500">{fullyFilteredExpenses.length} transactions</div>
-                {Object.values(colFilters).some(v => v) && (
+                {hasActiveFilters && (
                     <button 
-                        onClick={() => setColFilters({ date: '', merchant: '', description: '', account: '', amount: '', category: '', recurring: '' })}
+                        onClick={clearColFilters}
                         className="px-3 py-1.5 bg-red-100 text-red-600 rounded-lg text-xs font-bold hover:bg-red-200"
                     >
                         ✕ Clear Column Filters
                     </button>
                 )}
             </div>
+            
+            {/* Multi-Select Actions Bar */}
+            {selectedIds.size > 0 && (
+                <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 flex flex-wrap items-center gap-4">
+                    <div className="text-sm font-bold text-indigo-700">
+                        ✓ {selectedIds.size} selected
+                    </div>
+                    <button onClick={selectNone} className="text-xs font-semibold text-indigo-600 hover:underline">
+                        Clear Selection
+                    </button>
+                    <div className="flex-1" />
+                    <div className="flex items-center gap-2">
+                        <select 
+                            value={bulkCategory}
+                            onChange={e => setBulkCategory(e.target.value)}
+                            className="px-3 py-2 bg-white border border-indigo-300 rounded-lg text-sm font-semibold outline-none"
+                        >
+                            <option value="">Choose category...</option>
+                            {CATEGORIES.map(cat => (
+                                <option key={cat} value={cat}>{cat}</option>
+                            ))}
+                        </select>
+                        <button 
+                            onClick={handleBulkCategoryChange}
+                            disabled={!bulkCategory}
+                            className={`px-4 py-2 rounded-lg text-sm font-bold ${
+                                bulkCategory 
+                                    ? 'bg-indigo-600 text-white hover:bg-indigo-700' 
+                                    : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                            }`}
+                        >
+                            Apply to {selectedIds.size}
+                        </button>
+                    </div>
+                </div>
+            )}
 
-            {/* Transactions Table with Column Filters */}
+            {/* Transactions Table with Smart Column Filters */}
             <div className="bg-white rounded-2xl border border-slate-100 shadow-lg overflow-hidden">
                 <div className="overflow-x-auto max-h-[60vh]">
                     <table className="w-full text-left text-sm">
                         <thead className="bg-slate-50 text-slate-400 uppercase text-[10px] font-bold sticky top-0 z-10">
                             <tr>
+                                {/* Checkbox column */}
+                                <th className="p-2 w-10">
+                                    <div className="flex flex-col items-center gap-1">
+                                        <input 
+                                            type="checkbox"
+                                            checked={selectedIds.size > 0 && selectedIds.size === Math.min(fullyFilteredExpenses.length, 500)}
+                                            onChange={e => e.target.checked ? selectAll() : selectNone()}
+                                            className="w-4 h-4 rounded border-slate-300"
+                                        />
+                                        <span className="text-[8px] normal-case">All</span>
+                                    </div>
+                                </th>
+                                {/* Date - Year/Month dropdowns */}
                                 <th className="p-2">
                                     <div className="space-y-1">
                                         <span>Date</span>
-                                        <input 
-                                            type="text" 
-                                            placeholder="Filter..." 
-                                            value={colFilters.date}
-                                            onChange={e => setColFilters({...colFilters, date: e.target.value})}
-                                            className="w-full px-2 py-1 text-[10px] font-normal normal-case bg-white border border-slate-200 rounded outline-none"
-                                        />
+                                        <div className="flex gap-1">
+                                            <select 
+                                                value={colFilters.year}
+                                                onChange={e => setColFilters({...colFilters, year: e.target.value})}
+                                                className="w-16 px-1 py-1 text-[10px] font-normal normal-case bg-white border border-slate-200 rounded outline-none"
+                                            >
+                                                <option value="">Year</option>
+                                                {uniqueYears.map(y => (
+                                                    <option key={y} value={y}>{y}</option>
+                                                ))}
+                                            </select>
+                                            <select 
+                                                value={colFilters.month}
+                                                onChange={e => setColFilters({...colFilters, month: e.target.value})}
+                                                className="w-14 px-1 py-1 text-[10px] font-normal normal-case bg-white border border-slate-200 rounded outline-none"
+                                            >
+                                                <option value="">Mon</option>
+                                                {uniqueMonths.map(m => (
+                                                    <option key={m} value={m}>{monthNames[m]}</option>
+                                                ))}
+                                            </select>
+                                        </div>
                                     </div>
                                 </th>
+                                {/* Merchant - text input */}
                                 <th className="p-2">
                                     <div className="space-y-1">
                                         <span>Merchant</span>
@@ -2855,6 +3018,7 @@ const CategoryManagement = ({ expenses, merchantRules, onUpdateExpense, onUpdate
                                         />
                                     </div>
                                 </th>
+                                {/* Description - text input */}
                                 <th className="p-2">
                                     <div className="space-y-1">
                                         <span>Description</span>
@@ -2867,33 +3031,70 @@ const CategoryManagement = ({ expenses, merchantRules, onUpdateExpense, onUpdate
                                         />
                                     </div>
                                 </th>
+                                {/* Account - multi-select dropdown */}
                                 <th className="p-2">
                                     <div className="space-y-1">
                                         <span>Account</span>
-                                        <select 
-                                            value={colFilters.account}
-                                            onChange={e => setColFilters({...colFilters, account: e.target.value})}
-                                            className="w-full px-2 py-1 text-[10px] font-normal normal-case bg-white border border-slate-200 rounded outline-none"
-                                        >
-                                            <option value="">All</option>
-                                            {uniqueAccounts.filter(a => a).map(acc => (
-                                                <option key={acc} value={acc}>{acc}</option>
-                                            ))}
-                                        </select>
+                                        <div className="relative group">
+                                            <button 
+                                                className="w-full px-2 py-1 text-[10px] font-normal normal-case bg-white border border-slate-200 rounded text-left truncate"
+                                            >
+                                                {colFilters.accounts.length === 0 
+                                                    ? 'All' 
+                                                    : colFilters.accounts.length === 1 
+                                                        ? colFilters.accounts[0].substring(0, 12) 
+                                                        : `${colFilters.accounts.length} selected`}
+                                            </button>
+                                            <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-20 hidden group-hover:block min-w-[160px] max-h-48 overflow-auto">
+                                                <div className="p-1 border-b border-slate-100 flex gap-1">
+                                                    <button 
+                                                        onClick={() => setColFilters({...colFilters, accounts: [...uniqueAccounts]})}
+                                                        className="text-[9px] text-indigo-600 hover:underline"
+                                                    >All</button>
+                                                    <button 
+                                                        onClick={() => setColFilters({...colFilters, accounts: []})}
+                                                        className="text-[9px] text-slate-500 hover:underline"
+                                                    >None</button>
+                                                </div>
+                                                {uniqueAccounts.map(acc => (
+                                                    <label key={acc} className="flex items-center gap-2 px-2 py-1.5 hover:bg-slate-50 cursor-pointer">
+                                                        <input 
+                                                            type="checkbox"
+                                                            checked={colFilters.accounts.includes(acc)}
+                                                            onChange={() => toggleAccountFilter(acc)}
+                                                            className="w-3 h-3 rounded"
+                                                        />
+                                                        <span className="text-[10px] text-slate-700 truncate">{acc}</span>
+                                                    </label>
+                                                ))}
+                                            </div>
+                                        </div>
                                     </div>
                                 </th>
+                                {/* Amount - range inputs */}
                                 <th className="p-2">
                                     <div className="space-y-1">
                                         <span>Amount</span>
-                                        <input 
-                                            type="text" 
-                                            placeholder="Filter..." 
-                                            value={colFilters.amount}
-                                            onChange={e => setColFilters({...colFilters, amount: e.target.value})}
-                                            className="w-full px-2 py-1 text-[10px] font-normal normal-case bg-white border border-slate-200 rounded outline-none"
-                                        />
+                                        <div className="flex gap-1 items-center">
+                                            <input 
+                                                type="number" 
+                                                placeholder="Min" 
+                                                value={colFilters.amountMin}
+                                                onChange={e => setColFilters({...colFilters, amountMin: e.target.value})}
+                                                className="w-14 px-1 py-1 text-[10px] font-normal normal-case bg-white border border-slate-200 rounded outline-none"
+                                            />
+                                            <span className="text-[8px]">-</span>
+                                            <input 
+                                                type="number" 
+                                                placeholder="Max" 
+                                                value={colFilters.amountMax}
+                                                onChange={e => setColFilters({...colFilters, amountMax: e.target.value})}
+                                                className="w-14 px-1 py-1 text-[10px] font-normal normal-case bg-white border border-slate-200 rounded outline-none"
+                                            />
+                                        </div>
                                     </div>
                                 </th>
+                                {/* Category - dropdown */}
                                 <th className="p-2">
                                     <div className="space-y-1">
                                         <span>Category</span>
@@ -2909,6 +3110,7 @@ const CategoryManagement = ({ expenses, merchantRules, onUpdateExpense, onUpdate
                                         </select>
                                     </div>
                                 </th>
+                                {/* Recurring - dropdown */}
                                 <th className="p-2">
                                     <div className="space-y-1">
                                         <span>Recurring</span>
@@ -2928,15 +3130,24 @@ const CategoryManagement = ({ expenses, merchantRules, onUpdateExpense, onUpdate
                         </thead>
                         <tbody className="divide-y divide-slate-50">
                             {fullyFilteredExpenses.length === 0 ? (
-                                <tr><td colSpan={8} className="p-12 text-center text-slate-400">No transactions found</td></tr>
+                                <tr><td colSpan={10} className="p-12 text-center text-slate-400">No transactions found</td></tr>
                             ) : fullyFilteredExpenses.slice(0, 500).map(e => {
                                 const effective = getEffectiveCategory(e, merchantRules);
                                 const isExcluded = EXCLUDED_CATEGORIES.includes(effective.category);
                                 const isVenmo = effective.category === 'Venmo';
                                 const isNegative = e.amount < 0;
                                 const isSubscription = e.isSubscription || false;
+                                const isSelected = selectedIds.has(e.id);
                                 return (
-                                    <tr key={e.id} className={`group ${isExcluded ? 'bg-slate-50 opacity-60' : isVenmo ? 'bg-blue-50/30' : 'hover:bg-slate-50'}`}>
+                                    <tr key={e.id} className={`group ${isSelected ? 'bg-indigo-50' : isExcluded ? 'bg-slate-50 opacity-60' : isVenmo ? 'bg-blue-50/30' : 'hover:bg-slate-50'}`}>
+                                        <td className="p-2 text-center">
+                                            <input 
+                                                type="checkbox"
+                                                checked={isSelected}
+                                                onChange={() => toggleSelect(e.id)}
+                                                className="w-4 h-4 rounded border-slate-300"
+                                            />
+                                        </td>
                                         <td className="p-2 text-slate-500 text-xs whitespace-nowrap">{e.date}</td>
                                         <td className="p-2">
                                             <div className={`font-semibold text-xs ${isExcluded ? 'text-slate-400 line-through' : 'text-slate-700'}`} title={e.description}>
@@ -4881,7 +5092,7 @@ const TransferMatching = ({ expenses, merchantRules }) => {
 // ============== EXPORT RULES (DEVELOPER MODE) ==============
 const ExportRules = ({ merchantRules, expenses }) => {
     const [copied, setCopied] = useState(false);
-    const [exportType, setExportType] = useState('all'); // 'all', 'global', 'accounts'
+    const [exportType, setExportType] = useState('all'); // 'all', 'global', 'accounts', 'oneoff', 'subscriptions'
     
     // Generate statistics about rules
     const ruleStats = useMemo(() => {
@@ -4903,8 +5114,40 @@ const ExportRules = ({ merchantRules, expenses }) => {
             }
         });
         
-        return { globalRules, accountRules, totalRules: Object.keys(merchantRules).length };
-    }, [merchantRules]);
+        // Get one-off manual category assignments from expenses
+        const oneOffRules = expenses
+            .filter(e => e.manualCategory && isValidYear(e.date))
+            .map(e => ({
+                id: e.id,
+                date: e.date,
+                description: e.description,
+                merchant: cleanMerchant(e.description),
+                amount: e.amount,
+                category: e.manualCategory,
+                account: e.account || 'Unknown'
+            }));
+        
+        // Get subscription-flagged expenses
+        const subscriptions = expenses
+            .filter(e => e.isSubscription === true && isValidYear(e.date))
+            .map(e => ({
+                id: e.id,
+                date: e.date,
+                description: e.description,
+                merchant: cleanMerchant(e.description),
+                amount: e.amount,
+                category: getEffectiveCategory(e, merchantRules).category,
+                account: e.account || 'Unknown'
+            }));
+        
+        return { 
+            globalRules, 
+            accountRules, 
+            oneOffRules,
+            subscriptions,
+            totalRules: Object.keys(merchantRules).length 
+        };
+    }, [merchantRules, expenses]);
     
     // Generate the code snippet for AUTO_RULES additions
     const generateAutoRulesCode = () => {
@@ -4979,15 +5222,83 @@ const ExportRules = ({ merchantRules, expenses }) => {
         return lines.join('\n');
     };
     
+    // Generate One-Off Rules export
+    const generateOneOffRulesCode = () => {
+        const lines = [];
+        lines.push('// ========== ONE-OFF CATEGORY ASSIGNMENTS ==========');
+        lines.push('// These are manual category overrides for specific transactions');
+        lines.push(`// Total: ${ruleStats.oneOffRules.length} one-off assignments`);
+        lines.push('');
+        lines.push('const ONE_OFF_CATEGORIES = [');
+        
+        // Group by category for readability
+        const byCategory = {};
+        ruleStats.oneOffRules.forEach(r => {
+            if (!byCategory[r.category]) byCategory[r.category] = [];
+            byCategory[r.category].push(r);
+        });
+        
+        Object.entries(byCategory).sort((a, b) => a[0].localeCompare(b[0])).forEach(([cat, rules]) => {
+            lines.push(`    // --- ${cat} (${rules.length}) ---`);
+            rules.sort((a, b) => a.date.localeCompare(b.date)).forEach(r => {
+                const escapedDesc = (r.description || '').replace(/'/g, "\\'").substring(0, 50);
+                lines.push(`    { id: '${r.id}', date: '${r.date}', merchant: '${r.merchant}', category: '${r.category}', amount: ${r.amount.toFixed(2)}, desc: '${escapedDesc}' },`);
+            });
+        });
+        
+        lines.push('];');
+        lines.push('');
+        lines.push('// To apply these, loop through and set manualCategory on matching expenses:');
+        lines.push('// ONE_OFF_CATEGORIES.forEach(r => { const exp = expenses.find(e => e.id === r.id); if (exp) exp.manualCategory = r.category; });');
+        
+        return lines.join('\n');
+    };
+    
+    // Generate Subscriptions export
+    const generateSubscriptionsCode = () => {
+        const lines = [];
+        lines.push('// ========== SUBSCRIPTION TAGS ==========');
+        lines.push('// These transactions are flagged as recurring subscriptions');
+        lines.push(`// Total: ${ruleStats.subscriptions.length} subscription-tagged transactions`);
+        lines.push('');
+        
+        // Group by merchant
+        const byMerchant = {};
+        ruleStats.subscriptions.forEach(s => {
+            if (!byMerchant[s.merchant]) byMerchant[s.merchant] = { items: [], category: s.category };
+            byMerchant[s.merchant].items.push(s);
+        });
+        
+        lines.push('const SUBSCRIPTION_MERCHANTS = [');
+        Object.entries(byMerchant).sort((a, b) => a[0].localeCompare(b[0])).forEach(([merchant, data]) => {
+            const escapedMerchant = merchant.replace(/'/g, "\\'");
+            lines.push(`    '${escapedMerchant}', // ${data.category} (${data.items.length}× in data)`);
+        });
+        lines.push('];');
+        lines.push('');
+        lines.push('const SUBSCRIPTION_IDS = [');
+        ruleStats.subscriptions.sort((a, b) => a.date.localeCompare(b.date)).forEach(s => {
+            lines.push(`    '${s.id}', // ${s.date} - ${s.merchant} - $${s.amount.toFixed(2)}`);
+        });
+        lines.push('];');
+        lines.push('');
+        lines.push('// To apply these, loop through and set isSubscription flag:');
+        lines.push('// SUBSCRIPTION_IDS.forEach(id => { const exp = expenses.find(e => e.id === id); if (exp) exp.isSubscription = true; });');
+        
+        return lines.join('\n');
+    };
+    
     // Combined export
     const generateFullExport = () => {
         const sections = [];
         sections.push('// ══════════════════════════════════════════════════════════');
-        sections.push('// EXPENSE TRACKER - RULES EXPORT');
+        sections.push('// EXPENSE TRACKER - FULL RULES EXPORT');
         sections.push(`// Generated: ${new Date().toISOString()}`);
-        sections.push(`// Total Rules: ${ruleStats.totalRules}`);
+        sections.push(`// Total Merchant Rules: ${ruleStats.totalRules}`);
         sections.push(`// Global Rules: ${Object.keys(ruleStats.globalRules).length}`);
         sections.push(`// Account Rules: ${Object.keys(ruleStats.accountRules).length}`);
+        sections.push(`// One-Off Assignments: ${ruleStats.oneOffRules.length}`);
+        sections.push(`// Subscription Tags: ${ruleStats.subscriptions.length}`);
         sections.push('// ══════════════════════════════════════════════════════════');
         sections.push('');
         sections.push(generateAutoRulesCode());
@@ -4995,6 +5306,10 @@ const ExportRules = ({ merchantRules, expenses }) => {
         sections.push(generateMerchantRulesCode());
         sections.push('');
         sections.push(generatePriorityRulesCode());
+        sections.push('');
+        sections.push(generateOneOffRulesCode());
+        sections.push('');
+        sections.push(generateSubscriptionsCode());
         
         return sections.join('\n');
     };
@@ -5004,6 +5319,8 @@ const ExportRules = ({ merchantRules, expenses }) => {
             case 'auto': return generateAutoRulesCode();
             case 'merchant': return generateMerchantRulesCode();
             case 'priority': return generatePriorityRulesCode();
+            case 'oneoff': return generateOneOffRulesCode();
+            case 'subscriptions': return generateSubscriptionsCode();
             default: return generateFullExport();
         }
     };
@@ -5030,11 +5347,11 @@ const ExportRules = ({ merchantRules, expenses }) => {
             {/* Header */}
             <div className="bg-gradient-to-r from-slate-700 to-slate-900 text-white p-6 rounded-2xl">
                 <h2 className="text-xl font-black">🛠️ Export Rules (Developer Mode)</h2>
-                <p className="text-slate-300 text-sm mt-1">Export your categorization rules to hardcode into the source</p>
+                <p className="text-slate-300 text-sm mt-1">Export your categorization rules, one-off assignments, and subscription tags</p>
             </div>
             
             {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                 <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg">
                     <h3 className="text-[10px] font-bold text-slate-400 uppercase">Total Rules</h3>
                     <p className="text-3xl font-black text-slate-900">{ruleStats.totalRules}</p>
@@ -5047,7 +5364,17 @@ const ExportRules = ({ merchantRules, expenses }) => {
                 <div className="bg-white p-5 rounded-2xl border border-cyan-200 shadow-lg">
                     <h3 className="text-[10px] font-bold text-cyan-600 uppercase">💳 Account Rules</h3>
                     <p className="text-3xl font-black text-cyan-600">{Object.keys(ruleStats.accountRules).length}</p>
-                    <p className="text-xs text-slate-500 mt-1">Account-specific overrides</p>
+                    <p className="text-xs text-slate-500 mt-1">Account-specific</p>
+                </div>
+                <div className="bg-white p-5 rounded-2xl border border-amber-200 shadow-lg">
+                    <h3 className="text-[10px] font-bold text-amber-600 uppercase">⚡ One-Off</h3>
+                    <p className="text-3xl font-black text-amber-600">{ruleStats.oneOffRules.length}</p>
+                    <p className="text-xs text-slate-500 mt-1">Manual overrides</p>
+                </div>
+                <div className="bg-white p-5 rounded-2xl border border-emerald-200 shadow-lg">
+                    <h3 className="text-[10px] font-bold text-emerald-600 uppercase">🔄 Subscriptions</h3>
+                    <p className="text-3xl font-black text-emerald-600">{ruleStats.subscriptions.length}</p>
+                    <p className="text-xs text-slate-500 mt-1">Recurring tags</p>
                 </div>
             </div>
             
@@ -5062,7 +5389,9 @@ const ExportRules = ({ merchantRules, expenses }) => {
                             { key: 'all', label: '📋 Full Export', desc: 'Everything' },
                             { key: 'auto', label: '🔤 AUTO_RULES', desc: 'Keywords only' },
                             { key: 'merchant', label: '🏪 Merchant Rules', desc: 'JSON format' },
-                            { key: 'priority', label: '⚡ PRIORITY_RULES', desc: 'Hard overrides' }
+                            { key: 'priority', label: '⚡ PRIORITY_RULES', desc: 'Hard overrides' },
+                            { key: 'oneoff', label: '🎯 One-Off', desc: 'Manual assignments' },
+                            { key: 'subscriptions', label: '🔄 Subscriptions', desc: 'Recurring tags' }
                         ].map(opt => (
                             <button 
                                 key={opt.key}
@@ -5159,6 +5488,65 @@ const ExportRules = ({ merchantRules, expenses }) => {
                                     </span>
                                 </div>
                             ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+            
+            {/* One-Off Rules Preview */}
+            {ruleStats.oneOffRules.length > 0 && (
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-lg overflow-hidden">
+                    <div className="p-5 border-b border-slate-100">
+                        <h3 className="text-sm font-black text-slate-800">⚡ One-Off Category Assignments Preview</h3>
+                        <p className="text-xs text-slate-500 mt-1">Manual category overrides for individual transactions</p>
+                    </div>
+                    <div className="p-4 max-h-64 overflow-y-auto">
+                        <div className="space-y-2">
+                            {ruleStats.oneOffRules.slice(0, 50).map((rule) => (
+                                <div key={rule.id} className="flex items-center gap-2 p-2 bg-amber-50 rounded-lg">
+                                    <span className="text-[10px] text-slate-400 w-20">{rule.date}</span>
+                                    <span className="text-xs font-semibold text-slate-600 truncate flex-1" title={rule.description}>{rule.merchant}</span>
+                                    <span className="text-[10px] text-slate-500">${rule.amount.toFixed(2)}</span>
+                                    <span className="text-[10px] font-bold text-white px-2 py-0.5 rounded" style={{ backgroundColor: CAT_COLORS[rule.category] || '#6366f1' }}>
+                                        {rule.category}
+                                    </span>
+                                </div>
+                            ))}
+                            {ruleStats.oneOffRules.length > 50 && (
+                                <div className="text-xs text-slate-400 text-center py-2">
+                                    ... and {ruleStats.oneOffRules.length - 50} more
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+            
+            {/* Subscriptions Preview */}
+            {ruleStats.subscriptions.length > 0 && (
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-lg overflow-hidden">
+                    <div className="p-5 border-b border-slate-100">
+                        <h3 className="text-sm font-black text-slate-800">🔄 Subscription Tags Preview</h3>
+                        <p className="text-xs text-slate-500 mt-1">Transactions flagged as recurring subscriptions</p>
+                    </div>
+                    <div className="p-4 max-h-64 overflow-y-auto">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                            {(() => {
+                                // Group by merchant for display
+                                const byMerchant = {};
+                                ruleStats.subscriptions.forEach(s => {
+                                    if (!byMerchant[s.merchant]) byMerchant[s.merchant] = { count: 0, total: 0, category: s.category };
+                                    byMerchant[s.merchant].count++;
+                                    byMerchant[s.merchant].total += s.amount;
+                                });
+                                return Object.entries(byMerchant).sort((a, b) => b[1].total - a[1].total).map(([merchant, data]) => (
+                                    <div key={merchant} className="flex items-center gap-2 p-2 bg-emerald-50 rounded-lg">
+                                        <span className="text-xs font-semibold text-slate-600 truncate flex-1" title={merchant}>{merchant}</span>
+                                        <span className="text-[9px] text-slate-400">{data.count}×</span>
+                                        <span className="text-[10px] font-bold text-emerald-600">${data.total.toFixed(0)}</span>
+                                    </div>
+                                ));
+                            })()}
                         </div>
                     </div>
                 </div>
