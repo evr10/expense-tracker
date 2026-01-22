@@ -3832,61 +3832,76 @@ const StylecomReimbursement = ({ expenses, merchantRules, paidIds, onTogglePaid 
     const [selectedQuarter, setSelectedQuarter] = useState('all');
     const [viewMode, setViewMode] = useState('expenses'); // 'expenses' or 'repayments'
     
-    // Separate Stylecom into EXPENSES (positive) and REPAYMENTS (negative)
+    // Threshold to distinguish refunds from repayments
+    // Refunds are small (returns, credits) < $500 - these go with expenses
+    // Repayments are large wire transfers >= $500 - these are separate
+    const REPAYMENT_THRESHOLD = 500;
+    
+    // Separate Stylecom into EXPENSES (includes small refunds) and REPAYMENTS (large transfers only)
     const { stylecomExpenses, stylecomRepayments } = useMemo(() => {
         const allStylecom = expenses.filter(e => {
             const effective = getEffectiveCategory(e, merchantRules);
             return effective.category === 'Stylecom' && isValidYear(e.date);
         });
         
-        // Expenses = positive amounts (money you put out)
+        // Expenses = positive amounts + small negative amounts (refunds < $500)
+        // These net against each other
         const stylecomExpenses = allStylecom
-            .filter(e => safe(e.amount) > 0)
+            .filter(e => safe(e.amount) > 0 || (safe(e.amount) < 0 && Math.abs(safe(e.amount)) < REPAYMENT_THRESHOLD))
             .sort((a, b) => new Date(b.date) - new Date(a.date));
         
-        // Repayments = negative amounts (money coming back)
+        // Repayments = large negative amounts only (family wire transfers >= $500)
         const stylecomRepayments = allStylecom
-            .filter(e => safe(e.amount) < 0)
+            .filter(e => safe(e.amount) < 0 && Math.abs(safe(e.amount)) >= REPAYMENT_THRESHOLD)
             .sort((a, b) => new Date(b.date) - new Date(a.date));
         
         return { stylecomExpenses, stylecomRepayments };
     }, [expenses, merchantRules]);
     
-    // Calculate KPIs using GROSS amounts (expenses only, no netting)
+    // Calculate KPIs - Net expenses = sum of expenses bucket (positives - refunds)
     const kpis = useMemo(() => {
-        // GROSS lifetime spend (only positive expenses)
-        const grossSpend = stylecomExpenses.reduce((sum, e) => sum + safe(e.amount), 0);
+        // Net expenses = positives minus small refunds (they're in same bucket)
+        const netExpenses = stylecomExpenses.reduce((sum, e) => sum + safe(e.amount), 0);
         
-        // Total actually repaid (sum of negative amounts, shown as positive)
+        // Count positives and refunds separately for display
+        const positiveExpenses = stylecomExpenses.filter(e => safe(e.amount) > 0);
+        const refunds = stylecomExpenses.filter(e => safe(e.amount) < 0);
+        const grossExpenses = positiveExpenses.reduce((sum, e) => sum + safe(e.amount), 0);
+        const totalRefunds = Math.abs(refunds.reduce((sum, e) => sum + safe(e.amount), 0));
+        
+        // Total actually repaid via wire (large transfers)
         const totalRepaid = Math.abs(stylecomRepayments.reduce((sum, e) => sum + safe(e.amount), 0));
         
-        // Claims marked as paid (user checkbox)
-        const markedAsPaid = stylecomExpenses.filter(e => paidIds.has(e.id));
+        // Claims marked as paid (user checkbox) - only count positive expenses
+        const markedAsPaid = positiveExpenses.filter(e => paidIds.has(e.id));
         const totalMarkedPaid = markedAsPaid.reduce((sum, e) => sum + safe(e.amount), 0);
         
-        // Outstanding balance = Gross Spend - Actual Repayments
-        const netOwed = grossSpend - totalRepaid;
+        // Outstanding balance = Net Expenses - Actual Repayments
+        const netOwed = netExpenses - totalRepaid;
         
         // Reconciliation delta = What's marked as paid - What's actually received
         const reconciliationDelta = totalMarkedPaid - totalRepaid;
         
         return { 
-            grossSpend, 
+            grossExpenses,
+            totalRefunds,
+            netExpenses,
             totalRepaid, 
             totalMarkedPaid,
             netOwed,
             reconciliationDelta,
-            expenseCount: stylecomExpenses.length,
+            expenseCount: positiveExpenses.length,
+            refundCount: refunds.length,
             repaymentCount: stylecomRepayments.length,
             markedPaidCount: markedAsPaid.length
         };
     }, [stylecomExpenses, stylecomRepayments, paidIds]);
     
-    // Group EXPENSES by quarter (GROSS only, no repayments mixed in)
+    // Group by quarter
     const quarterlyData = useMemo(() => {
         const byQuarter = {};
         
-        // Process expenses
+        // Process expenses (includes refunds)
         stylecomExpenses.forEach(e => {
             const date = pDate(e.date);
             const year = date.getFullYear();
@@ -3896,24 +3911,29 @@ const StylecomReimbursement = ({ expenses, merchantRules, paidIds, onTogglePaid 
             if (!byQuarter[key]) {
                 byQuarter[key] = { 
                     key, year, quarter, 
-                    grossTotal: 0, markedPaid: 0, notMarked: 0, 
+                    grossTotal: 0, refunds: 0, netTotal: 0, markedPaid: 0, notMarked: 0, 
                     transactions: [],
                     repayments: 0, repaymentTxns: []
                 };
             }
             
             const amount = safe(e.amount);
-            byQuarter[key].grossTotal += amount;
             byQuarter[key].transactions.push(e);
             
-            if (paidIds.has(e.id)) {
-                byQuarter[key].markedPaid += amount;
+            if (amount > 0) {
+                byQuarter[key].grossTotal += amount;
+                if (paidIds.has(e.id)) {
+                    byQuarter[key].markedPaid += amount;
+                } else {
+                    byQuarter[key].notMarked += amount;
+                }
             } else {
-                byQuarter[key].notMarked += amount;
+                byQuarter[key].refunds += Math.abs(amount);
             }
+            byQuarter[key].netTotal = byQuarter[key].grossTotal - byQuarter[key].refunds;
         });
         
-        // Process repayments separately
+        // Process repayments (wire transfers)
         stylecomRepayments.forEach(e => {
             const date = pDate(e.date);
             const year = date.getFullYear();
@@ -3923,7 +3943,7 @@ const StylecomReimbursement = ({ expenses, merchantRules, paidIds, onTogglePaid 
             if (!byQuarter[key]) {
                 byQuarter[key] = { 
                     key, year, quarter, 
-                    grossTotal: 0, markedPaid: 0, notMarked: 0, 
+                    grossTotal: 0, refunds: 0, netTotal: 0, markedPaid: 0, notMarked: 0, 
                     transactions: [],
                     repayments: 0, repaymentTxns: []
                 };
@@ -3952,7 +3972,7 @@ const StylecomReimbursement = ({ expenses, merchantRules, paidIds, onTogglePaid 
     const markQuarterPaid = (quarterKey) => {
         const q = quarterlyData.find(q => q.key === quarterKey);
         if (q) {
-            q.transactions.forEach(e => {
+            q.transactions.filter(e => safe(e.amount) > 0).forEach(e => {
                 if (!paidIds.has(e.id)) {
                     onTogglePaid(e.id);
                 }
@@ -3960,49 +3980,64 @@ const StylecomReimbursement = ({ expenses, merchantRules, paidIds, onTogglePaid 
         }
     };
     
-    // Get max for bar chart scaling
-    const maxQuarterlyGross = Math.max(...quarterlyData.map(q => q.grossTotal), 1);
-    
     return (
         <div className="space-y-6">
             {/* Header */}
             <div className="bg-gradient-to-r from-pink-500 to-rose-600 text-white p-6 rounded-2xl">
                 <h2 className="text-xl font-black">👗 Stylecom Reimbursement Tracker</h2>
-                <p className="text-pink-100 text-sm mt-1">Track business expenses and reimbursements separately</p>
+                <p className="text-pink-100 text-sm mt-1">Track business expenses and family repayments</p>
             </div>
             
-            {/* KPI Cards - Row 1: Gross Metrics */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {/* KPI Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                 <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg">
-                    <h3 className="text-[10px] font-bold text-slate-400 uppercase">💸 Gross Lifetime Spend</h3>
-                    <p className="text-2xl font-black text-slate-900">${kpis.grossSpend.toLocaleString(undefined, {maximumFractionDigits: 0})}</p>
-                    <p className="text-xs text-slate-500 mt-1">{kpis.expenseCount} expense transactions</p>
+                    <h3 className="text-[10px] font-bold text-slate-400 uppercase">💸 Gross Expenses</h3>
+                    <p className="text-xl font-black text-slate-900">${kpis.grossExpenses.toLocaleString(undefined, {maximumFractionDigits: 0})}</p>
+                    <p className="text-xs text-slate-500 mt-1">{kpis.expenseCount} purchases</p>
+                </div>
+                <div className="bg-white p-5 rounded-2xl border border-orange-200 shadow-lg">
+                    <h3 className="text-[10px] font-bold text-orange-600 uppercase">↩️ Refunds/Credits</h3>
+                    <p className="text-xl font-black text-orange-600">-${kpis.totalRefunds.toLocaleString(undefined, {maximumFractionDigits: 0})}</p>
+                    <p className="text-xs text-orange-500 mt-1">{kpis.refundCount} returns</p>
+                </div>
+                <div className="bg-white p-5 rounded-2xl border border-pink-200 shadow-lg">
+                    <h3 className="text-[10px] font-bold text-pink-600 uppercase">📋 Net Expenses</h3>
+                    <p className="text-xl font-black text-pink-600">${kpis.netExpenses.toLocaleString(undefined, {maximumFractionDigits: 0})}</p>
+                    <p className="text-xs text-pink-500 mt-1">Amount to reimburse</p>
                 </div>
                 <div className="bg-white p-5 rounded-2xl border border-green-200 shadow-lg">
-                    <h3 className="text-[10px] font-bold text-green-600 uppercase">💰 Total Repaid</h3>
-                    <p className="text-2xl font-black text-green-600">${kpis.totalRepaid.toLocaleString(undefined, {maximumFractionDigits: 0})}</p>
-                    <p className="text-xs text-green-500 mt-1">{kpis.repaymentCount} repayment wires</p>
+                    <h3 className="text-[10px] font-bold text-green-600 uppercase">💰 Repaid (Wires)</h3>
+                    <p className="text-xl font-black text-green-600">${kpis.totalRepaid.toLocaleString(undefined, {maximumFractionDigits: 0})}</p>
+                    <p className="text-xs text-green-500 mt-1">{kpis.repaymentCount} transfers</p>
                 </div>
                 <div className="bg-white p-5 rounded-2xl border border-amber-200 shadow-lg">
-                    <h3 className="text-[10px] font-bold text-amber-600 uppercase">⚡ Net Owed to Family</h3>
-                    <p className={`text-3xl font-black ${kpis.netOwed > 0 ? 'text-amber-600' : 'text-green-600'}`}>
+                    <h3 className="text-[10px] font-bold text-amber-600 uppercase">⚡ Still Owed</h3>
+                    <p className={`text-xl font-black ${kpis.netOwed > 0 ? 'text-amber-600' : 'text-green-600'}`}>
                         ${Math.abs(kpis.netOwed).toLocaleString(undefined, {maximumFractionDigits: 0})}
                     </p>
-                    <p className="text-xs text-amber-500 mt-1">Gross Spend - Repaid</p>
-                </div>
-                <div className="bg-white p-5 rounded-2xl border border-indigo-200 shadow-lg">
-                    <h3 className="text-[10px] font-bold text-indigo-500 uppercase">📊 Repayment Rate</h3>
-                    <p className="text-2xl font-black text-indigo-600">
-                        {kpis.grossSpend > 0 ? Math.round((kpis.totalRepaid / kpis.grossSpend) * 100) : 0}%
-                    </p>
-                    <div className="h-2 bg-slate-100 rounded-full mt-2 overflow-hidden">
-                        <div className="h-full bg-gradient-to-r from-indigo-400 to-indigo-600 rounded-full"
-                            style={{ width: `${kpis.grossSpend > 0 ? (kpis.totalRepaid / kpis.grossSpend) * 100 : 0}%` }}/>
-                    </div>
+                    <p className="text-xs text-amber-500 mt-1">Net - Repaid</p>
                 </div>
             </div>
             
-            {/* NEW: Reimbursement Reconciliation Section */}
+            {/* Repayment Progress */}
+            <div className="bg-white p-5 rounded-2xl border border-indigo-200 shadow-lg">
+                <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-[10px] font-bold text-indigo-500 uppercase">📊 Repayment Progress</h3>
+                    <span className="text-lg font-black text-indigo-600">
+                        {kpis.netExpenses > 0 ? Math.round((kpis.totalRepaid / kpis.netExpenses) * 100) : 0}%
+                    </span>
+                </div>
+                <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-indigo-400 to-indigo-600 rounded-full transition-all"
+                        style={{ width: `${kpis.netExpenses > 0 ? Math.min((kpis.totalRepaid / kpis.netExpenses) * 100, 100) : 0}%` }}/>
+                </div>
+                <div className="flex justify-between mt-2 text-[10px] text-slate-500">
+                    <span>Net Expenses: ${kpis.netExpenses.toLocaleString(undefined, {maximumFractionDigits: 0})}</span>
+                    <span>Repaid: ${kpis.totalRepaid.toLocaleString(undefined, {maximumFractionDigits: 0})}</span>
+                </div>
+            </div>
+            
+            {/* Reimbursement Reconciliation Section */}
             <div className="bg-white rounded-2xl border border-slate-100 shadow-lg overflow-hidden">
                 <div className="p-5 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-slate-100">
                     <h3 className="text-sm font-black text-slate-800">🔍 Reimbursement Reconciliation</h3>
@@ -4020,14 +4055,11 @@ const StylecomReimbursement = ({ expenses, merchantRules, paidIds, onTogglePaid 
                         {/* Progress Bar */}
                         <div className="flex-1">
                             <div className="relative h-8 bg-slate-100 rounded-full overflow-hidden">
-                                {/* Marked as Paid (full bar) */}
                                 <div className="absolute inset-0 bg-blue-200 rounded-full" style={{ width: '100%' }}/>
-                                {/* Actually Received (overlay) */}
                                 <div 
                                     className="absolute inset-y-0 left-0 bg-green-500 rounded-full transition-all"
                                     style={{ width: `${kpis.totalMarkedPaid > 0 ? Math.min((kpis.totalRepaid / kpis.totalMarkedPaid) * 100, 100) : 0}%` }}
                                 />
-                                {/* Center line marker */}
                                 <div className="absolute inset-0 flex items-center justify-center">
                                     <span className="text-[10px] font-black text-white drop-shadow-md">
                                         {kpis.totalMarkedPaid > 0 ? Math.round((kpis.totalRepaid / kpis.totalMarkedPaid) * 100) : 0}% received
@@ -4071,37 +4103,40 @@ const StylecomReimbursement = ({ expenses, merchantRules, paidIds, onTogglePaid 
                 </div>
             </div>
             
-            {/* Quarterly Breakdown - GROSS SPENDING ONLY (no negative bars) */}
+            {/* Quarterly Breakdown */}
             <div className="bg-white rounded-2xl border border-slate-100 shadow-lg overflow-hidden">
                 <div className="p-5 border-b border-slate-100">
-                    <h3 className="text-sm font-black text-slate-800">📅 Quarterly Gross Spending</h3>
-                    <p className="text-[10px] text-slate-500 mt-1">Showing what you advanced (not netted with repayments)</p>
+                    <h3 className="text-sm font-black text-slate-800">📅 Quarterly Breakdown</h3>
+                    <p className="text-[10px] text-slate-500 mt-1">Net = Gross - Refunds</p>
                 </div>
                 
-                {/* Table */}
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                         <thead className="bg-slate-50 text-slate-400 uppercase text-[10px] font-bold">
                             <tr>
                                 <th className="p-4 text-left">Quarter</th>
-                                <th className="p-4 text-right">Gross Spend</th>
-                                <th className="p-4 text-right">Marked Paid</th>
+                                <th className="p-4 text-right">Gross</th>
+                                <th className="p-4 text-right">Refunds</th>
+                                <th className="p-4 text-right">Net</th>
                                 <th className="p-4 text-right">Repaid</th>
-                                <th className="p-4 text-center">Claim Status</th>
+                                <th className="p-4 text-center">Claim %</th>
                                 <th className="p-4 text-center">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50">
                             {quarterlyData.length === 0 ? (
-                                <tr><td colSpan={6} className="p-12 text-center text-slate-400">No Stylecom expenses found</td></tr>
+                                <tr><td colSpan={7} className="p-12 text-center text-slate-400">No Stylecom expenses found</td></tr>
                             ) : quarterlyData.map(q => {
                                 const allMarked = q.notMarked === 0 && q.grossTotal > 0;
                                 const progress = q.grossTotal > 0 ? (q.markedPaid / q.grossTotal) * 100 : 0;
                                 return (
                                     <tr key={q.key} className={`hover:bg-slate-50 ${allMarked ? 'bg-green-50/50' : ''}`}>
                                         <td className="p-4 font-bold text-slate-800">{q.key}</td>
-                                        <td className="p-4 text-right font-semibold text-pink-600">${q.grossTotal.toLocaleString(undefined, {maximumFractionDigits: 0})}</td>
-                                        <td className="p-4 text-right font-semibold text-blue-600">${q.markedPaid.toLocaleString(undefined, {maximumFractionDigits: 0})}</td>
+                                        <td className="p-4 text-right font-semibold text-slate-600">${q.grossTotal.toLocaleString(undefined, {maximumFractionDigits: 0})}</td>
+                                        <td className="p-4 text-right font-semibold text-orange-500">
+                                            {(q.refunds || 0) > 0 ? `-$${(q.refunds || 0).toLocaleString(undefined, {maximumFractionDigits: 0})}` : '-'}
+                                        </td>
+                                        <td className="p-4 text-right font-bold text-pink-600">${q.netTotal.toLocaleString(undefined, {maximumFractionDigits: 0})}</td>
                                         <td className="p-4 text-right font-semibold text-green-600">${(q.repayments || 0).toLocaleString(undefined, {maximumFractionDigits: 0})}</td>
                                         <td className="p-4 text-center">
                                             <div className="flex items-center gap-2">
@@ -4135,27 +4170,25 @@ const StylecomReimbursement = ({ expenses, merchantRules, paidIds, onTogglePaid 
                 </div>
             </div>
             
-            {/* Transaction List with Toggle */}
+            {/* Transaction List */}
             <div className="bg-white rounded-2xl border border-slate-100 shadow-lg overflow-hidden">
                 <div className="p-5 border-b border-slate-100 flex justify-between items-center">
                     <h3 className="text-sm font-black text-slate-800">
-                        📝 {viewMode === 'expenses' ? 'Expenses' : 'Repayments'} {selectedQuarter !== 'all' && `- ${selectedQuarter}`}
+                        📝 {viewMode === 'expenses' ? 'Expenses & Refunds' : 'Repayments'} {selectedQuarter !== 'all' && `- ${selectedQuarter}`}
                     </h3>
                     <div className="flex gap-2 items-center">
                         {/* Export Button */}
                         <button 
                             onClick={() => {
-                                // Export current view to Excel/CSV
                                 const dataToExport = filteredTransactions.map(e => ({
                                     Date: e.date,
                                     Description: e.description,
                                     Account: e.account,
-                                    Amount: Math.abs(safe(e.amount)).toFixed(2),
-                                    Type: safe(e.amount) < 0 ? 'Repayment' : 'Expense',
-                                    'Marked Paid': viewMode === 'expenses' ? (paidIds.has(e.id) ? 'Yes' : 'No') : 'N/A'
+                                    Amount: safe(e.amount).toFixed(2),
+                                    Type: safe(e.amount) < 0 ? (viewMode === 'repayments' ? 'Repayment' : 'Refund') : 'Expense',
+                                    'Marked Paid': viewMode === 'expenses' && safe(e.amount) > 0 ? (paidIds.has(e.id) ? 'Yes' : 'No') : 'N/A'
                                 }));
                                 
-                                // Create CSV content
                                 const headers = ['Date', 'Description', 'Account', 'Amount', 'Type', 'Marked Paid'];
                                 const csvContent = [
                                     headers.join(','),
@@ -4164,7 +4197,6 @@ const StylecomReimbursement = ({ expenses, merchantRules, paidIds, onTogglePaid 
                                     )
                                 ].join('\n');
                                 
-                                // Download
                                 const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
                                 const url = URL.createObjectURL(blob);
                                 const a = document.createElement('a');
@@ -4213,33 +4245,39 @@ const StylecomReimbursement = ({ expenses, merchantRules, paidIds, onTogglePaid 
                             {filteredTransactions.length === 0 ? (
                                 <tr><td colSpan={viewMode === 'expenses' ? 5 : 4} className="p-12 text-center text-slate-400">No {viewMode} found</td></tr>
                             ) : filteredTransactions.map(e => {
-                                const isPaid = paidIds.has(e.id);
                                 const amount = safe(e.amount);
-                                const isRepayment = amount < 0;
+                                const isRefund = amount < 0 && viewMode === 'expenses';
+                                const isRepayment = viewMode === 'repayments';
+                                const isPaid = paidIds.has(e.id);
+                                const showCheckbox = viewMode === 'expenses' && amount > 0;
                                 return (
-                                    <tr key={e.id} className={`group hover:bg-slate-50 ${isPaid ? 'bg-green-50/50' : ''} ${isRepayment ? 'bg-emerald-50/50' : ''}`}>
+                                    <tr key={e.id} className={`group hover:bg-slate-50 ${isPaid && showCheckbox ? 'bg-green-50/50' : ''} ${isRefund ? 'bg-orange-50/50' : ''} ${isRepayment ? 'bg-emerald-50/50' : ''}`}>
                                         {viewMode === 'expenses' && (
                                             <td className="p-3 text-center">
-                                                <button 
-                                                    onClick={() => onTogglePaid(e.id)}
-                                                    className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${
-                                                        isPaid 
-                                                            ? 'bg-green-500 border-green-500 text-white' 
-                                                            : 'border-slate-300 hover:border-green-400 text-transparent hover:text-green-400'
-                                                    }`}>
-                                                    ✓
-                                                </button>
+                                                {showCheckbox ? (
+                                                    <button 
+                                                        onClick={() => onTogglePaid(e.id)}
+                                                        className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${
+                                                            isPaid 
+                                                                ? 'bg-green-500 border-green-500 text-white' 
+                                                                : 'border-slate-300 hover:border-green-400 text-transparent hover:text-green-400'
+                                                        }`}>
+                                                        ✓
+                                                    </button>
+                                                ) : (
+                                                    <span className="text-orange-500 text-xs">↩️</span>
+                                                )}
                                             </td>
                                         )}
-                                        <td className={`p-3 text-slate-500 text-xs whitespace-nowrap ${isPaid ? 'line-through' : ''}`}>{e.date}</td>
-                                        <td className={`p-3 ${isPaid ? 'text-slate-400 line-through' : isRepayment ? 'text-emerald-700' : 'text-slate-700'}`}>
+                                        <td className={`p-3 text-slate-500 text-xs whitespace-nowrap ${isPaid && showCheckbox ? 'line-through' : ''}`}>{e.date}</td>
+                                        <td className={`p-3 ${isPaid && showCheckbox ? 'text-slate-400 line-through' : isRefund ? 'text-orange-700' : isRepayment ? 'text-emerald-700' : 'text-slate-700'}`}>
                                             <div className="font-semibold text-xs truncate max-w-[250px]" title={e.description}>
-                                                {isRepayment && '↩️ '}{e.description}
+                                                {isRepayment && '💰 '}{e.description}
                                             </div>
                                         </td>
                                         <td className="p-3 text-slate-500 text-xs">{e.account}</td>
-                                        <td className={`p-3 text-right font-bold ${isRepayment ? 'text-green-600' : isPaid ? 'text-blue-600' : 'text-slate-900'}`}>
-                                            {isRepayment ? '+' : ''}${Math.abs(amount).toFixed(2)}
+                                        <td className={`p-3 text-right font-bold ${isRefund ? 'text-orange-600' : isRepayment ? 'text-green-600' : isPaid ? 'text-blue-600' : 'text-slate-900'}`}>
+                                            {amount < 0 ? '-' : ''}${Math.abs(amount).toFixed(2)}
                                         </td>
                                     </tr>
                                 );
