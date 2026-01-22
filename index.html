@@ -900,9 +900,6 @@ const CostStructureChart = ({ expenses, merchantRules, costTypeOverrides = {} })
     if (!hasData) return <Empty msg="No 2025 data for cost structure" />;
     
     // CUMULATIVE average line positions (measured from BOTTOM of chart)
-    // Line 1: Top of Fixed segment = avgFixed
-    // Line 2: Top of Semi-Fixed segment = avgFixed + avgSemiFixed  
-    // Line 3: Top of Variable (Total) = avgFixed + avgSemiFixed + avgVariable
     const line1Y = chartHeight - (avgFixed / maxTotal) * chartHeight;
     const line2Y = chartHeight - ((avgFixed + avgSemiFixed) / maxTotal) * chartHeight;
     const line3Y = chartHeight - (avgTotal / maxTotal) * chartHeight;
@@ -911,31 +908,34 @@ const CostStructureChart = ({ expenses, merchantRules, costTypeOverrides = {} })
         <div className="h-full flex flex-col">
             {/* Chart area with fixed height */}
             <div className="relative" style={{ height: chartHeight }}>
-                {/* Average reference lines - CUMULATIVE */}
+                {/* Average reference lines - CUMULATIVE with labels */}
                 <div className="absolute inset-0 pointer-events-none z-10">
                     {/* Line 1: Avg Fixed (top of red segment) */}
                     {avgFixed > 0 && (
-                        <div 
-                            className="absolute left-0 right-0 border-t-2 border-dashed"
-                            style={{ top: line1Y, borderColor: COST_TYPE_COLORS.Fixed }}
-                            title={`Avg Fixed: $${avgFixed.toLocaleString(undefined, {maximumFractionDigits: 0})}`}
-                        />
+                        <div className="absolute left-0 right-0" style={{ top: line1Y }}>
+                            <div className="border-t-2 border-dashed w-full" style={{ borderColor: COST_TYPE_COLORS.Fixed }} />
+                            <span className="absolute right-0 -top-3 text-[8px] font-bold px-1 rounded" style={{ color: COST_TYPE_COLORS.Fixed, backgroundColor: 'rgba(255,255,255,0.9)' }}>
+                                F: ${(avgFixed/1000).toFixed(1)}k
+                            </span>
+                        </div>
                     )}
                     {/* Line 2: Avg Fixed + Semi-Fixed (top of orange segment) */}
                     {avgSemiFixed > 0 && (
-                        <div 
-                            className="absolute left-0 right-0 border-t-2 border-dashed"
-                            style={{ top: line2Y, borderColor: COST_TYPE_COLORS['Semi-Fixed'] }}
-                            title={`Avg Fixed+Semi: $${(avgFixed + avgSemiFixed).toLocaleString(undefined, {maximumFractionDigits: 0})}`}
-                        />
+                        <div className="absolute left-0 right-0" style={{ top: line2Y }}>
+                            <div className="border-t-2 border-dashed w-full" style={{ borderColor: COST_TYPE_COLORS['Semi-Fixed'] }} />
+                            <span className="absolute right-0 -top-3 text-[8px] font-bold px-1 rounded" style={{ color: COST_TYPE_COLORS['Semi-Fixed'], backgroundColor: 'rgba(255,255,255,0.9)' }}>
+                                +SF: ${((avgFixed + avgSemiFixed)/1000).toFixed(1)}k
+                            </span>
+                        </div>
                     )}
                     {/* Line 3: Avg Total (top of blue segment) */}
                     {avgVariable > 0 && (
-                        <div 
-                            className="absolute left-0 right-0 border-t-2 border-dashed"
-                            style={{ top: line3Y, borderColor: COST_TYPE_COLORS.Variable }}
-                            title={`Avg Total: $${avgTotal.toLocaleString(undefined, {maximumFractionDigits: 0})}`}
-                        />
+                        <div className="absolute left-0 right-0" style={{ top: line3Y }}>
+                            <div className="border-t-2 border-dashed w-full" style={{ borderColor: COST_TYPE_COLORS.Variable }} />
+                            <span className="absolute right-0 -top-3 text-[8px] font-bold px-1 rounded" style={{ color: COST_TYPE_COLORS.Variable, backgroundColor: 'rgba(255,255,255,0.9)' }}>
+                                Avg: ${(avgTotal/1000).toFixed(1)}k
+                            </span>
+                        </div>
                     )}
                 </div>
                 
@@ -985,19 +985,19 @@ const CostStructureChart = ({ expenses, merchantRules, costTypeOverrides = {} })
                 ))}
             </div>
             
-            {/* Legend with avg values */}
-            <div className="flex-shrink-0 flex justify-center gap-3 pt-2 border-t border-slate-100 mt-2">
+            {/* Legend */}
+            <div className="flex-shrink-0 flex justify-center gap-4 pt-2 border-t border-slate-100 mt-2">
                 <div className="flex items-center gap-1">
-                    <div className="w-3 h-0.5 border-t-2 border-dashed" style={{ borderColor: COST_TYPE_COLORS.Fixed }} />
-                    <span className="text-[9px] text-slate-500">F: ${(avgFixed/1000).toFixed(1)}k</span>
+                    <div className="w-3 h-3 rounded" style={{ backgroundColor: COST_TYPE_COLORS.Fixed }} />
+                    <span className="text-[9px] text-slate-500">Fixed</span>
                 </div>
                 <div className="flex items-center gap-1">
-                    <div className="w-3 h-0.5 border-t-2 border-dashed" style={{ borderColor: COST_TYPE_COLORS['Semi-Fixed'] }} />
-                    <span className="text-[9px] text-slate-500">+SF: ${((avgFixed+avgSemiFixed)/1000).toFixed(1)}k</span>
+                    <div className="w-3 h-3 rounded" style={{ backgroundColor: COST_TYPE_COLORS['Semi-Fixed'] }} />
+                    <span className="text-[9px] text-slate-500">Semi-Fixed</span>
                 </div>
                 <div className="flex items-center gap-1">
-                    <div className="w-3 h-0.5 border-t-2 border-dashed" style={{ borderColor: COST_TYPE_COLORS.Variable }} />
-                    <span className="text-[9px] text-slate-500">Total: ${(avgTotal/1000).toFixed(1)}k</span>
+                    <div className="w-3 h-3 rounded" style={{ backgroundColor: COST_TYPE_COLORS.Variable }} />
+                    <span className="text-[9px] text-slate-500">Variable</span>
                 </div>
             </div>
         </div>
@@ -1072,16 +1072,31 @@ const CostStructureEvolution = ({ expenses, merchantRules, costTypeOverrides = {
         <div className="h-full flex flex-col">
             {/* Chart area */}
             <div className="relative" style={{ height: chartHeight }}>
-                {/* Average reference lines - CUMULATIVE */}
+                {/* Average reference lines - CUMULATIVE with labels */}
                 <div className="absolute inset-0 pointer-events-none z-10">
                     {avgFixed > 0 && (
-                        <div className="absolute left-0 right-0 border-t-2 border-dashed" style={{ top: line1Y, borderColor: COST_TYPE_COLORS.Fixed }} />
+                        <div className="absolute left-0 right-0" style={{ top: line1Y }}>
+                            <div className="border-t-2 border-dashed w-full" style={{ borderColor: COST_TYPE_COLORS.Fixed }} />
+                            <span className="absolute right-0 -top-3 text-[7px] font-bold px-1 rounded" style={{ color: COST_TYPE_COLORS.Fixed, backgroundColor: 'rgba(255,255,255,0.9)' }}>
+                                F: ${(avgFixed/1000).toFixed(1)}k
+                            </span>
+                        </div>
                     )}
                     {avgSemiFixed > 0 && (
-                        <div className="absolute left-0 right-0 border-t-2 border-dashed" style={{ top: line2Y, borderColor: COST_TYPE_COLORS['Semi-Fixed'] }} />
+                        <div className="absolute left-0 right-0" style={{ top: line2Y }}>
+                            <div className="border-t-2 border-dashed w-full" style={{ borderColor: COST_TYPE_COLORS['Semi-Fixed'] }} />
+                            <span className="absolute right-0 -top-3 text-[7px] font-bold px-1 rounded" style={{ color: COST_TYPE_COLORS['Semi-Fixed'], backgroundColor: 'rgba(255,255,255,0.9)' }}>
+                                +SF: ${((avgFixed + avgSemiFixed)/1000).toFixed(1)}k
+                            </span>
+                        </div>
                     )}
                     {avgVariable > 0 && (
-                        <div className="absolute left-0 right-0 border-t-2 border-dashed" style={{ top: line3Y, borderColor: COST_TYPE_COLORS.Variable }} />
+                        <div className="absolute left-0 right-0" style={{ top: line3Y }}>
+                            <div className="border-t-2 border-dashed w-full" style={{ borderColor: COST_TYPE_COLORS.Variable }} />
+                            <span className="absolute right-0 -top-3 text-[7px] font-bold px-1 rounded" style={{ color: COST_TYPE_COLORS.Variable, backgroundColor: 'rgba(255,255,255,0.9)' }}>
+                                Avg: ${(avgTotal/1000).toFixed(1)}k
+                            </span>
+                        </div>
                     )}
                 </div>
                 
@@ -1143,7 +1158,7 @@ const CostStructureEvolution = ({ expenses, merchantRules, costTypeOverrides = {
                 ))}
             </div>
             
-            {/* Legend with cumulative avg values */}
+            {/* Legend */}
             <div className="flex-shrink-0 border-t border-slate-100 pt-2 mt-1">
                 <div className="flex justify-center gap-3 flex-wrap">
                     <div className="flex items-center gap-1">
@@ -1158,8 +1173,6 @@ const CostStructureEvolution = ({ expenses, merchantRules, costTypeOverrides = {
                         <div className="w-2 h-2 rounded" style={{ backgroundColor: COST_TYPE_COLORS.Variable }} />
                         <span className="text-[8px] text-slate-500">Variable</span>
                     </div>
-                    <span className="text-[8px] text-slate-300">|</span>
-                    <span className="text-[8px] text-slate-400">Avg Total: ${(avgTotal/1000).toFixed(1)}k/mo</span>
                     <span className="text-[8px] text-slate-300">|</span>
                     <span className="text-[8px] text-slate-400 opacity-70">2024 (faded)</span>
                 </div>
@@ -1183,28 +1196,42 @@ const Stats = ({ expenses, merchantRules }) => {
 };
 
 const Pareto = ({ expenses, merchantRules }) => {
-    const { data, total } = useMemo(() => {
+    const { data, total, monthsWithData } = useMemo(() => {
         const sp = expenses.filter(e => !DASHBOARD_EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category) && getY(e.date) === 2025);
         const bc = {}; sp.forEach(e => { const cat = getEffectiveCategory(e, merchantRules).category; bc[cat] = (bc[cat]||0) + safe(e.amount); });
         const sorted = Object.entries(bc).map(([n,v]) => ({name:n,value:v})).sort((a,b) => b.value - a.value);
         const tot = sorted.reduce((s,i) => s + i.value, 0);
-        return { data: sorted.map(i => ({...i, pct: tot > 0 ? (i.value / tot) * 100 : 0 })), total: tot };
+        const months = new Set(sp.map(e => getM(e.date)));
+        return { data: sorted.map(i => ({...i, pct: tot > 0 ? (i.value / tot) * 100 : 0 })), total: tot, monthsWithData: months.size || 1 };
     }, [expenses, merchantRules]);
     if (!data.length) return <Empty msg="No 2025 data" />;
     const mx = Math.max(...data.map(d => d.value));
+    const projectedMonths = 12;
     return (<div className="h-full flex flex-col">
+        {/* Header */}
+        <div className="flex items-center gap-2 pb-2 border-b border-slate-100 mb-2 text-[9px] font-bold text-slate-400 uppercase">
+            <div className="w-24 text-right">Category</div>
+            <div className="flex-1"></div>
+            <div className="w-14 text-right">YTD</div>
+            <div className="w-14 text-right">Avg/Mo</div>
+            <div className="w-10 text-right">%</div>
+        </div>
         <div className="flex-1 overflow-auto space-y-1.5">
             {data.map(i => <div key={i.name} className="flex items-center gap-2">
                 <div className="w-24 text-[10px] font-semibold text-slate-600 truncate text-right" title={i.name}>{i.name}</div>
                 <div className="flex-1 h-5 bg-slate-100 rounded overflow-hidden">
                     <div className="h-full rounded" style={{width:`${i.value/mx*100}%`,backgroundColor:CAT_COLORS[i.name]||'#6366f1'}}/>
                 </div>
-                <div className="w-16 text-[10px] font-bold text-slate-700 text-right">${(i.value/1000).toFixed(1)}k</div>
+                <div className="w-14 text-[10px] font-bold text-slate-700 text-right">${(i.value/1000).toFixed(1)}k</div>
+                <div className="w-14 text-[10px] font-semibold text-indigo-600 text-right">${(i.value/monthsWithData/1000).toFixed(1)}k</div>
                 <div className="w-10 text-[10px] font-bold text-slate-500 text-right">{i.pct.toFixed(0)}%</div>
             </div>)}
         </div>
         <div className="text-[10px] text-slate-400 text-center pt-2 border-t border-slate-100 mt-2">
             Total: <span className="font-bold text-slate-600">${total.toLocaleString(undefined,{maximumFractionDigits:0})}</span>
+            <span className="mx-2">•</span>
+            Avg/Mo: <span className="font-bold text-indigo-600">${(total/monthsWithData).toLocaleString(undefined,{maximumFractionDigits:0})}</span>
+            <span className="text-slate-300 ml-1">({monthsWithData} months)</span>
         </div>
     </div>);
 };
@@ -1221,11 +1248,14 @@ const TopMerchants = ({ expenses, merchantRules }) => {
     if (!data.length) return <Empty msg="No 2025 data" />;
     const mx = data[0]?.value || 1;
     return (<div className="h-full flex flex-col"><div className="flex-1 space-y-1 overflow-auto">
-        {data.map((m, i) => (<div key={m.name} className="flex items-center gap-2"><div className="w-5 text-[10px] font-black text-slate-400">{i + 1}</div><div className="w-28 text-[10px] font-semibold text-slate-600 truncate" title={m.name}>{m.name}</div><div className="flex-1 h-4 bg-slate-100 rounded overflow-hidden"><div className="h-full rounded bg-gradient-to-r from-indigo-500 to-purple-500" style={{width:`${m.value/mx*100}%`}}/></div><div className="w-14 text-[9px] font-bold text-slate-700 text-right">${m.value.toLocaleString(undefined,{maximumFractionDigits:0})}</div><div className="w-10 text-[9px] font-semibold text-slate-400 text-right">{m.pct.toFixed(1)}%</div></div>))}
+        {data.map((m, i) => (<div key={m.name} className="flex items-center gap-2"><div className="w-5 text-[10px] font-black text-slate-400">{i + 1}</div><div className="w-40 text-[10px] font-semibold text-slate-600 truncate" title={m.name}>{m.name}</div><div className="w-24 h-4 bg-slate-100 rounded overflow-hidden"><div className="h-full rounded bg-gradient-to-r from-indigo-500 to-purple-500" style={{width:`${m.value/mx*100}%`}}/></div><div className="w-14 text-[9px] font-bold text-slate-700 text-right">${m.value.toLocaleString(undefined,{maximumFractionDigits:0})}</div><div className="w-10 text-[9px] font-semibold text-slate-400 text-right">{m.pct.toFixed(1)}%</div></div>))}
     </div><div className="text-[10px] text-slate-400 text-center pt-2 border-t border-slate-100 mt-2">Top 20 = ${data.reduce((s,m)=>s+m.value,0).toLocaleString(undefined,{maximumFractionDigits:0})}</div></div>);
 };
 
 const RecurringCosts = ({ expenses, merchantRules }) => {
+    const [sortBy, setSortBy] = useState('totalYear'); // 'months', 'monthlyAvg', 'totalYear'
+    const [sortDir, setSortDir] = useState('desc'); // 'asc' or 'desc'
+    
     const { recurring, totalMonthly, totalYearly, totalCount } = useMemo(() => {
         // Exclude subscription-flagged items - those are shown in Subscriptions widget
         const sp2025 = expenses.filter(e => 
@@ -1266,6 +1296,32 @@ const RecurringCosts = ({ expenses, merchantRules }) => {
         return { recurring, totalMonthly, totalYearly, totalCount: recurring.length };
     }, [expenses, merchantRules]);
     
+    // Sort the data based on current sort settings
+    const sortedRecurring = useMemo(() => {
+        const sorted = [...recurring];
+        sorted.sort((a, b) => {
+            const aVal = a[sortBy];
+            const bVal = b[sortBy];
+            return sortDir === 'desc' ? bVal - aVal : aVal - bVal;
+        });
+        return sorted;
+    }, [recurring, sortBy, sortDir]);
+    
+    const handleSort = (col) => {
+        if (sortBy === col) {
+            setSortDir(sortDir === 'desc' ? 'asc' : 'desc');
+        } else {
+            setSortBy(col);
+            setSortDir('desc');
+        }
+    };
+    
+    const SortIcon = ({ col }) => (
+        <span className="ml-0.5 text-[8px]">
+            {sortBy === col ? (sortDir === 'desc' ? '▼' : '▲') : '⇅'}
+        </span>
+    );
+    
     if (!recurring.length) return <Empty msg="No recurring costs detected" />;
     
     return (
@@ -1275,13 +1331,28 @@ const RecurringCosts = ({ expenses, merchantRules }) => {
                     <thead className="sticky top-0 bg-white">
                         <tr className="text-slate-400 uppercase font-bold">
                             <th className="text-left p-1.5">Merchant</th>
-                            <th className="text-center p-1.5">Freq</th>
-                            <th className="text-right p-1.5">Monthly</th>
-                            <th className="text-right p-1.5">2025</th>
+                            <th 
+                                className="text-center p-1.5 cursor-pointer hover:text-indigo-600 select-none"
+                                onClick={() => handleSort('months')}
+                            >
+                                Freq<SortIcon col="months" />
+                            </th>
+                            <th 
+                                className="text-right p-1.5 cursor-pointer hover:text-indigo-600 select-none"
+                                onClick={() => handleSort('monthlyAvg')}
+                            >
+                                Monthly<SortIcon col="monthlyAvg" />
+                            </th>
+                            <th 
+                                className="text-right p-1.5 cursor-pointer hover:text-indigo-600 select-none"
+                                onClick={() => handleSort('totalYear')}
+                            >
+                                2025<SortIcon col="totalYear" />
+                            </th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50">
-                        {recurring.map((r, i) => (
+                        {sortedRecurring.map((r, i) => (
                             <tr key={r.name} className="hover:bg-slate-50">
                                 <td className="p-1.5 font-semibold text-slate-700 truncate max-w-[150px]" title={r.name}>
                                     <span className="inline-flex items-center gap-1">
@@ -1420,21 +1491,46 @@ const SmallPurchaseMerchants = ({ expenses, merchantRules }) => {
 };
 
 const Scatter = ({ expenses, merchantRules }) => {
-    const { pts, minD, maxD, maxA } = useMemo(() => {
+    const { pts, minD, maxD, maxA, totalTxns, smallTxns, medTxns, largeTxns } = useMemo(() => {
         const sp = expenses.filter(e => !DASHBOARD_EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category) && getY(e.date) === 2025);
-        if (!sp.length) return { pts:[], minD:0, maxD:1, maxA:100 };
+        if (!sp.length) return { pts:[], minD:0, maxD:1, maxA:100, totalTxns: 0, smallTxns: 0, medTxns: 0, largeTxns: 0 };
         const pts = sp.map(e => ({ d:pDate(e.date).getTime(), a:safe(e.amount), desc:e.description }));
         const ds = pts.map(p => p.d), as = pts.map(p => p.a);
-        return { pts, minD:Math.min(...ds), maxD:Math.max(...ds), maxA:Math.max(...as) };
+        const smallTxns = pts.filter(p => p.a < 20).length;
+        const medTxns = pts.filter(p => p.a >= 20 && p.a < 100).length;
+        const largeTxns = pts.filter(p => p.a >= 100).length;
+        return { pts, minD:Math.min(...ds), maxD:Math.max(...ds), maxA:Math.max(...as), totalTxns: pts.length, smallTxns, medTxns, largeTxns };
     }, [expenses, merchantRules]);
     if (!pts.length) return <Empty msg="No 2025 data" />;
     const range = maxD - minD || 1;
-    const small = pts.filter(p => p.a < 20).length;
-    const pct = (small/pts.length*100).toFixed(0);
-    return (<div className="h-full flex flex-col"><div className="flex-1 relative bg-slate-50 rounded-lg overflow-hidden">
-        <div className="absolute left-0 right-0 border-t border-dashed border-red-300" style={{bottom:`${20/maxA*100}%`}}><span className="absolute -top-2 left-1 text-[8px] font-bold text-red-400">$20</span></div>
-        {pts.map((p,i) => <div key={i} className={`absolute w-2 h-2 rounded-full ${p.a<20?'bg-red-400':'bg-indigo-400'}`} style={{left:`${(p.d-minD)/range*100}%`,bottom:`${p.a/maxA*100}%`,opacity:.7}} title={`$${p.a.toFixed(2)}`}/>)}
-    </div><div className="text-[10px] text-slate-400 text-center pt-2 border-t border-slate-100 mt-2">🔴 {pct}% under $20</div></div>);
+    const smallPct = (smallTxns/totalTxns*100).toFixed(0);
+    const medPct = (medTxns/totalTxns*100).toFixed(0);
+    return (<div className="h-full flex flex-col">
+        {/* Header showing this is about transaction COUNT */}
+        <div className="flex justify-between items-center mb-2 pb-2 border-b border-slate-100">
+            <div className="text-[10px] font-bold text-slate-500">📍 Each dot = 1 transaction</div>
+            <div className="text-[10px] font-black text-slate-700">{totalTxns.toLocaleString()} total</div>
+        </div>
+        <div className="flex-1 relative bg-slate-50 rounded-lg overflow-hidden">
+            <div className="absolute left-0 right-0 border-t border-dashed border-red-300" style={{bottom:`${20/maxA*100}%`}}><span className="absolute -top-2 left-1 text-[8px] font-bold text-red-400">$20</span></div>
+            <div className="absolute left-0 right-0 border-t border-dashed border-amber-300" style={{bottom:`${100/maxA*100}%`}}><span className="absolute -top-2 left-1 text-[8px] font-bold text-amber-500">$100</span></div>
+            {pts.map((p,i) => <div key={i} className={`absolute w-2 h-2 rounded-full ${p.a<20?'bg-red-400':p.a<100?'bg-amber-400':'bg-indigo-400'}`} style={{left:`${(p.d-minD)/range*100}%`,bottom:`${Math.min(p.a/maxA*100, 100)}%`,opacity:.7}} title={`$${p.a.toFixed(2)}`}/>)}
+        </div>
+        <div className="pt-2 border-t border-slate-100 mt-2 flex justify-around">
+            <div className="text-center">
+                <div className="text-[10px] font-black text-red-500">{smallTxns}</div>
+                <div className="text-[8px] text-slate-400">🔴 &lt;$20 ({smallPct}%)</div>
+            </div>
+            <div className="text-center">
+                <div className="text-[10px] font-black text-amber-500">{medTxns}</div>
+                <div className="text-[8px] text-slate-400">🟡 $20-100 ({medPct}%)</div>
+            </div>
+            <div className="text-center">
+                <div className="text-[10px] font-black text-indigo-500">{largeTxns}</div>
+                <div className="text-[8px] text-slate-400">🔵 $100+</div>
+            </div>
+        </div>
+    </div>);
 };
 
 // ============== SPENDING MAGNITUDE DISTRIBUTION (Whale vs Minnow) ==============
@@ -1824,6 +1920,243 @@ const MidRangeMerchants = ({ expenses, merchantRules }) => {
                 </div>
                 <div className="text-[9px] text-slate-400 mt-1">
                     🎯 {merchantData.filter(m => m.count >= 3).length} repeat merchants ({'>'}2× visits)
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ============== TRAVEL DEEP DIVE ==============
+const TravelDeepDive = ({ expenses, merchantRules }) => {
+    const { 
+        travelExpenses, totalSpend, monthlyData, merchantData, 
+        avgPerTrip, tripCount, byType, yoyComparison 
+    } = useMemo(() => {
+        // Get all Travel category expenses for 2025
+        const travelExp = expenses.filter(e => {
+            const cat = getEffectiveCategory(e, merchantRules).category;
+            return cat === 'Travel' && getY(e.date) === 2025 && safe(e.amount) > 0;
+        });
+        
+        // Get 2024 for comparison
+        const travel2024 = expenses.filter(e => {
+            const cat = getEffectiveCategory(e, merchantRules).category;
+            return cat === 'Travel' && getY(e.date) === 2024 && safe(e.amount) > 0;
+        });
+        
+        const totalSpend = travelExp.reduce((s, e) => s + safe(e.amount), 0);
+        const total2024 = travel2024.reduce((s, e) => s + safe(e.amount), 0);
+        
+        // Monthly breakdown
+        const byMonth = {};
+        travelExp.forEach(e => {
+            const m = getM(e.date);
+            if (!byMonth[m]) byMonth[m] = { total: 0, count: 0 };
+            byMonth[m].total += safe(e.amount);
+            byMonth[m].count += 1;
+        });
+        const monthlyData = MONTHS.map((name, i) => ({
+            month: name,
+            total: byMonth[i]?.total || 0,
+            count: byMonth[i]?.count || 0
+        }));
+        
+        // By merchant
+        const byMerchant = {};
+        travelExp.forEach(e => {
+            const name = cleanMerchant(e.description);
+            if (!byMerchant[name]) byMerchant[name] = { total: 0, count: 0, dates: [] };
+            byMerchant[name].total += safe(e.amount);
+            byMerchant[name].count += 1;
+            byMerchant[name].dates.push(e.date);
+        });
+        const merchantData = Object.entries(byMerchant)
+            .map(([name, data]) => ({ name, ...data, avg: data.total / data.count }))
+            .sort((a, b) => b.total - a.total)
+            .slice(0, 10);
+        
+        // Categorize by travel type based on merchant keywords
+        const typeKeywords = {
+            '✈️ Flights': ['airline', 'airways', 'united', 'delta', 'american', 'southwest', 'jetblue', 'spirit', 'frontier', 'alaska', 'air ', 'flight'],
+            '🏨 Hotels': ['hotel', 'marriott', 'hilton', 'hyatt', 'inn', 'resort', 'airbnb', 'vrbo', 'booking', 'expedia'],
+            '🚗 Car/Transport': ['uber', 'lyft', 'taxi', 'rental', 'hertz', 'avis', 'enterprise', 'budget', 'parking', 'toll', 'gas', 'fuel'],
+            '🍽️ Travel Dining': ['restaurant', 'cafe', 'food', 'dining'],
+            '🎫 Activities': ['tour', 'museum', 'ticket', 'attraction', 'park', 'zoo', 'aquarium']
+        };
+        
+        const byType = { '✈️ Flights': 0, '🏨 Hotels': 0, '🚗 Car/Transport': 0, '🎫 Activities': 0, '📦 Other': 0 };
+        travelExp.forEach(e => {
+            const desc = (e.description || '').toLowerCase();
+            let matched = false;
+            for (const [type, keywords] of Object.entries(typeKeywords)) {
+                if (keywords.some(kw => desc.includes(kw))) {
+                    byType[type] = (byType[type] || 0) + safe(e.amount);
+                    matched = true;
+                    break;
+                }
+            }
+            if (!matched) byType['📦 Other'] += safe(e.amount);
+        });
+        
+        // Estimate trip count by looking for clusters of spending
+        // Group expenses within 7 days of each other
+        const sortedByDate = [...travelExp].sort((a, b) => pDate(a.date) - pDate(b.date));
+        let tripCount = 0;
+        let lastTripDate = null;
+        sortedByDate.forEach(e => {
+            const d = pDate(e.date);
+            if (!lastTripDate || (d - lastTripDate) > 7 * 24 * 60 * 60 * 1000) {
+                tripCount++;
+            }
+            lastTripDate = d;
+        });
+        
+        const avgPerTrip = tripCount > 0 ? totalSpend / tripCount : 0;
+        
+        const yoyComparison = {
+            current: totalSpend,
+            previous: total2024,
+            change: total2024 > 0 ? ((totalSpend - total2024) / total2024) * 100 : 0
+        };
+        
+        return { travelExpenses: travelExp, totalSpend, monthlyData, merchantData, avgPerTrip, tripCount, byType, yoyComparison };
+    }, [expenses, merchantRules]);
+    
+    if (travelExpenses.length === 0) {
+        return <Empty msg="No Travel expenses in 2025" />;
+    }
+    
+    const maxMonthly = Math.max(...monthlyData.map(m => m.total), 1);
+    const maxMerchant = merchantData[0]?.total || 1;
+    const typeTotal = Object.values(byType).reduce((s, v) => s + v, 0);
+    const sortedTypes = Object.entries(byType).filter(([_, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+    
+    const typeColors = {
+        '✈️ Flights': '#3b82f6',
+        '🏨 Hotels': '#8b5cf6',
+        '🚗 Car/Transport': '#f97316',
+        '🍽️ Travel Dining': '#ef4444',
+        '🎫 Activities': '#22c55e',
+        '📦 Other': '#64748b'
+    };
+    
+    return (
+        <div className="space-y-6">
+            {/* Summary Stats */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-blue-50 p-4 rounded-xl border border-blue-200">
+                    <div className="text-[10px] font-bold text-blue-500 uppercase">Total Travel</div>
+                    <div className="text-2xl font-black text-blue-700">${(totalSpend/1000).toFixed(1)}k</div>
+                    {yoyComparison.previous > 0 && (
+                        <div className={`text-[10px] font-semibold ${yoyComparison.change >= 0 ? 'text-red-500' : 'text-green-500'}`}>
+                            {yoyComparison.change >= 0 ? '↑' : '↓'} {Math.abs(yoyComparison.change).toFixed(0)}% vs 2024
+                        </div>
+                    )}
+                </div>
+                <div className="bg-purple-50 p-4 rounded-xl border border-purple-200">
+                    <div className="text-[10px] font-bold text-purple-500 uppercase">Est. Trips</div>
+                    <div className="text-2xl font-black text-purple-700">{tripCount}</div>
+                    <div className="text-[10px] text-purple-400">{travelExpenses.length} transactions</div>
+                </div>
+                <div className="bg-amber-50 p-4 rounded-xl border border-amber-200">
+                    <div className="text-[10px] font-bold text-amber-500 uppercase">Avg Per Trip</div>
+                    <div className="text-2xl font-black text-amber-700">${avgPerTrip.toFixed(0)}</div>
+                    <div className="text-[10px] text-amber-400">based on {tripCount} trips</div>
+                </div>
+                <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200">
+                    <div className="text-[10px] font-bold text-emerald-500 uppercase">Monthly Avg</div>
+                    <div className="text-2xl font-black text-emerald-700">${(totalSpend / (new Set(travelExpenses.map(e => getM(e.date))).size || 1)).toFixed(0)}</div>
+                    <div className="text-[10px] text-emerald-400">{new Set(travelExpenses.map(e => getM(e.date))).size} months with travel</div>
+                </div>
+            </div>
+            
+            {/* Two Column Layout */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Monthly Timeline */}
+                <div className="bg-white p-5 rounded-2xl border border-blue-100">
+                    <h4 className="text-sm font-black text-slate-800 mb-3">📅 Monthly Timeline</h4>
+                    <div className="h-40 flex items-end gap-1">
+                        {monthlyData.map((m, i) => {
+                            const h = m.total > 0 ? (m.total / maxMonthly) * 100 : 0;
+                            return (
+                                <div key={i} className="flex-1 flex flex-col items-center">
+                                    <div 
+                                        className="w-full bg-gradient-to-t from-blue-500 to-blue-400 rounded-t cursor-pointer hover:from-blue-600 hover:to-blue-500 transition-all"
+                                        style={{ height: `${h}%`, minHeight: m.total > 0 ? 4 : 0 }}
+                                        title={`${m.month}: $${m.total.toLocaleString()} (${m.count} txns)`}
+                                    />
+                                </div>
+                            );
+                        })}
+                    </div>
+                    <div className="flex gap-1 mt-1">
+                        {monthlyData.map((m, i) => (
+                            <div key={i} className="flex-1 text-center text-[8px] text-slate-400">{m.month.slice(0,1)}</div>
+                        ))}
+                    </div>
+                    {/* Peak month indicator */}
+                    {(() => {
+                        const peak = monthlyData.reduce((max, m) => m.total > max.total ? m : max, monthlyData[0]);
+                        return peak.total > 0 ? (
+                            <div className="mt-2 text-[10px] text-slate-500">
+                                Peak: <span className="font-bold text-blue-600">{peak.month}</span> (${peak.total.toLocaleString()})
+                            </div>
+                        ) : null;
+                    })()}
+                </div>
+                
+                {/* Spend by Type */}
+                <div className="bg-white p-5 rounded-2xl border border-purple-100">
+                    <h4 className="text-sm font-black text-slate-800 mb-3">🏷️ Spend by Type</h4>
+                    {/* Stacked bar */}
+                    <div className="h-8 flex rounded-lg overflow-hidden mb-3">
+                        {sortedTypes.map(([type, amount]) => (
+                            <div 
+                                key={type}
+                                className="h-full flex items-center justify-center text-[8px] font-bold text-white overflow-hidden"
+                                style={{ 
+                                    width: `${(amount / typeTotal) * 100}%`,
+                                    backgroundColor: typeColors[type] || '#64748b',
+                                    minWidth: amount > 0 ? 20 : 0
+                                }}
+                                title={`${type}: $${amount.toLocaleString()}`}
+                            >
+                                {(amount / typeTotal) * 100 > 10 ? `${((amount / typeTotal) * 100).toFixed(0)}%` : ''}
+                            </div>
+                        ))}
+                    </div>
+                    {/* Legend */}
+                    <div className="space-y-1.5">
+                        {sortedTypes.map(([type, amount]) => (
+                            <div key={type} className="flex items-center gap-2">
+                                <div className="w-3 h-3 rounded" style={{ backgroundColor: typeColors[type] || '#64748b' }} />
+                                <div className="flex-1 text-[10px] font-semibold text-slate-600">{type}</div>
+                                <div className="text-[10px] font-bold text-slate-700">${(amount/1000).toFixed(1)}k</div>
+                                <div className="text-[10px] text-slate-400 w-10 text-right">{((amount / typeTotal) * 100).toFixed(0)}%</div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+            
+            {/* Top Merchants */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-100">
+                <h4 className="text-sm font-black text-slate-800 mb-3">🏪 Top Travel Merchants</h4>
+                <div className="space-y-1.5">
+                    {merchantData.map((m, i) => (
+                        <div key={m.name} className="flex items-center gap-2">
+                            <div className="w-5 text-[10px] font-black text-slate-400">{i + 1}</div>
+                            <div className="w-36 text-[10px] font-semibold text-slate-600 truncate" title={m.name}>{m.name}</div>
+                            <div className="flex-1 h-4 bg-slate-100 rounded overflow-hidden">
+                                <div 
+                                    className="h-full rounded bg-gradient-to-r from-blue-500 to-purple-500"
+                                    style={{ width: `${(m.total / maxMerchant) * 100}%` }}
+                                />
+                            </div>
+                            <div className="w-14 text-[9px] font-bold text-slate-700 text-right">${m.total.toLocaleString(undefined,{maximumFractionDigits:0})}</div>
+                            <div className="w-8 text-[9px] text-slate-400 text-right">{m.count}×</div>
+                        </div>
+                    ))}
                 </div>
             </div>
         </div>
@@ -6111,6 +6444,13 @@ const App = () => {
                         <div className="h-72"><MidRangeMerchants expenses={expenses} merchantRules={merchantRules}/></div>
                     </div>
                 </div>
+                
+                {/* Travel Deep Dive */}
+                <div className="bg-gradient-to-r from-blue-500 to-purple-600 text-white p-4 rounded-2xl">
+                    <h2 className="text-lg font-black">✈️ Travel Deep Dive (2025)</h2>
+                    <p className="text-blue-100 text-xs mt-1">Understanding your travel spending patterns: flights, hotels, transport & more</p>
+                </div>
+                <TravelDeepDive expenses={expenses} merchantRules={merchantRules} />
             </>)}
 
             {tab === 'evolution' && (<>
