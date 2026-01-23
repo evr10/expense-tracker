@@ -181,45 +181,49 @@ const AUTO_RULES = {
     // Excluded - only for truly unmatchable/ignorable transactions
     Excluded:[],
     Groceries:['walmart','kroger','safeway','trader joe','whole foods','aldi','costco','publix','grocery','supermarket','wegmans','heb','albertsons','sprouts',
-        'hellofresh','blue apron','home chef','freshly','factor','daily harvest'],
-    Dining:['sweetgreen','mcdonald','starbucks','chipotle','subway','restaurant','cafe','coffee','doordash','uber eats','pizza','grubhub','seamless','postmates',
-        'cathedrale','alphabet ba','jongro gopchang','phd terrace','rubirosa','laccolade','shinn west','niagara','the garrett','ternesse golf','de vogelenzang','ops','brasserie den artist'],
+        'hellofresh','blue apron','home chef','freshly','factor','daily harvest','gastro market','little spoon'],
+    Dining:['sweetgreen','mcdonald','chipotle','subway','restaurant','cafe','doordash','uber eats','pizza','grubhub','seamless','postmates',
+        'cathedrale','alphabet ba','jongro gopchang','phd terrace','rubirosa','laccolade','shinn west','niagara','the garrett','ternesse golf','de vogelenzang','ops','brasserie den artist',
+        'soho house','gansevoort hotel','whitby hotel','ny penn sta','dirk de witte','balls & glory','balls &amp; glory'],
     Transportation:['uber','lyft','taxi','shell','exxon','chevron','gas','fuel','parking','metro','transit','mobil','bp','sunoco',
-        '900 8th ave gar','900 8th avenue gar','motorcycle mall'],
-    Shopping:['amazon','ebay','best buy','apple store','ikea','nike','nordstrom','target','macys','tjmaxx','marshalls','kohls','gap','old navy','zara','h&m','uniqlo','sephora','ulta','bath body',
-        'ferrier','hoekjes en boekjes','partzilla','dia art foundation','sp dore rose','hdsht'],
+        '900 8th ave','900 8th avenue','motorcycle mall','jetty insurance','mta','citibik','nyc ferry','nyc yellow cab','voi be','gemeentelijk autonoom','e-z'],
+    Shopping:['ebay','best buy','apple store','ikea','nike','nordstrom','target','macys','tjmaxx','marshalls','kohls','gap','old navy','zara','h&m','uniqlo','sephora','ulta','bath body',
+        'ferrier','hoekjes en boekjes','partzilla','dia art foundation','sp dore rose','hdsht','microsoft cor'],
     Entertainment:['netflix','hulu','disney','hbo','spotify','movie','cinema','xbox','steam','playstation','nintendo','amc',
         'seatgeek','all borough party','fat black pussycat','fnac direct','ascent lounge','wcs zoos','msg concessions',
-        'apple music','youtube premium','amazon prime','prime video','peacock','paramount','audible','kindle','crunchyroll','masterclass','skillshare'],
+        'apple music','youtube premium','prime video','peacock','paramount','audible','kindle','crunchyroll','masterclass','skillshare','disney plus'],
     // Household - utilities, home services, maintenance, cleaning, home supplies
     Household:['electric','power','water bill','comcast','xfinity','spectrum','internet','verizon','at&t','t-mobile','con ed','pge','national grid','cable','phone bill','trash','waste','sewer','gas bill','heating','cooling','hvac','plumber','plumbing','electrician','handyman','lawn','landscaping','pest control','cleaning','maid','housekeeping','home depot','lowes','ace hardware','menards','bed bath','container store','pottery barn','crate barrel','williams sonoma','wayfair','overstock','furniture','mattress','appliance','repair','maintenance','security','adt','ring','nest','thermostat',
-        'taskrabbit','ups store','laundry card','mysalights','hildreths','janovic paint','level frames','swans cleaners',
-        'icloud','google one','dropbox','simplisafe'],
+        'taskrabbit','ups store','laundry card','mysalights','hildreths','janovic paint','level frames','swans cleaners','duane reade','lemonade insurance','us mobile','ysi','storage','nytimes','seed cleaners','m & n french cleaners','marc valet','sp switchbot','bt','one','annual membership fee','renewal membership fee','monthly service fee','annual fee'],
     // Health & Wellness - medical, pharmacy, fitness, mental health, personal care
     'Health & Wellness':['pharmacy','cvs','walgreens','doctor','hospital','medical','dentist','optum','cigna','aetna','united health','clinic','urgent care','emergency','lab','blood','xray','mri','therapy','therapist','counseling','psychiatrist','psychologist','mental health','gym','fitness','yoga','pilates','peloton','crossfit','equinox','planet fitness','orange theory','soulcycle','massage','spa','chiropractor','physical therapy','vision','eye','optical','glasses','contacts','lenscrafters','warby parker','vitamins','supplements','gnc','vitamin shoppe',
-        'evavercouteren','shair nyc','every mother','solidstarts','headspace','calm','noom','weight watchers','classpass','strava'],
+        'evavercouteren','shair nyc','every mother','headspace','calm','noom','weight watchers','classpass','strava','blvd','ritual','prime barbers','costa del kapsalon','sundays studi','sp nuun hydration'],
     // Amazon - all Amazon purchases
-    Amazon:['amazon','amzn','amz mktplace','prime now','whole foods','amazon fresh','amazon pantry'],
+    Amazon:['amazon','amzn','amz mktplace','prime now','amazon fresh','amazon pantry','amazonprimebe','amazon mktpl','amazon prime','amazon tips','amazon go','amazon groce','amazon reta'],
     // Coffee - coffee shops and cafes
-    Coffee:['starbucks','dunkin','peets','blue bottle','philz','intelligentsia','counter culture','stumptown','la colombe','coffee','cafe','caffe','espresso','latte'],
-    Travel:['airline','delta','united','southwest','flight','airbnb','hotel','marriott','hilton','hyatt','expedia','booking.com',
-        'thestrabon','wuzipay'],
-    // Other - software, news, education subscriptions
-    Other:['adobe','linkedin premium','github','notion','patreon','evernote','lastpass','1password','nordvpn','expressvpn','new york times','nytimes','washington post','wall street journal','wsj','economist','coursera','duolingo'],
+    Coffee:['starbucks','dunkin','peets','blue bottle','philz','intelligentsia','counter culture','stumptown','la colombe','espresso','latte','bluestone lane','bluestonelane','think hudson','cafe bravo'],
+    Travel:['airline','delta','southwest','flight','airbnb','hotel','marriott','hilton','hyatt','expedia','booking.com',
+        'thestrabon','wuzipay','avis rent'],
+    // Subscriptions - recurring subscriptions
+    Subscriptions:['solidstarts'],
+    // Other - catch-all for misc
+    Other:['cash withdrawal','purchase interest charge','wire withdrawal','wire convenience charge',
+        'zelle payment to','zelle payment from'],
     // Stylecom - business expenses for reimbursement
-    Stylecom:['softr','yww','airtable','iphone citiz','winred','crowne plaza amsterdam','smartsuite','gsuite','lindy','paddle.net','bambino technologies','hannago','vultr','odoo','dex personal crm','art of mondays','transip','vcn','hostinger','pingen','srd services'],
+    Stylecom:['softr','yww','airtable','iphone citiz','winred','crowne plaza amsterdam','smartsuite','gsuite','lindy','paddle.net','bambino technologies','hannago','vultr','odoo','dex personal crm','art of mondays','transip','vcn','hostinger','pingen','srd services',
+        'apple.com/bill','apple.com/us','applecard gsbank','monitr.be','linkedinpre','mp hudson','sncb-nmbs mobile','claude.ai subscription','jetblue','a-stad','in automation helpers','in ryders alley'],
     // Venmo - special category, NOT excluded (allows netting)
     Venmo:['venmo'],
     // Income categories - will be auto-excluded from expense views
     Income:['payroll','salary','direct deposit','paycheck','dividend','interest income','wire in','employer','bonus','commission','stripe',
-        'payyourselfback','returned payment','credit balance refund','travel credit'],
+        'payyourselfback','returned payment','credit balance refund','travel credit','interest paid from','instant funds received'],
     // Tax refunds/income - auto-excluded
     TaxIncome:['irs','treasury','tax refund','state tax','federal tax','tax credit',
-        'budgetnerd'],
+        'budgetnerd','ny state nysttaxrfd','usataxpymt'],
     // Transfer category - internal moves between accounts (for transfer matching)
     // Includes CC payments so they can be matched with checking withdrawals
     Transfer:['zelle to','zelle from','internal transfer','external transfer','online transfer to','online transfer from','ach payment to','transfer to sav','transfer from sav','transfer to chk','transfer from chk','autopay','auto pay','thank you','credit card payment','card payment','online payment','bill pay','paying','paid in full','minimum payment','statement balance','balance payment','ach payment','electronic payment','pymt','payment to chase','payment to amex','payment to citi','payment to capital one','payment to discover','amex transfer','chase transfer',
-        'payment thank you','ach automatic transfer to credit']
+        'payment thank you','ach automatic transfer to credit','deposit from 360 checking','deposit from daycare','deposit from jpmorgan chase','deposit from rent','online realtime transfer to hsbc','canadian rivers wild']
 };
 
 // INTERNAL TRANSFER SOURCES - these override income keywords
@@ -474,25 +478,56 @@ const loadExpenses = () => {
 
 // Default merchant rules from categorization export
 const DEFAULT_MERCHANT_RULES = {
-    '900 8TH AVE GAR WEB': { category: 'Transportation', scope: 'global' },
+    '900 8TH AVE GAR WEB': { category: 'Stylecom', scope: 'global' },
     '900 8TH AVENUE GAR': { category: 'Transportation', scope: 'global' },
     '99231 LAUNDRY CARD': { category: 'Household', scope: 'global' },
+    'A-STAD': { category: 'Stylecom', scope: 'global' },
     'ACH AUTOMATIC TRANSFER TO CREDIT ACCOUNT': { category: 'Transfer', scope: 'global' },
     'AIRTABLE.COM/BILL': { category: 'Stylecom', scope: 'global' },
     'ALL BOROUGH PARTY RENTAL': { category: 'Entertainment', scope: 'global' },
+    'AMAZON GO': { category: 'Amazon', scope: 'global' },
+    'AMAZON GROCE': { category: 'Amazon', scope: 'global' },
+    'AMAZON MARKEPLACE NA PA': { category: 'Amazon', scope: 'global' },
+    'AMAZON MARKETPLACE NAMZN.COM/BILL': { category: 'Amazon', scope: 'global' },
     'AMAZON MKTPL': { category: 'Amazon', scope: 'global' },
+    'AMAZON MKTPLACE PMTS': { category: 'Amazon', scope: 'global' },
+    'AMAZON MX MARKETPLACMEXICO CITY': { category: 'Amazon', scope: 'global' },
     'AMAZON PRIME': { category: 'Amazon', scope: 'global' },
+    'AMAZON RETA': { category: 'Amazon', scope: 'global' },
+    'AMAZON TIPS': { category: 'Amazon', scope: 'global' },
+    'AMAZON.COM': { category: 'Amazon', scope: 'global' },
     'AMAZONPRIMEBE': { category: 'Amazon', scope: 'global' },
+    'ANNUAL FEE 02/26 THROUGH 01/27 01/12/202': { category: 'Household', scope: 'global' },
+    'ANNUAL MEMBERSHIP FEE': { category: 'Household', scope: 'global' },
     'APPLE.COM/BILL': { category: 'Stylecom', scope: 'global' },
     'APPLE.COM/US': { category: 'Stylecom', scope: 'global' },
+    'APPLECARD GSBANK PAYMENT': { category: 'Stylecom', scope: 'global' },
     'ART OF MONDAYS': { category: 'Stylecom', scope: 'global' },
     'ASCENT LOUNGE': { category: 'Entertainment', scope: 'global' },
+    'AVIS RENT-A-CAR': { category: 'Travel', scope: 'global' },
+    'BALLS &AMP; GLORY': { category: 'Dining', scope: 'global' },
     'BAMBINO TECHNOLOGIES': { category: 'Stylecom', scope: 'global' },
+    'BH BACKUP': { category: 'Daycare', scope: 'global' },
+    'BLUESTONE LANE - 166': { category: 'Coffee', scope: 'global' },
+    'BLUESTONE LANNEW YORK': { category: 'Coffee', scope: 'global' },
+    'BLUESTONELANE': { category: 'Coffee', scope: 'global' },
+    'BLUESTONELANENEW YORK': { category: 'Coffee', scope: 'global' },
+    'BLUESTONELANENEW YORK CITY': { category: 'Coffee', scope: 'global' },
     'BLVD': { category: 'Health & Wellness', scope: 'global' },
     'BRASSERIE DEN ARTIST': { category: 'Dining', scope: 'global' },
+    'BT': { category: 'Household', scope: 'global' },
+    'CAFE BRAVO INC': { category: 'Coffee', scope: 'global' },
     'CANADIAN RIVERS WILDCANMORE': { category: 'Transfer', scope: 'global' },
     'CASH WITHDRAWAL AT BRANCH': { category: 'Other', scope: 'global' },
     'CATHEDRALE/ALPHABET BA': { category: 'Dining', scope: 'global' },
+    'CITIBIK': { category: 'Transportation', scope: 'global' },
+    'CITIBIK 1 RIDE': { category: 'Transportation', scope: 'global' },
+    'CITIBIK 2 RIDES': { category: 'Transportation', scope: 'global' },
+    'CITIBIK 3 RIDES': { category: 'Transportation', scope: 'global' },
+    'CITIBIK 4 RIDES': { category: 'Transportation', scope: 'global' },
+    'CITIBIK 5 RIDES': { category: 'Transportation', scope: 'global' },
+    'CLAUDE.AI SUBSCRIPTION': { category: 'Stylecom', scope: 'global' },
+    'COSTA DEL KAPSALON': { category: 'Health & Wellness', scope: 'global' },
     'CREDIT BALANCE REFUND': { category: 'Income', scope: 'global' },
     'CROWNE PLAZA AMSTERDAM': { category: 'Stylecom', scope: 'global' },
     'DE VOGELENZANG': { category: 'Dining', scope: 'global' },
@@ -504,13 +539,18 @@ const DEFAULT_MERCHANT_RULES = {
     'DEPOSIT FROM RENT XXXXXXX0906': { category: 'Transfer', scope: 'global' },
     'DEX PERSONAL CRM': { category: 'Stylecom', scope: 'global' },
     'DIA ART FOUNDATION': { category: 'Shopping', scope: 'global' },
+    'DIRK DE WITTE - WIJNEG': { category: 'Dining', scope: 'global' },
     'DISNEY PLUS': { category: 'Entertainment', scope: 'global' },
     'DUANE READE': { category: 'Household', scope: 'global' },
+    'E-Z': { category: 'Transportation', scope: 'global' },
     'EVAVERCOUTEREN.COM': { category: 'Health & Wellness', scope: 'global' },
     'EVERY MOTHER': { category: 'Health & Wellness', scope: 'global' },
     'FAT BLACK PUSSYCAT': { category: 'Entertainment', scope: 'global' },
     'FERRIER-30': { category: 'Shopping', scope: 'global' },
     'FNAC DIRECT BELGIUM': { category: 'Entertainment', scope: 'global' },
+    'GANSEVOORT HOTEL - COF': { category: 'Dining', scope: 'global' },
+    'GASTRO MARKETNEW YORK': { category: 'Groceries', scope: 'global' },
+    'GEMEENTELIJK AUTONOOM PAR': { category: 'Transportation', scope: 'global' },
     'GSUITE MRTNS.IO': { category: 'Stylecom', scope: 'global' },
     'GSUITE_NICOLASMERT': { category: 'Stylecom', scope: 'global' },
     'HANNAGO': { category: 'Stylecom', scope: 'global' },
@@ -519,46 +559,90 @@ const DEFAULT_MERCHANT_RULES = {
     'HOEKJES EN BOEKJES': { category: 'Shopping', scope: 'global' },
     'HOSTINGER': { category: 'Stylecom', scope: 'global' },
     'IN': { category: 'Stylecom', scope: 'global' },
+    'IN AUTOMATION HELPERS': { category: 'Stylecom', scope: 'global' },
+    'IN RYDERS ALLEY INC': { category: 'Stylecom', scope: 'global' },
     'INSTANT FUNDS RECEIVED FROM NICOLAS MERT': { category: 'Income', scope: 'global' },
+    'INTEREST PAID FROM 10/30/25 THRU 11/30/2': { category: 'Income', scope: 'global' },
+    'INTEREST PAID FROM 12/01/25 THRU 12/29/2': { category: 'Income', scope: 'global' },
     'IPHONE CITIZ': { category: 'Stylecom', scope: 'global' },
     'JANOVIC PAINT AND DECORA': { category: 'Household', scope: 'global' },
+    'JETBLUE': { category: 'Stylecom', scope: 'global' },
     'JETTY INSURANCE': { category: 'Transportation', scope: 'global' },
     'JONGRO GOPCHANG (5TH F': { category: 'Dining', scope: 'global' },
     "L'ACCOLADE": { category: 'Dining', scope: 'global' },
     'LEMONADE INSURANCE': { category: 'Household', scope: 'global' },
     'LEVEL FRAMES ORDER': { category: 'Household', scope: 'global' },
     'LINDY': { category: 'Stylecom', scope: 'global' },
+    'LINKEDIN PRE P106735526': { category: 'Stylecom', scope: 'global' },
+    'LINKEDIN PRE P138997796': { category: 'Stylecom', scope: 'global' },
+    'LINKEDIN PRE P176254376': { category: 'Stylecom', scope: 'global' },
+    'LINKEDINPRE': { category: 'Stylecom', scope: 'global' },
+    'LINKEDINPREC': { category: 'Stylecom', scope: 'global' },
+    'LITTLE SPOON': { category: 'Groceries', scope: 'global' },
+    'M & N FRENCH CLEANERS': { category: 'Household', scope: 'global' },
+    'MARC VALET': { category: 'Household', scope: 'global' },
+    'MICROSOFT CORREDMOND': { category: 'Shopping', scope: 'global' },
+    'MONITR.BE': { category: 'Stylecom', scope: 'global' },
+    'MONTHLY SERVICE FEE': { category: 'Household', scope: 'global' },
     'MOTORCYCLE MALL INC.': { category: 'Transportation', scope: 'global' },
+    'MP HUDSON': { category: 'Stylecom', scope: 'global' },
+    'MP HUDSON LLC MONTHLY': { category: 'Stylecom', scope: 'global' },
     'MSG CONCESSIONS': { category: 'Entertainment', scope: 'global' },
+    'MTA': { category: 'Transportation', scope: 'global' },
+    'MTA LIRR ETIX TICKET': { category: 'Transportation', scope: 'global' },
+    'MTA LIRR STATION TIX': { category: 'Transportation', scope: 'global' },
+    'MTA NYCT PAYGO': { category: 'Transportation', scope: 'global' },
     'NIAGARA / LOVERS': { category: 'Dining', scope: 'global' },
+    'NY PENN STA': { category: 'Dining', scope: 'global' },
+    'NYC FERRY PIER 79': { category: 'Transportation', scope: 'global' },
+    'NYC YELLOW CAB': { category: 'Transportation', scope: 'global' },
+    'NYTIMES': { category: 'Household', scope: 'global' },
     'ODOO': { category: 'Stylecom', scope: 'global' },
+    'ONE': { category: 'Household', scope: 'global' },
+    'ONLINE REALTIME TRANSFER TO HSBC PREMIER': { category: 'Transfer', scope: 'global' },
     'OPS': { category: 'Dining', scope: 'global' },
     'PADDLE.NET': { category: 'Stylecom', scope: 'global' },
     'PARTZILLA.COM': { category: 'Shopping', scope: 'global' },
     'PAYMENT THANK YOU-MOBILE': { category: 'Transfer', scope: 'global' },
     'PAYYOURSELFBACK CREDIT': { category: 'Income', scope: 'global' },
     'PHD TERRACE AT DREAM H': { category: 'Dining', scope: 'global' },
+    'PRIME BARBERSNEW YORK': { category: 'Health & Wellness', scope: 'global' },
     'PURCHASE INTEREST CHARGE': { category: 'Other', scope: 'global' },
     'PURCHASE ON 0208 AT SPOT IFY': { category: 'Entertainment', scope: 'global' },
+    'RENEWAL MEMBERSHIP FEE': { category: 'Household', scope: 'global' },
     'RETURNED PAYMENT': { category: 'Income', scope: 'global' },
     'RITUAL (RITUAL.COM)': { category: 'Health & Wellness', scope: 'global' },
     'RUBIROSA - MULBERRY': { category: 'Dining', scope: 'global' },
     'SEATGEEK TICKETS': { category: 'Entertainment', scope: 'global' },
+    'SEED CLEANERS 145000NEW YORK': { category: 'Household', scope: 'global' },
     'SHAIR NYC 000NEW YORK': { category: 'Health & Wellness', scope: 'global' },
     'SHINN WEST': { category: 'Dining', scope: 'global' },
     'SMARTSUITE': { category: 'Stylecom', scope: 'global' },
+    'SNCB-NMBS MOBILE PAYMENT': { category: 'Stylecom', scope: 'global' },
     'SOFTR.IO': { category: 'Stylecom', scope: 'global' },
-    'SOLIDSTARTS': { category: 'Health & Wellness', scope: 'global' },
+    'SOHO HOUSE NEW YORK LLC': { category: 'Dining', scope: 'global' },
+    'SOLIDSTARTS': { category: 'Subscriptions', scope: 'global' },
     'SP BUDGETNERD': { category: 'TaxIncome', scope: 'global' },
     'SP DORE ROSE': { category: 'Shopping', scope: 'global' },
     'SP MYSALIGHTS': { category: 'Household', scope: 'global' },
     'SP NUUN HYDRATION': { category: 'Health & Wellness', scope: 'global' },
+    'SP SWITCHBOT US': { category: 'Household', scope: 'global' },
     'SRD SERVICES': { category: 'Stylecom', scope: 'global' },
+    'STARBUCKS': { category: 'Coffee', scope: 'global' },
+    'STARBUCKS 844JAMAICA': { category: 'Coffee', scope: 'global' },
+    'STARBUCKS BELCIUDAD AUTONOMA BUEN': { category: 'Coffee', scope: 'global' },
+    'STARBUCKS COFEZEIZA': { category: 'Coffee', scope: 'global' },
+    'STARBUCKS STONEW YORK': { category: 'Coffee', scope: 'global' },
+    'STARBUCKS STOREDMOND': { category: 'Coffee', scope: 'global' },
+    'STORAGE': { category: 'Household', scope: 'global' },
+    'SUNDAYS STUDINEW YORK': { category: 'Health & Wellness', scope: 'global' },
     "SWAN'S CLEANERS": { category: 'Household', scope: 'global' },
     'TASKER ON TASKRABBITSAN FRANCISCO': { category: 'Household', scope: 'global' },
     'TERNESSE GOLF &AMP; COUNTR': { category: 'Dining', scope: 'global' },
     'THE GARRETT - WEST': { category: 'Dining', scope: 'global' },
     'THE UPS STORE 6387': { category: 'Household', scope: 'global' },
+    'THE WHITBY HOTEL-2': { category: 'Dining', scope: 'global' },
+    'THINK HUDSON NEW YORK': { category: 'Coffee', scope: 'global' },
     'TRANSIP B.V.': { category: 'Stylecom', scope: 'global' },
     'TRAVEL CREDIT $300/YEAR': { category: 'Income', scope: 'global' },
     'US MOBILE': { category: 'Household', scope: 'global' },
@@ -568,26 +652,65 @@ const DEFAULT_MERCHANT_RULES = {
     'WCS ZOOS AND AQUARIUM': { category: 'Entertainment', scope: 'global' },
     'WILLIAMS-SONOMA.COM': { category: 'Household', scope: 'global' },
     'WINRED': { category: 'Stylecom', scope: 'global' },
-    'WIRE WITHDRAWAL': { category: 'Stylecom', scope: 'global' },
+    'WIRE CONVENIENCE CHARGE': { category: 'Other', scope: 'global' },
+    'WIRE WITHDRAWAL': { category: 'Other', scope: 'global' },
     'WITHDRAWAL FROM APPLECARD GSBANK PAYMENT': { category: 'Stylecom', scope: 'global' },
     'WITHDRAWAL FROM CON ED OF NY CECONY': { category: 'Household', scope: 'global' },
     'WITHDRAWAL FROM IRS USATAXPYMT': { category: 'TaxIncome', scope: 'global' },
     'WUZIPAY': { category: 'Travel', scope: 'global' },
+    'WWW.AMAZON.': { category: 'Amazon', scope: 'global' },
     'WWW.PINGEN.COM': { category: 'Stylecom', scope: 'global' },
     'WWW.THESTRABON.COM': { category: 'Travel', scope: 'global' },
     'YSI': { category: 'Household', scope: 'global' },
     'YWW': { category: 'Stylecom', scope: 'global' },
+    'ZELLE PAYMENT FROM EMILIA FRIDA FIERS': { category: 'Other', scope: 'global' },
+    'ZELLE PAYMENT FROM WILLEM VAN DE MIEROP': { category: 'Other', scope: 'global' },
+    'ZELLE PAYMENT TO ANNE ELISABETH': { category: 'Other', scope: 'global' },
+    'ZELLE PAYMENT TO ARGATHE MICHAUD JPM99BX': { category: 'Other', scope: 'global' },
+    'ZELLE PAYMENT TO ARGATHE MICHAUD JPM99BY': { category: 'Other', scope: 'global' },
+    'ZELLE PAYMENT TO BRAULIO HERNANDEZ JPM99': { category: 'Other', scope: 'global' },
+    'ZELLE PAYMENT TO MICHAEL MISHOE JPM99AQQ': { category: 'Other', scope: 'global' },
+    'ZELLE PAYMENT TO NICOLAS MERTENS BOFA JP': { category: 'Other', scope: 'global' },
+    // Account-specific rules
+    'ACCOR|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 1 - Credit"] },
     'AIR EUROPA|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 4","Chase 0700 - 1","Chase 0700 - 2","Chase 0700 - 3","Chase 2251","Chase 5448"] },
-    'AIR FRANCE|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 5448","Chase 0700 - 1","Chase 0700 - 2","Chase 0700 - 3","Chase 0700 - 4","Chase 2251"] },
+    'AIR FRANCE|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 5448 - Credit","Chase 2251 - Credit","Chase 0700 - 3- Credit","Chase 0700 - 2 - Credit","Chase 0700 - 4 - Credit","Chase 0700 - 1 - Credit"] },
     'BANGKOK AIRWAYS-5G7NK3|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 3","Chase 0700 - 1","Chase 0700 - 2","Chase 0700 - 4","Chase 2251"] },
-    'DELTA AIR|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 5448","Chase 0700 - 1","Chase 0700 - 2","Chase 0700 - 3","Chase 0700 - 4","Chase 2251"] },
+    'BELGIUM VENDING|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 1 - Credit"] },
+    'BKG|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 1 - Credit"] },
+    'BOTANIC|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 1 - Credit","Chase 0700 - 2 - Credit","Chase 0700 - 3- Credit","Chase 0700 - 4 - Credit","Chase 2251 - Credit","Chase 5448 - Credit"] },
+    'CATHAY PACIFIC AIRWAYS LI|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 1 - Credit"] },
+    'CONTINENTAL EXC|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Debit Chase9532 Nicoline"] },
+    'COURTYARD NEW YORK|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 3- Credit"] },
+    'DELIJN XFVZJBEP 08NOV|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 1 - Credit"] },
+    'DELTA AIR|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 1 - Credit","Chase 0700 - 2 - Credit","Chase 0700 - 3- Credit","Chase 0700 - 4 - Credit","Chase 2251 - Credit","Chase 5448 - Credit"] },
     'ETIHAD AIRW|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 3"] },
+    'HOTEL SOFITEL GPRS|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 4 - Credit"] },
     'JETBLUE|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 4"] },
-    'KLM AIRLINE|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 1","Chase 0700 - 2","Chase 0700 - 3","Chase 0700 - 4","Chase 2251","Chase 5448"] },
-    'KLM ROYAL DUYIAONX|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 1","Chase 0700 - 2","Chase 0700 - 3","Chase 0700 - 4","Chase 2251"] },
+    'KIMPTON KITALAY SAMUI|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 3- Credit"] },
+    'KLM AIRLINE|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 1 - Credit","Chase 0700 - 2 - Credit","Chase 0700 - 3- Credit","Chase 0700 - 4 - Credit","Chase 2251 - Credit","Chase 5448 - Credit"] },
+    'KLM NETHERLA|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 4 - Credit"] },
+    'KLM ROYAL DUXAUC8Y|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 1 - Credit"] },
+    'KLM ROYAL DUYCUN5D|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 1 - Credit"] },
+    'KLM ROYAL DUYIAONX|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 1 - Credit","Chase 0700 - 2 - Credit","Chase 0700 - 3- Credit","Chase 0700 - 4 - Credit","Chase 2251 - Credit","Chase 5448 - Credit"] },
+    'LS THEATER HOTEL BY HA|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 1 - Credit"] },
+    'MERCURE ANTWERP CITY CENT|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 1 - Credit"] },
+    'MOL|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 2 - Credit"] },
+    'NH COLLECTION ANTWERP CEN|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 5448 - Credit"] },
+    'NS INTERNATIONAAL B.V.|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 1 - Credit"] },
+    'NS REIZIGERS B.V.|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 1 - Credit"] },
+    'POPPY MOBILITY NV|||accounts': { category: 'Transportation', scope: 'accounts', accounts: ["Chase 0700 - 1 - Credit","Chase 0700 - 2 - Credit","Chase 0700 - 3- Credit","Chase 0700 - 4 - Credit","Chase 2251 - Credit"] },
     'QATAR AIR|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 3","Chase 0700 - 1","Chase 0700 - 2","Chase 0700 - 4","Chase 2251","Chase 5448"] },
-    'SWISS AIR|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 5448","Chase 0700 - 1","Chase 0700 - 2","Chase 0700 - 3","Chase 0700 - 4","Chase 2251"] },
-    'UNITED|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 5448","Chase 0700 - 1","Chase 0700 - 2","Chase 0700 - 3","Chase 0700 - 4","Chase 2251"] },
+    'SAPPHIRE HOUSE ANTWERP AU|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 1 - Credit"] },
+    'SNBRU AIR|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 2 - Credit"] },
+    'SNCB - NMBS EU|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 5448 - Credit"] },
+    'SNCB NMBS TAP ON PHONE|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 1 - Credit"] },
+    'SWISS AIR|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 5448 - Credit"] },
+    'TECHS|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 2 - Credit"] },
+    'THEATER HOTEL CV|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 1 - Credit"] },
+    'TUI NEDERLAND APEXX|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 5448 - Credit"] },
+    'UNITED|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 5448 - Credit","Chase 0700 - 1 - Credit","Chase 0700 - 2 - Credit","Chase 0700 - 3- Credit","Chase 0700 - 4 - Credit","Chase 2251 - Credit"] },
+    'VOI BE|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 1 - Credit","Chase 0700 - 2 - Credit","Chase 0700 - 3- Credit","Chase 0700 - 4 - Credit","Chase 2251 - Credit"] },
 };
 
 const loadMerchantRules = () => {
@@ -2718,6 +2841,8 @@ const CategoryManagement = ({ expenses, merchantRules, onUpdateExpense, onUpdate
     const [selectedIds, setSelectedIds] = useState(new Set());
     const [showBulkEdit, setShowBulkEdit] = useState(false);
     const [bulkCategory, setBulkCategory] = useState('');
+    const [bulkScope, setBulkScope] = useState('oneoff'); // 'oneoff', 'global', or 'accounts'
+    const [bulkAccounts, setBulkAccounts] = useState([]); // Selected accounts for account-specific rules
     
     // Get unique values for filter dropdowns
     const uniqueAccounts = useMemo(() => {
@@ -2831,18 +2956,44 @@ const CategoryManagement = ({ expenses, merchantRules, onUpdateExpense, onUpdate
         setSelectedIds(new Set());
     };
     
-    // Bulk edit handler
+    // Bulk edit handler - supports one-off, global rules, and account-specific rules
     const handleBulkCategoryChange = () => {
         if (!bulkCategory || selectedIds.size === 0) return;
+        if (bulkScope === 'accounts' && bulkAccounts.length === 0) return;
         
-        // Apply category to all selected transactions as one-off changes
-        selectedIds.forEach(id => {
-            onUpdateExpense(id, bulkCategory);
-        });
+        if (bulkScope === 'oneoff') {
+            // Apply category to all selected transactions as one-off changes
+            selectedIds.forEach(id => {
+                onUpdateExpense(id, bulkCategory);
+            });
+        } else {
+            // Create merchant rules for unique merchants in selection
+            const selectedExpenses = expenses.filter(e => selectedIds.has(e.id));
+            const uniqueMerchants = new Set(selectedExpenses.map(e => cleanMerchant(e.description)));
+            
+            uniqueMerchants.forEach(merchant => {
+                if (bulkScope === 'global') {
+                    onUpdateRule(merchant, bulkCategory, 'global', null);
+                } else if (bulkScope === 'accounts') {
+                    onUpdateRule(merchant, bulkCategory, 'accounts', bulkAccounts);
+                }
+            });
+        }
         
         setSelectedIds(new Set());
         setShowBulkEdit(false);
         setBulkCategory('');
+        setBulkScope('oneoff');
+        setBulkAccounts([]);
+    };
+    
+    // Toggle account in bulk accounts selection
+    const toggleBulkAccount = (acc) => {
+        setBulkAccounts(prev => 
+            prev.includes(acc) 
+                ? prev.filter(a => a !== acc) 
+                : [...prev, acc]
+        );
     };
     
     return (
@@ -2925,15 +3076,29 @@ const CategoryManagement = ({ expenses, merchantRules, onUpdateExpense, onUpdate
             
             {/* Multi-Select Actions Bar */}
             {selectedIds.size > 0 && (
-                <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 flex flex-wrap items-center gap-4">
-                    <div className="text-sm font-bold text-indigo-700">
-                        ✓ {selectedIds.size} selected
+                <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 space-y-3">
+                    {/* Top row: selection info and clear */}
+                    <div className="flex items-center gap-4">
+                        <div className="text-sm font-bold text-indigo-700">
+                            ✓ {selectedIds.size} selected
+                        </div>
+                        <button onClick={selectNone} className="text-xs font-semibold text-indigo-600 hover:underline">
+                            Clear Selection
+                        </button>
+                        <div className="flex-1" />
+                        {/* Unique merchants count */}
+                        <div className="text-xs text-slate-500">
+                            {(() => {
+                                const selectedExpenses = expenses.filter(e => selectedIds.has(e.id));
+                                const uniqueMerchants = new Set(selectedExpenses.map(e => cleanMerchant(e.description)));
+                                return `${uniqueMerchants.size} unique merchant${uniqueMerchants.size !== 1 ? 's' : ''}`;
+                            })()}
+                        </div>
                     </div>
-                    <button onClick={selectNone} className="text-xs font-semibold text-indigo-600 hover:underline">
-                        Clear Selection
-                    </button>
-                    <div className="flex-1" />
-                    <div className="flex items-center gap-2">
+                    
+                    {/* Bottom row: category, scope, accounts, apply */}
+                    <div className="flex flex-wrap items-center gap-3">
+                        {/* Category selector */}
                         <select 
                             value={bulkCategory}
                             onChange={e => setBulkCategory(e.target.value)}
@@ -2944,17 +3109,107 @@ const CategoryManagement = ({ expenses, merchantRules, onUpdateExpense, onUpdate
                                 <option key={cat} value={cat}>{cat}</option>
                             ))}
                         </select>
+                        
+                        {/* Scope selector */}
+                        <div className="flex items-center gap-1 bg-white border border-indigo-300 rounded-lg p-1">
+                            <button
+                                onClick={() => setBulkScope('oneoff')}
+                                className={`px-3 py-1.5 rounded text-xs font-bold transition-all ${
+                                    bulkScope === 'oneoff' 
+                                        ? 'bg-amber-100 text-amber-700' 
+                                        : 'text-slate-500 hover:bg-slate-100'
+                                }`}
+                                title="Apply to these specific transactions only"
+                            >
+                                ⚡ One-Off
+                            </button>
+                            <button
+                                onClick={() => setBulkScope('global')}
+                                className={`px-3 py-1.5 rounded text-xs font-bold transition-all ${
+                                    bulkScope === 'global' 
+                                        ? 'bg-purple-100 text-purple-700' 
+                                        : 'text-slate-500 hover:bg-slate-100'
+                                }`}
+                                title="Create global rule for these merchants"
+                            >
+                                🌍 Global
+                            </button>
+                            <button
+                                onClick={() => setBulkScope('accounts')}
+                                className={`px-3 py-1.5 rounded text-xs font-bold transition-all ${
+                                    bulkScope === 'accounts' 
+                                        ? 'bg-cyan-100 text-cyan-700' 
+                                        : 'text-slate-500 hover:bg-slate-100'
+                                }`}
+                                title="Create rule for specific accounts only"
+                            >
+                                💳 Accounts
+                            </button>
+                        </div>
+                        
+                        {/* Account selector (only shown when scope is 'accounts') */}
+                        {bulkScope === 'accounts' && (
+                            <div className="relative group">
+                                <button 
+                                    className="px-3 py-2 bg-white border border-cyan-400 rounded-lg text-xs font-semibold text-cyan-700 min-w-[140px] text-left"
+                                >
+                                    {bulkAccounts.length === 0 
+                                        ? 'Select accounts...' 
+                                        : bulkAccounts.length === 1 
+                                            ? bulkAccounts[0].substring(0, 18) + (bulkAccounts[0].length > 18 ? '...' : '')
+                                            : `${bulkAccounts.length} accounts`}
+                                </button>
+                                <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-30 hidden group-hover:block min-w-[220px] max-h-56 overflow-auto">
+                                    <div className="p-2 border-b border-slate-100 flex gap-2">
+                                        <button 
+                                            onClick={() => setBulkAccounts([...uniqueAccounts])}
+                                            className="text-[10px] text-indigo-600 hover:underline font-semibold"
+                                        >Select All</button>
+                                        <button 
+                                            onClick={() => setBulkAccounts([])}
+                                            className="text-[10px] text-slate-500 hover:underline font-semibold"
+                                        >Clear</button>
+                                    </div>
+                                    {uniqueAccounts.map(acc => (
+                                        <label key={acc} className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer">
+                                            <input 
+                                                type="checkbox"
+                                                checked={bulkAccounts.includes(acc)}
+                                                onChange={() => toggleBulkAccount(acc)}
+                                                className="w-3.5 h-3.5 rounded"
+                                            />
+                                            <span className="text-xs text-slate-700">{acc}</span>
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                        
+                        <div className="flex-1" />
+                        
+                        {/* Apply button */}
                         <button 
                             onClick={handleBulkCategoryChange}
-                            disabled={!bulkCategory}
+                            disabled={!bulkCategory || (bulkScope === 'accounts' && bulkAccounts.length === 0)}
                             className={`px-4 py-2 rounded-lg text-sm font-bold ${
-                                bulkCategory 
+                                bulkCategory && (bulkScope !== 'accounts' || bulkAccounts.length > 0)
                                     ? 'bg-indigo-600 text-white hover:bg-indigo-700' 
                                     : 'bg-slate-200 text-slate-400 cursor-not-allowed'
                             }`}
                         >
-                            Apply to {selectedIds.size}
+                            {bulkScope === 'oneoff' 
+                                ? `Apply to ${selectedIds.size}` 
+                                : bulkScope === 'global'
+                                    ? `Create Global Rule${selectedIds.size > 1 ? 's' : ''}`
+                                    : `Create Account Rule${selectedIds.size > 1 ? 's' : ''}`}
                         </button>
+                    </div>
+                    
+                    {/* Scope explanation */}
+                    <div className="text-[10px] text-slate-500">
+                        {bulkScope === 'oneoff' && '⚡ One-Off: Changes only these specific transactions (highest priority)'}
+                        {bulkScope === 'global' && '🌍 Global: Creates merchant rules that apply to ALL accounts'}
+                        {bulkScope === 'accounts' && '💳 Accounts: Creates merchant rules that only apply to selected accounts'}
                     </div>
                 </div>
             )}
