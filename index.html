@@ -6984,7 +6984,7 @@ const App = () => {
     };
 
     const updateExpenseCategory = (id, category) => {
-        setExpenses(expenses.map(e => e.id === id ? {...e, manualCategory: category} : e));
+        setExpenses(prev => prev.map(e => e.id === id ? {...e, manualCategory: category} : e));
     };
     
     const updateExpenseSubscription = (id, isSubscription) => {
