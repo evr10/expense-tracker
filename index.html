@@ -3162,7 +3162,7 @@ const CategoryManagement = ({ expenses, merchantRules, onUpdateExpense, onUpdate
                                 <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-30 hidden group-hover:block min-w-[220px] max-h-56 overflow-auto">
                                     <div className="p-2 border-b border-slate-100 flex gap-2">
                                         <button 
-                                            onClick={() => setBulkAccounts([...uniqueAccounts])}
+                                            onClick={() => setBulkAccounts([...allAccounts])}
                                             className="text-[10px] text-indigo-600 hover:underline font-semibold"
                                         >Select All</button>
                                         <button 
@@ -3170,7 +3170,7 @@ const CategoryManagement = ({ expenses, merchantRules, onUpdateExpense, onUpdate
                                             className="text-[10px] text-slate-500 hover:underline font-semibold"
                                         >Clear</button>
                                     </div>
-                                    {uniqueAccounts.map(acc => (
+                                    {allAccounts.map(acc => (
                                         <label key={acc} className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer">
                                             <input 
                                                 type="checkbox"
