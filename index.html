@@ -4428,8 +4428,443 @@ const StylecomReimbursement = ({ expenses, merchantRules, paidIds, onTogglePaid 
         <div className="space-y-6">
             {/* Header */}
             <div className="bg-gradient-to-r from-pink-500 to-rose-600 text-white p-6 rounded-2xl">
-                <h2 className="text-xl font-black">👗 Stylecom Reimbursement Tracker</h2>
-                <p className="text-pink-100 text-sm mt-1">Track business expenses and family repayments</p>
+                <div className="flex justify-between items-start">
+                    <div>
+                        <h2 className="text-xl font-black">👗 Stylecom Reimbursement Tracker</h2>
+                        <p className="text-pink-100 text-sm mt-1">Track business expenses and family repayments</p>
+                    </div>
+                    <button 
+                        onClick={() => {
+                            // Generate standalone HTML file with all Stylecom data embedded
+                            const generateShareableHTML = () => {
+                                const fmt = (n) => '$' + Math.abs(n).toLocaleString(undefined, {maximumFractionDigits: 2});
+                                const fmtInt = (n) => '$' + Math.abs(n).toLocaleString(undefined, {maximumFractionDigits: 0});
+                                const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+                                
+                                // Prepare embedded data
+                                const expensesJSON = JSON.stringify(stylecomExpenses.map(e => ({
+                                    id: e.id,
+                                    date: e.date,
+                                    description: e.description,
+                                    account: e.account,
+                                    amount: safe(e.amount),
+                                    isPaid: paidIds.has(e.id)
+                                })));
+                                
+                                const repaymentsJSON = JSON.stringify(stylecomRepayments.map(e => ({
+                                    id: e.id,
+                                    date: e.date,
+                                    description: e.description,
+                                    account: e.account,
+                                    amount: Math.abs(safe(e.amount))
+                                })));
+                                
+                                const quarterlyJSON = JSON.stringify(quarterlyData.map(q => ({
+                                    key: q.key,
+                                    label: q.label,
+                                    expenses: q.expenses,
+                                    refunds: q.refunds,
+                                    net: q.net,
+                                    repayments: q.repayments,
+                                    balance: q.balance
+                                })));
+                                
+                                return \`<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stylecom Reimbursement Overview</title>
+    <script src="https://cdn.tailwindcss.com"><\/script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+        .gradient-header { background: linear-gradient(135deg, #ec4899 0%, #e11d48 100%); }
+        .gradient-progress { background: linear-gradient(90deg, #818cf8 0%, #4f46e5 100%); }
+        .deleted-row { opacity: 0.4; text-decoration: line-through; background: #fee2e2 !important; }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+    <div id="root"></div>
+    
+    <script>
+        // Embedded Data (Generated \${today})
+        const ORIGINAL_EXPENSES = \${expensesJSON};
+        const REPAYMENTS = \${repaymentsJSON};
+        const QUARTERLY = \${quarterlyJSON};
+        const ORIGINAL_KPIS = {
+            grossExpenses: \${kpis.grossExpenses},
+            totalRefunds: \${kpis.totalRefunds},
+            netExpenses: \${kpis.netExpenses},
+            totalRepaid: \${kpis.totalRepaid},
+            netOwed: \${kpis.netOwed},
+            expenseCount: \${kpis.expenseCount},
+            refundCount: \${kpis.refundCount},
+            repaymentCount: \${kpis.repaymentCount}
+        };
+        const GENERATED_DATE = "\${today}";
+        
+        // Track changes made by reviewer
+        let deletedIds = new Set();           // Expenses marked as "not Stylecom"
+        let newlyPaidIds = new Set();         // Expenses marked as paid by reviewer
+        let originalPaidIds = new Set(ORIGINAL_EXPENSES.filter(e => e.isPaid).map(e => e.id));
+        
+        // Get active (non-deleted) expenses
+        const getActiveExpenses = () => ORIGINAL_EXPENSES.filter(e => !deletedIds.has(e.id));
+        
+        // Calculate current KPIs based on active expenses
+        const calculateKPIs = () => {
+            const active = getActiveExpenses();
+            const positiveExp = active.filter(e => e.amount > 0);
+            const refunds = active.filter(e => e.amount < 0);
+            const grossExpenses = positiveExp.reduce((s, e) => s + e.amount, 0);
+            const totalRefunds = Math.abs(refunds.reduce((s, e) => s + e.amount, 0));
+            const netExpenses = grossExpenses - totalRefunds;
+            const totalRepaid = ORIGINAL_KPIS.totalRepaid;
+            return {
+                grossExpenses,
+                totalRefunds,
+                netExpenses,
+                totalRepaid,
+                netOwed: netExpenses - totalRepaid,
+                expenseCount: positiveExp.length,
+                refundCount: refunds.length,
+                repaymentCount: ORIGINAL_KPIS.repaymentCount
+            };
+        };
+        
+        // Check if expense is currently marked as paid
+        const isPaid = (id) => originalPaidIds.has(id) || newlyPaidIds.has(id);
+        
+        // Toggle paid status
+        const togglePaid = (id) => {
+            if (originalPaidIds.has(id)) return; // Can't unpay originally paid items
+            if (newlyPaidIds.has(id)) {
+                newlyPaidIds.delete(id);
+            } else {
+                newlyPaidIds.add(id);
+            }
+            render();
+        };
+        
+        // Delete expense (mark as not Stylecom)
+        const deleteExpense = (id) => {
+            if (confirm('Mark this expense as NOT a Stylecom expense? This will remove it from the totals.')) {
+                deletedIds.add(id);
+                render();
+            }
+        };
+        
+        // Restore deleted expense
+        const restoreExpense = (id) => {
+            deletedIds.delete(id);
+            render();
+        };
+        
+        // Export changes
+        const exportChanges = () => {
+            const deleted = ORIGINAL_EXPENSES.filter(e => deletedIds.has(e.id));
+            const newlyPaid = ORIGINAL_EXPENSES.filter(e => newlyPaidIds.has(e.id));
+            
+            let text = "STYLECOM REVIEW FEEDBACK\\n";
+            text += "========================\\n";
+            text += "Generated: " + GENERATED_DATE + "\\n";
+            text += "Reviewed: " + new Date().toLocaleDateString() + "\\n\\n";
+            
+            if (deleted.length > 0) {
+                text += "❌ REMOVED (Not Stylecom) - " + deleted.length + " items:\\n";
+                text += "----------------------------------------\\n";
+                deleted.forEach(e => {
+                    text += \\\`  • \\\${e.date} | \\\${e.description} | $\\\${Math.abs(e.amount).toFixed(2)}\\n\\\`;
+                });
+                const deletedTotal = deleted.reduce((s, e) => s + Math.abs(e.amount), 0);
+                text += \\\`  TOTAL REMOVED: $\\\${deletedTotal.toFixed(2)}\\n\\n\\\`;
+            } else {
+                text += "❌ REMOVED: None\\n\\n";
+            }
+            
+            if (newlyPaid.length > 0) {
+                text += "✅ MARKED AS PAID - " + newlyPaid.length + " items:\\n";
+                text += "----------------------------------------\\n";
+                newlyPaid.forEach(e => {
+                    text += \\\`  • \\\${e.date} | \\\${e.description} | $\\\${Math.abs(e.amount).toFixed(2)}\\n\\\`;
+                });
+                const paidTotal = newlyPaid.reduce((s, e) => s + Math.abs(e.amount), 0);
+                text += \\\`  TOTAL MARKED PAID: $\\\${paidTotal.toFixed(2)}\\n\\n\\\`;
+            } else {
+                text += "✅ MARKED AS PAID: None\\n\\n";
+            }
+            
+            const kpis = calculateKPIs();
+            text += "📊 ADJUSTED SUMMARY:\\n";
+            text += "----------------------------------------\\n";
+            text += \\\`  Net Expenses (adjusted): $\\\${kpis.netExpenses.toFixed(2)}\\n\\\`;
+            text += \\\`  Total Repaid: $\\\${kpis.totalRepaid.toFixed(2)}\\n\\\`;
+            text += \\\`  Still Owed (adjusted): $\\\${kpis.netOwed.toFixed(2)}\\n\\\`;
+            
+            // Download as text file
+            const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'stylecom-review-' + new Date().toISOString().split('T')[0] + '.txt';
+            a.click();
+            URL.revokeObjectURL(url);
+        };
+        
+        // Render helpers
+        const fmt = (n) => '$' + Math.abs(n).toLocaleString(undefined, {maximumFractionDigits: 2});
+        const fmtInt = (n) => '$' + Math.abs(n).toLocaleString(undefined, {maximumFractionDigits: 0});
+        
+        let viewMode = 'expenses';
+        let selectedQuarter = 'all';
+        let showDeleted = false;
+        
+        function render() {
+            const KPIS = calculateKPIs();
+            const activeExpenses = getActiveExpenses();
+            const hasChanges = deletedIds.size > 0 || newlyPaidIds.size > 0;
+            
+            // Filter by quarter
+            const getQuarter = (dateStr) => {
+                const d = new Date(dateStr);
+                const q = Math.floor(d.getMonth() / 3) + 1;
+                return \\\`Q\\\${q} \\\${d.getFullYear()}\\\`;
+            };
+            
+            let filteredTxns;
+            if (viewMode === 'expenses') {
+                filteredTxns = showDeleted ? ORIGINAL_EXPENSES : activeExpenses;
+                if (selectedQuarter !== 'all') {
+                    filteredTxns = filteredTxns.filter(e => getQuarter(e.date) === selectedQuarter);
+                }
+            } else {
+                filteredTxns = REPAYMENTS;
+                if (selectedQuarter !== 'all') {
+                    filteredTxns = filteredTxns.filter(e => getQuarter(e.date) === selectedQuarter);
+                }
+            }
+            
+            document.getElementById('root').innerHTML = \\\`
+                <div class="max-w-6xl mx-auto p-6 space-y-6">
+                    <!-- Header -->
+                    <div class="gradient-header text-white p-6 rounded-2xl shadow-lg">
+                        <div class="flex justify-between items-start flex-wrap gap-4">
+                            <div>
+                                <h1 class="text-2xl font-black">👗 Stylecom Reimbursement Overview</h1>
+                                <p class="text-pink-100 text-sm mt-1">Family expense tracking & repayment status</p>
+                                <p class="text-pink-200 text-xs mt-2">📅 Generated: \${GENERATED_DATE}</p>
+                            </div>
+                            \${hasChanges ? \\\`
+                                <button onclick="exportChanges()" class="px-4 py-2 bg-white text-pink-600 rounded-xl text-sm font-bold hover:bg-pink-50 flex items-center gap-2 shadow-lg">
+                                    📤 Export My Changes (\${deletedIds.size + newlyPaidIds.size})
+                                </button>
+                            \\\` : ''}
+                        </div>
+                    </div>
+                    
+                    \${hasChanges ? \\\`
+                    <!-- Changes Banner -->
+                    <div class="bg-amber-50 border-2 border-amber-200 rounded-2xl p-4 flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <span class="text-2xl">✏️</span>
+                            <div>
+                                <p class="font-bold text-amber-800">You have unsaved changes</p>
+                                <p class="text-xs text-amber-600">\${deletedIds.size} removed, \${newlyPaidIds.size} marked paid</p>
+                            </div>
+                        </div>
+                        <button onclick="exportChanges()" class="px-4 py-2 bg-amber-500 text-white rounded-lg text-sm font-bold hover:bg-amber-600">
+                            Export Changes
+                        </button>
+                    </div>
+                    \\\` : ''}
+                    
+                    <!-- KPI Cards -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="bg-white p-5 rounded-2xl border-2 border-pink-200 shadow-lg">
+                            <h3 class="text-xs font-bold text-pink-600 uppercase">📋 Net Expenses</h3>
+                            <p class="text-3xl font-black text-pink-600">\${fmtInt(KPIS.netExpenses)}</p>
+                            <p class="text-xs text-pink-400 mt-1">\${deletedIds.size > 0 ? '(adjusted)' : 'Amount to reimburse'}</p>
+                        </div>
+                        <div class="bg-white p-5 rounded-2xl border-2 border-green-200 shadow-lg">
+                            <h3 class="text-xs font-bold text-green-600 uppercase">💰 Repaid (Wires)</h3>
+                            <p class="text-3xl font-black text-green-600">\${fmtInt(KPIS.totalRepaid)}</p>
+                            <p class="text-xs text-green-400 mt-1">\${KPIS.repaymentCount} transfers</p>
+                        </div>
+                        <div class="bg-white p-5 rounded-2xl border-2 border-amber-200 shadow-lg">
+                            <h3 class="text-xs font-bold text-amber-600 uppercase">⚡ Still Owed</h3>
+                            <p class="text-3xl font-black \${KPIS.netOwed > 0 ? 'text-amber-600' : 'text-green-600'}">\${fmtInt(KPIS.netOwed)}</p>
+                            <p class="text-xs text-amber-400 mt-1">\${deletedIds.size > 0 ? '(adjusted)' : 'Net - Repaid'}</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Progress Bar -->
+                    <div class="bg-white p-5 rounded-2xl border border-indigo-200 shadow-lg">
+                        <div class="flex items-center justify-between mb-2">
+                            <h3 class="text-xs font-bold text-indigo-500 uppercase">📊 Repayment Progress</h3>
+                            <span class="text-xl font-black text-indigo-600">\${KPIS.netExpenses > 0 ? Math.round((KPIS.totalRepaid / KPIS.netExpenses) * 100) : 0}%</span>
+                        </div>
+                        <div class="h-4 bg-slate-100 rounded-full overflow-hidden">
+                            <div class="h-full gradient-progress rounded-full" style="width: \${KPIS.netExpenses > 0 ? Math.min((KPIS.totalRepaid / KPIS.netExpenses) * 100, 100) : 0}%"></div>
+                        </div>
+                        <div class="flex justify-between mt-2 text-xs text-slate-500">
+                            <span>Net Expenses: \${fmtInt(KPIS.netExpenses)}</span>
+                            <span>Repaid: \${fmtInt(KPIS.totalRepaid)}</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Quarterly Breakdown -->
+                    <div class="bg-white rounded-2xl border border-slate-200 shadow-lg overflow-hidden">
+                        <div class="p-5 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-slate-100">
+                            <h3 class="text-sm font-black text-slate-800">📅 Quarterly Breakdown</h3>
+                            <p class="text-xs text-slate-500 mt-1">Click a row to filter transactions</p>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm">
+                                <thead class="bg-slate-50">
+                                    <tr>
+                                        <th class="text-left p-4 font-bold text-slate-600">Quarter</th>
+                                        <th class="text-right p-4 font-bold text-slate-600">Expenses</th>
+                                        <th class="text-right p-4 font-bold text-slate-600">Refunds</th>
+                                        <th class="text-right p-4 font-bold text-slate-600">Net</th>
+                                        <th class="text-right p-4 font-bold text-slate-600">Repaid</th>
+                                        <th class="text-right p-4 font-bold text-slate-600">Balance</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    \${QUARTERLY.map(q => \\\`
+                                        <tr class="border-t border-slate-100 hover:bg-slate-50 cursor-pointer \${selectedQuarter === q.key ? 'bg-indigo-50' : ''}" onclick="selectedQuarter='\${q.key}';render()">
+                                            <td class="p-4 font-bold text-slate-800">\${q.label}</td>
+                                            <td class="p-4 text-right text-pink-600">\${fmt(q.expenses)}</td>
+                                            <td class="p-4 text-right text-blue-600">-\${fmt(q.refunds)}</td>
+                                            <td class="p-4 text-right font-bold text-slate-800">\${fmt(q.net)}</td>
+                                            <td class="p-4 text-right text-green-600">\${fmt(q.repayments)}</td>
+                                            <td class="p-4 text-right font-bold \${q.balance > 0 ? 'text-amber-600' : 'text-green-600'}">\${fmt(q.balance)}</td>
+                                        </tr>
+                                    \\\`).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <!-- Transaction List -->
+                    <div class="bg-white rounded-2xl border border-slate-200 shadow-lg overflow-hidden">
+                        <div class="p-5 border-b border-slate-100 flex flex-wrap justify-between items-center gap-4">
+                            <h3 class="text-sm font-black text-slate-800">
+                                📝 \${viewMode === 'expenses' ? 'Expenses & Refunds' : 'Repayments'} \${selectedQuarter !== 'all' ? '- ' + selectedQuarter : ''}
+                            </h3>
+                            <div class="flex gap-2 flex-wrap">
+                                <button onclick="selectedQuarter='all';render()" class="px-3 py-1 rounded-lg text-xs font-bold \${selectedQuarter === 'all' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}">
+                                    All Time
+                                </button>
+                                \${viewMode === 'expenses' && deletedIds.size > 0 ? \\\`
+                                    <button onclick="showDeleted=!showDeleted;render()" class="px-3 py-1 rounded-lg text-xs font-bold \${showDeleted ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}">
+                                        \${showDeleted ? '🙈 Hide' : '👁️ Show'} Deleted (\${deletedIds.size})
+                                    </button>
+                                \\\` : ''}
+                                <div class="flex gap-1 bg-slate-100 p-1 rounded-lg">
+                                    <button onclick="viewMode='expenses';render()" class="px-3 py-1 rounded text-xs font-bold \${viewMode === 'expenses' ? 'bg-white text-pink-600 shadow' : 'text-slate-500'}">
+                                        💸 Expenses (\${activeExpenses.length})
+                                    </button>
+                                    <button onclick="viewMode='repayments';render()" class="px-3 py-1 rounded text-xs font-bold \${viewMode === 'repayments' ? 'bg-white text-green-600 shadow' : 'text-slate-500'}">
+                                        💰 Repayments (\${REPAYMENTS.length})
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="overflow-x-auto max-h-[500px]">
+                            <table class="w-full text-sm">
+                                <thead class="bg-slate-50 sticky top-0">
+                                    <tr>
+                                        <th class="text-left p-3 font-bold text-slate-600">Date</th>
+                                        <th class="text-left p-3 font-bold text-slate-600">Description</th>
+                                        <th class="text-left p-3 font-bold text-slate-600">Account</th>
+                                        <th class="text-right p-3 font-bold text-slate-600">Amount</th>
+                                        \${viewMode === 'expenses' ? '<th class="text-center p-3 font-bold text-slate-600">Status</th><th class="text-center p-3 font-bold text-slate-600">Actions</th>' : ''}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    \${filteredTxns.map(t => {
+                                        const isDeleted = deletedIds.has(t.id);
+                                        const isPositive = t.amount > 0;
+                                        const paidStatus = isPaid(t.id);
+                                        const isNewlyPaid = newlyPaidIds.has(t.id);
+                                        return \\\`
+                                        <tr class="border-t border-slate-100 hover:bg-slate-50 \${isDeleted ? 'deleted-row' : ''}">
+                                            <td class="p-3 text-slate-600">\${t.date}</td>
+                                            <td class="p-3 text-slate-800 max-w-xs">
+                                                <div class="truncate" title="\${t.description}">\${t.description}</div>
+                                            </td>
+                                            <td class="p-3 text-slate-500 text-xs">\${t.account || '-'}</td>
+                                            <td class="p-3 text-right font-bold \${t.amount < 0 ? 'text-blue-600' : (viewMode === 'repayments' ? 'text-green-600' : 'text-pink-600')}">\${t.amount < 0 ? '-' : ''}\${fmt(t.amount)}</td>
+                                            \${viewMode === 'expenses' ? \\\`
+                                                <td class="p-3 text-center">
+                                                    \${isDeleted ? '<span class="text-red-500">❌ Removed</span>' : 
+                                                      (isPositive ? (paidStatus ? (isNewlyPaid ? '<span class="text-green-600">✅ Paid (new)</span>' : '<span class="text-green-600">✅ Paid</span>') : '<span class="text-amber-500">⏳ Unpaid</span>') : '<span class="text-slate-400">-</span>')}
+                                                </td>
+                                                <td class="p-3 text-center">
+                                                    <div class="flex items-center justify-center gap-1">
+                                                        \${isDeleted ? \\\`
+                                                            <button onclick="restoreExpense('\${t.id}')" class="p-1.5 text-green-600 hover:bg-green-100 rounded" title="Restore">↩️</button>
+                                                        \\\` : \\\`
+                                                            \${isPositive && !paidStatus ? \\\`<button onclick="togglePaid('\${t.id}')" class="p-1.5 text-green-600 hover:bg-green-100 rounded" title="Mark as Paid">✅</button>\\\` : ''}
+                                                            \${isPositive && isNewlyPaid ? \\\`<button onclick="togglePaid('\${t.id}')" class="p-1.5 text-amber-600 hover:bg-amber-100 rounded" title="Unmark as Paid">↩️</button>\\\` : ''}
+                                                            <button onclick="deleteExpense('\${t.id}')" class="p-1.5 text-red-500 hover:bg-red-100 rounded" title="Not Stylecom">🗑️</button>
+                                                        \\\`}
+                                                    </div>
+                                                </td>
+                                            \\\` : ''}
+                                        </tr>
+                                    \\\`}).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="p-4 bg-slate-50 border-t text-xs text-slate-500 flex justify-between">
+                            <span>Showing \${filteredTxns.length} transactions</span>
+                            \${viewMode === 'expenses' ? \\\`<span>\${deletedIds.size} removed • \${newlyPaidIds.size} newly marked paid</span>\\\` : ''}
+                        </div>
+                    </div>
+                    
+                    <!-- Instructions -->
+                    <div class="bg-blue-50 border border-blue-200 rounded-2xl p-5">
+                        <h3 class="font-bold text-blue-800 mb-2">📋 How to Review</h3>
+                        <ul class="text-sm text-blue-700 space-y-1">
+                            <li>🗑️ <strong>Delete</strong> - Click trash icon if an expense is NOT a Stylecom expense</li>
+                            <li>✅ <strong>Mark Paid</strong> - Click check if you've reimbursed an expense</li>
+                            <li>📤 <strong>Export Changes</strong> - Send the file to sync your changes</li>
+                        </ul>
+                    </div>
+                    
+                    <!-- Footer -->
+                    <div class="text-center text-xs text-slate-400 py-4">
+                        Generated from Expense Tracker • Data as of \${GENERATED_DATE}
+                    </div>
+                </div>
+            \\\`;
+        }
+        
+        // Initial render
+        render();
+    <\/script>
+</body>
+</html>\`;
+                            };
+                            
+                            // Generate and download
+                            const html = generateShareableHTML();
+                            const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = `stylecom-overview-${new Date().toISOString().split('T')[0]}.html`;
+                            a.click();
+                            URL.revokeObjectURL(url);
+                        }}
+                        className="px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-xl text-sm font-bold flex items-center gap-2 transition-all"
+                        title="Export as standalone HTML website to share with family"
+                    >
+                        🌐 Share Website
+                    </button>
+                </div>
             </div>
             
             {/* KPI Cards - Just the essentials */}
@@ -6108,13 +6543,14 @@ const AIAnalystExport = ({ expenses, merchantRules }) => {
             const fmtPct = (n) => n.toFixed(1) + '%';
             const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
             
-            // Filter data
+            // Filter data - EXCLUDE Stylecom (family expenses tracked separately)
             const validYears = [2024, 2025];
+            const STYLECOM_EXCLUDED = [...EXCLUDED_CATEGORIES, 'Stylecom'];
             
             const allExpenses = expenses.filter(e => {
                 const cat = getEffectiveCategory(e, merchantRules).category;
                 const year = getY(e.date);
-                return !EXCLUDED_CATEGORIES.includes(cat) && validYears.includes(year) && safe(e.amount) > 0;
+                return !STYLECOM_EXCLUDED.includes(cat) && validYears.includes(year) && safe(e.amount) > 0;
             });
             
             const incomeData = expenses.filter(e => {
@@ -6372,25 +6808,86 @@ const AIAnalystExport = ({ expenses, merchantRules }) => {
                 lines.push('');
             }
             
-            // === STYLECOM SUMMARY (if applicable) ===
-            const stylecomExp = expenses.filter(e => {
+            // === SUBSCRIPTIONS (Tagged Recurring Expenses) ===
+            lines.push('## 🔄 Subscriptions & Recurring Costs');
+            lines.push('');
+            lines.push('Transactions explicitly tagged as subscriptions:');
+            lines.push('');
+            
+            // Get all subscription-tagged transactions (excluding Stylecom)
+            const subscriptionTxns = expenses.filter(e => {
                 const cat = getEffectiveCategory(e, merchantRules).category;
-                return cat === 'Stylecom' && getY(e.date) === 2025;
+                return e.isSubscription && cat !== 'Stylecom' && validYears.includes(getY(e.date));
             });
             
-            if (stylecomExp.length > 0) {
-                const stylecomGross = stylecomExp.filter(e => safe(e.amount) > 0).reduce((s, e) => s + safe(e.amount), 0);
-                const stylecomRepaid = stylecomExp.filter(e => safe(e.amount) < 0).reduce((s, e) => s + Math.abs(safe(e.amount)), 0);
-                const stylecomNet = stylecomGross - stylecomRepaid;
+            // Group subscriptions by merchant
+            const subsByMerchant = {};
+            subscriptionTxns.forEach(e => {
+                const merchant = cleanMerchant(e.description);
+                const cat = getEffectiveCategory(e, merchantRules).category;
+                if (!subsByMerchant[merchant]) {
+                    subsByMerchant[merchant] = { 
+                        total: 0, 
+                        count: 0, 
+                        category: cat,
+                        amounts: [],
+                        months: new Set()
+                    };
+                }
+                subsByMerchant[merchant].total += Math.abs(safe(e.amount));
+                subsByMerchant[merchant].count += 1;
+                subsByMerchant[merchant].amounts.push(Math.abs(safe(e.amount)));
+                subsByMerchant[merchant].months.add(`${getY(e.date)}-${getM(e.date)}`);
+            });
+            
+            const subsList = Object.entries(subsByMerchant)
+                .map(([merchant, data]) => {
+                    const avgAmount = data.total / data.count;
+                    const estMonthly = data.months.size > 0 ? data.total / data.months.size : avgAmount;
+                    return {
+                        merchant,
+                        category: data.category,
+                        total: data.total,
+                        count: data.count,
+                        avgAmount,
+                        estMonthly,
+                        estAnnual: estMonthly * 12,
+                        frequency: data.months.size
+                    };
+                })
+                .sort((a, b) => b.estAnnual - a.estAnnual);
+            
+            if (subsList.length > 0) {
+                const totalSubsAnnual = subsList.reduce((s, r) => s + r.estAnnual, 0);
+                const totalSubsMonthly = totalSubsAnnual / 12;
                 
-                lines.push('## 👔 Stylecom (Family Expenses) - 2025');
+                lines.push('| Service | Category | Est. Monthly | Est. Annual | Occurrences |');
+                lines.push('|---------|----------|--------------|-------------|-------------|');
+                subsList.forEach(s => {
+                    lines.push(`| ${s.merchant} | ${s.category} | ${fmt(s.estMonthly)} | ${fmt(s.estAnnual)} | ${s.count}× |`);
+                });
+                lines.push(`| **TOTAL SUBSCRIPTIONS** | | **${fmt(totalSubsMonthly)}** | **${fmt(totalSubsAnnual)}** | ${subsList.length} services |`);
                 lines.push('');
-                lines.push(`| Metric | Amount |`);
-                lines.push(`|--------|--------|`);
-                lines.push(`| Gross Advanced | ${fmt(stylecomGross)} |`);
-                lines.push(`| Repaid | ${fmt(stylecomRepaid)} |`);
-                lines.push(`| Net Owed to Family | **${fmt(stylecomNet)}** |`);
-                lines.push(`| Repayment Rate | ${fmtPct(stylecomGross > 0 ? (stylecomRepaid / stylecomGross) * 100 : 0)} |`);
+                
+                // Group by category
+                const subsByCategory = {};
+                subsList.forEach(s => {
+                    if (!subsByCategory[s.category]) subsByCategory[s.category] = 0;
+                    subsByCategory[s.category] += s.estAnnual;
+                });
+                
+                lines.push('**Subscriptions by Category:**');
+                Object.entries(subsByCategory)
+                    .sort((a, b) => b[1] - a[1])
+                    .forEach(([cat, annual]) => {
+                        lines.push(`- ${cat}: ${fmt(annual)}/year (${fmt(annual/12)}/mo)`);
+                    });
+                lines.push('');
+                
+                lines.push(`**Key Insight:** You spend approximately **${fmt(totalSubsMonthly)}/month** (${fmt(totalSubsAnnual)}/year) on ${subsList.length} recurring subscriptions.`);
+                lines.push('');
+            } else {
+                lines.push('*No subscription-tagged transactions found. Tag recurring expenses in Category Management to see them here.*');
                 lines.push('');
             }
             
@@ -6490,7 +6987,7 @@ const AIAnalystExport = ({ expenses, merchantRules }) => {
                 </div>
                 
                 <div className="bg-slate-50 rounded-xl p-4 text-sm text-slate-600">
-                    <p className="font-semibold mb-2">📋 What's included (2024-2025 focus):</p>
+                    <p className="font-semibold mb-2">📋 What's included (2024-2025 focus, excludes Stylecom):</p>
                     <ul className="grid grid-cols-2 gap-1 text-xs">
                         <li>✓ 2024 vs 2025 comparison</li>
                         <li>✓ Cost structure (Fixed/Semi-Fixed/Variable)</li>
@@ -6498,10 +6995,10 @@ const AIAnalystExport = ({ expenses, merchantRules }) => {
                         <li>✓ Category analysis with YoY change</li>
                         <li>✓ Income vs expenses ratios</li>
                         <li>✓ Top merchants with cost types</li>
-                        <li>✓ Recurring expense detection</li>
+                        <li>✓ All tagged subscriptions by service</li>
                         <li>✓ Budget-focused AI questions</li>
                     </ul>
-                    <p className="mt-3 text-[10px] text-slate-400">🔒 <strong>Privacy:</strong> No individual transactions or raw bank descriptions are included.</p>
+                    <p className="mt-3 text-[10px] text-slate-400">🔒 <strong>Privacy:</strong> No individual transactions or raw bank descriptions. Stylecom (family) expenses excluded.</p>
                 </div>
             </div>
             
