@@ -4571,35 +4571,35 @@ const StylecomReimbursement = ({ expenses, merchantRules, paidIds, onTogglePaid 
             text += "Reviewed: " + new Date().toLocaleDateString() + "\\n\\n";
             
             if (deleted.length > 0) {
-                text += "❌ REMOVED (Not Stylecom) - " + deleted.length + " items:\\n";
+                text += "REMOVED (Not Stylecom) - " + deleted.length + " items:\\n";
                 text += "----------------------------------------\\n";
                 deleted.forEach(e => {
-                    text += \\\`  • \\\${e.date} | \\\${e.description} | $\\\${Math.abs(e.amount).toFixed(2)}\\n\\\`;
+                    text += "  - " + e.date + " | " + e.description + " | $" + Math.abs(e.amount).toFixed(2) + "\\n";
                 });
                 const deletedTotal = deleted.reduce((s, e) => s + Math.abs(e.amount), 0);
-                text += \\\`  TOTAL REMOVED: $\\\${deletedTotal.toFixed(2)}\\n\\n\\\`;
+                text += "  TOTAL REMOVED: $" + deletedTotal.toFixed(2) + "\\n\\n";
             } else {
-                text += "❌ REMOVED: None\\n\\n";
+                text += "REMOVED: None\\n\\n";
             }
             
             if (newlyPaid.length > 0) {
-                text += "✅ MARKED AS PAID - " + newlyPaid.length + " items:\\n";
+                text += "MARKED AS PAID - " + newlyPaid.length + " items:\\n";
                 text += "----------------------------------------\\n";
                 newlyPaid.forEach(e => {
-                    text += \\\`  • \\\${e.date} | \\\${e.description} | $\\\${Math.abs(e.amount).toFixed(2)}\\n\\\`;
+                    text += "  - " + e.date + " | " + e.description + " | $" + Math.abs(e.amount).toFixed(2) + "\\n";
                 });
                 const paidTotal = newlyPaid.reduce((s, e) => s + Math.abs(e.amount), 0);
-                text += \\\`  TOTAL MARKED PAID: $\\\${paidTotal.toFixed(2)}\\n\\n\\\`;
+                text += "  TOTAL MARKED PAID: $" + paidTotal.toFixed(2) + "\\n\\n";
             } else {
-                text += "✅ MARKED AS PAID: None\\n\\n";
+                text += "MARKED AS PAID: None\\n\\n";
             }
             
             const kpis = calculateKPIs();
-            text += "📊 ADJUSTED SUMMARY:\\n";
+            text += "ADJUSTED SUMMARY:\\n";
             text += "----------------------------------------\\n";
-            text += \\\`  Net Expenses (adjusted): $\\\${kpis.netExpenses.toFixed(2)}\\n\\\`;
-            text += \\\`  Total Repaid: $\\\${kpis.totalRepaid.toFixed(2)}\\n\\\`;
-            text += \\\`  Still Owed (adjusted): $\\\${kpis.netOwed.toFixed(2)}\\n\\\`;
+            text += "  Net Expenses (adjusted): $" + kpis.netExpenses.toFixed(2) + "\\n";
+            text += "  Total Repaid: $" + kpis.totalRepaid.toFixed(2) + "\\n";
+            text += "  Still Owed (adjusted): $" + kpis.netOwed.toFixed(2) + "\\n";
             
             // Download as text file
             const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
@@ -4628,7 +4628,7 @@ const StylecomReimbursement = ({ expenses, merchantRules, paidIds, onTogglePaid 
             const getQuarter = (dateStr) => {
                 const d = new Date(dateStr);
                 const q = Math.floor(d.getMonth() / 3) + 1;
-                return \\\`Q\\\${q} \\\${d.getFullYear()}\\\`;
+                return "Q" + q + " " + d.getFullYear();
             };
             
             let filteredTxns;
@@ -4644,7 +4644,7 @@ const StylecomReimbursement = ({ expenses, merchantRules, paidIds, onTogglePaid 
                 }
             }
             
-            document.getElementById('root').innerHTML = \\\`
+            document.getElementById('root').innerHTML = \`
                 <div class="max-w-6xl mx-auto p-6 space-y-6">
                     <!-- Header -->
                     <div class="gradient-header text-white p-6 rounded-2xl shadow-lg">
@@ -4654,15 +4654,15 @@ const StylecomReimbursement = ({ expenses, merchantRules, paidIds, onTogglePaid 
                                 <p class="text-pink-100 text-sm mt-1">Family expense tracking & repayment status</p>
                                 <p class="text-pink-200 text-xs mt-2">📅 Generated: \${GENERATED_DATE}</p>
                             </div>
-                            \${hasChanges ? \\\`
+                            \${hasChanges ? \`
                                 <button onclick="exportChanges()" class="px-4 py-2 bg-white text-pink-600 rounded-xl text-sm font-bold hover:bg-pink-50 flex items-center gap-2 shadow-lg">
                                     📤 Export My Changes (\${deletedIds.size + newlyPaidIds.size})
                                 </button>
-                            \\\` : ''}
+                            \` : ''}
                         </div>
                     </div>
                     
-                    \${hasChanges ? \\\`
+                    \${hasChanges ? \`
                     <!-- Changes Banner -->
                     <div class="bg-amber-50 border-2 border-amber-200 rounded-2xl p-4 flex items-center justify-between">
                         <div class="flex items-center gap-3">
@@ -4676,7 +4676,7 @@ const StylecomReimbursement = ({ expenses, merchantRules, paidIds, onTogglePaid 
                             Export Changes
                         </button>
                     </div>
-                    \\\` : ''}
+                    \` : ''}
                     
                     <!-- KPI Cards -->
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -4731,7 +4731,7 @@ const StylecomReimbursement = ({ expenses, merchantRules, paidIds, onTogglePaid 
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    \${QUARTERLY.map(q => \\\`
+                                    \${QUARTERLY.map(q => \`
                                         <tr class="border-t border-slate-100 hover:bg-slate-50 cursor-pointer \${selectedQuarter === q.key ? 'bg-indigo-50' : ''}" onclick="selectedQuarter='\${q.key}';render()">
                                             <td class="p-4 font-bold text-slate-800">\${q.label}</td>
                                             <td class="p-4 text-right text-pink-600">\${fmt(q.expenses)}</td>
@@ -4740,7 +4740,7 @@ const StylecomReimbursement = ({ expenses, merchantRules, paidIds, onTogglePaid 
                                             <td class="p-4 text-right text-green-600">\${fmt(q.repayments)}</td>
                                             <td class="p-4 text-right font-bold \${q.balance > 0 ? 'text-amber-600' : 'text-green-600'}">\${fmt(q.balance)}</td>
                                         </tr>
-                                    \\\`).join('')}
+                                    \`).join('')}
                                 </tbody>
                             </table>
                         </div>
@@ -4756,11 +4756,11 @@ const StylecomReimbursement = ({ expenses, merchantRules, paidIds, onTogglePaid 
                                 <button onclick="selectedQuarter='all';render()" class="px-3 py-1 rounded-lg text-xs font-bold \${selectedQuarter === 'all' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}">
                                     All Time
                                 </button>
-                                \${viewMode === 'expenses' && deletedIds.size > 0 ? \\\`
+                                \${viewMode === 'expenses' && deletedIds.size > 0 ? \`
                                     <button onclick="showDeleted=!showDeleted;render()" class="px-3 py-1 rounded-lg text-xs font-bold \${showDeleted ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}">
                                         \${showDeleted ? '🙈 Hide' : '👁️ Show'} Deleted (\${deletedIds.size})
                                     </button>
-                                \\\` : ''}
+                                \` : ''}
                                 <div class="flex gap-1 bg-slate-100 p-1 rounded-lg">
                                     <button onclick="viewMode='expenses';render()" class="px-3 py-1 rounded text-xs font-bold \${viewMode === 'expenses' ? 'bg-white text-pink-600 shadow' : 'text-slate-500'}">
                                         💸 Expenses (\${activeExpenses.length})
@@ -4788,7 +4788,7 @@ const StylecomReimbursement = ({ expenses, merchantRules, paidIds, onTogglePaid 
                                         const isPositive = t.amount > 0;
                                         const paidStatus = isPaid(t.id);
                                         const isNewlyPaid = newlyPaidIds.has(t.id);
-                                        return \\\`
+                                        return \`
                                         <tr class="border-t border-slate-100 hover:bg-slate-50 \${isDeleted ? 'deleted-row' : ''}">
                                             <td class="p-3 text-slate-600">\${t.date}</td>
                                             <td class="p-3 text-slate-800 max-w-xs">
@@ -4796,31 +4796,31 @@ const StylecomReimbursement = ({ expenses, merchantRules, paidIds, onTogglePaid 
                                             </td>
                                             <td class="p-3 text-slate-500 text-xs">\${t.account || '-'}</td>
                                             <td class="p-3 text-right font-bold \${t.amount < 0 ? 'text-blue-600' : (viewMode === 'repayments' ? 'text-green-600' : 'text-pink-600')}">\${t.amount < 0 ? '-' : ''}\${fmt(t.amount)}</td>
-                                            \${viewMode === 'expenses' ? \\\`
+                                            \${viewMode === 'expenses' ? \`
                                                 <td class="p-3 text-center">
                                                     \${isDeleted ? '<span class="text-red-500">❌ Removed</span>' : 
                                                       (isPositive ? (paidStatus ? (isNewlyPaid ? '<span class="text-green-600">✅ Paid (new)</span>' : '<span class="text-green-600">✅ Paid</span>') : '<span class="text-amber-500">⏳ Unpaid</span>') : '<span class="text-slate-400">-</span>')}
                                                 </td>
                                                 <td class="p-3 text-center">
                                                     <div class="flex items-center justify-center gap-1">
-                                                        \${isDeleted ? \\\`
+                                                        \${isDeleted ? \`
                                                             <button onclick="restoreExpense('\${t.id}')" class="p-1.5 text-green-600 hover:bg-green-100 rounded" title="Restore">↩️</button>
-                                                        \\\` : \\\`
-                                                            \${isPositive && !paidStatus ? \\\`<button onclick="togglePaid('\${t.id}')" class="p-1.5 text-green-600 hover:bg-green-100 rounded" title="Mark as Paid">✅</button>\\\` : ''}
-                                                            \${isPositive && isNewlyPaid ? \\\`<button onclick="togglePaid('\${t.id}')" class="p-1.5 text-amber-600 hover:bg-amber-100 rounded" title="Unmark as Paid">↩️</button>\\\` : ''}
+                                                        \` : \`
+                                                            \${isPositive && !paidStatus ? \`<button onclick="togglePaid('\${t.id}')" class="p-1.5 text-green-600 hover:bg-green-100 rounded" title="Mark as Paid">✅</button>\` : ''}
+                                                            \${isPositive && isNewlyPaid ? \`<button onclick="togglePaid('\${t.id}')" class="p-1.5 text-amber-600 hover:bg-amber-100 rounded" title="Unmark as Paid">↩️</button>\` : ''}
                                                             <button onclick="deleteExpense('\${t.id}')" class="p-1.5 text-red-500 hover:bg-red-100 rounded" title="Not Stylecom">🗑️</button>
-                                                        \\\`}
+                                                        \`}
                                                     </div>
                                                 </td>
-                                            \\\` : ''}
+                                            \` : ''}
                                         </tr>
-                                    \\\`}).join('')}
+                                    \`}).join('')}
                                 </tbody>
                             </table>
                         </div>
                         <div class="p-4 bg-slate-50 border-t text-xs text-slate-500 flex justify-between">
                             <span>Showing \${filteredTxns.length} transactions</span>
-                            \${viewMode === 'expenses' ? \\\`<span>\${deletedIds.size} removed • \${newlyPaidIds.size} newly marked paid</span>\\\` : ''}
+                            \${viewMode === 'expenses' ? \`<span>\${deletedIds.size} removed • \${newlyPaidIds.size} newly marked paid</span>\` : ''}
                         </div>
                     </div>
                     
@@ -4839,7 +4839,7 @@ const StylecomReimbursement = ({ expenses, merchantRules, paidIds, onTogglePaid 
                         Generated from Expense Tracker • Data as of \${GENERATED_DATE}
                     </div>
                 </div>
-            \\\`;
+            \`;
         }
         
         // Initial render
