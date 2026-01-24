@@ -4272,9 +4272,26 @@ const TransactionsTable = ({ expenses, merchantRules, onDelete, onClearAll }) =>
 };
 
 // ============== STYLECOM REIMBURSEMENT DASHBOARD ==============
-const StylecomReimbursement = ({ expenses, merchantRules, paidIds, onTogglePaid }) => {
+const StylecomReimbursement = ({ expenses, merchantRules, paidIds, onTogglePaid, notStylecomIds = new Set(), onToggleNotStylecom }) => {
     const [selectedQuarter, setSelectedQuarter] = useState('all');
     const [viewMode, setViewMode] = useState('expenses'); // 'expenses' or 'repayments'
+    const [analyticsYear, setAnalyticsYear] = useState(2025); // Year filter for analytics widgets
+    
+    // Table filters state
+    const [tableFilters, setTableFilters] = useState({
+        dateYear: 'all',
+        dateMonth: 'all',
+        description: '',
+        account: [],
+        amountMin: '',
+        amountMax: '',
+        paidStatus: 'all', // 'all', 'paid', 'unpaid'
+        notStylecomStatus: 'all' // 'all', 'included', 'excluded'
+    });
+    
+    // Sorting state for analytics tables
+    const [subSort, setSubSort] = useState({ field: 'total', dir: 'desc' });
+    const [recSort, setRecSort] = useState({ field: 'total', dir: 'desc' });
     
     // Threshold to distinguish refunds from repayments
     // Refunds are small (returns, credits) < $500 - these go with expenses
@@ -4402,15 +4419,57 @@ const StylecomReimbursement = ({ expenses, merchantRules, paidIds, onTogglePaid 
         });
     }, [stylecomExpenses, stylecomRepayments, paidIds]);
     
-    // Filter transactions by selected quarter and view mode
+    // Get unique values for filter dropdowns
+    const filterOptions = useMemo(() => {
+        const allTxns = [...stylecomExpenses, ...stylecomRepayments];
+        const years = [...new Set(allTxns.map(e => getY(e.date)))].sort((a, b) => b - a);
+        const accounts = [...new Set(allTxns.map(e => e.account || 'Unknown'))].sort();
+        return { years, accounts };
+    }, [stylecomExpenses, stylecomRepayments]);
+    
+    // Filter transactions by selected quarter, view mode, and table filters
     const filteredTransactions = useMemo(() => {
-        const txns = viewMode === 'expenses' ? stylecomExpenses : stylecomRepayments;
-        if (selectedQuarter === 'all') return txns;
+        let txns = viewMode === 'expenses' ? stylecomExpenses : stylecomRepayments;
         
-        const q = quarterlyData.find(q => q.key === selectedQuarter);
-        if (!q) return [];
-        return viewMode === 'expenses' ? q.transactions : (q.repaymentTxns || []);
-    }, [stylecomExpenses, stylecomRepayments, quarterlyData, selectedQuarter, viewMode]);
+        // Quarter filter
+        if (selectedQuarter !== 'all') {
+            const q = quarterlyData.find(q => q.key === selectedQuarter);
+            if (!q) return [];
+            txns = viewMode === 'expenses' ? q.transactions : (q.repaymentTxns || []);
+        }
+        
+        // Apply table filters
+        return txns.filter(e => {
+            // Year filter
+            if (tableFilters.dateYear !== 'all' && getY(e.date) !== parseInt(tableFilters.dateYear)) return false;
+            
+            // Month filter
+            if (tableFilters.dateMonth !== 'all' && getM(e.date) !== parseInt(tableFilters.dateMonth)) return false;
+            
+            // Description search
+            if (tableFilters.description && !e.description.toLowerCase().includes(tableFilters.description.toLowerCase())) return false;
+            
+            // Account filter
+            if (tableFilters.account.length > 0 && !tableFilters.account.includes(e.account || 'Unknown')) return false;
+            
+            // Amount range
+            const amt = Math.abs(safe(e.amount));
+            if (tableFilters.amountMin && amt < parseFloat(tableFilters.amountMin)) return false;
+            if (tableFilters.amountMax && amt > parseFloat(tableFilters.amountMax)) return false;
+            
+            // Paid status filter (only for expenses)
+            if (viewMode === 'expenses' && safe(e.amount) > 0) {
+                if (tableFilters.paidStatus === 'paid' && !paidIds.has(e.id)) return false;
+                if (tableFilters.paidStatus === 'unpaid' && paidIds.has(e.id)) return false;
+            }
+            
+            // Not Stylecom filter
+            if (tableFilters.notStylecomStatus === 'included' && notStylecomIds.has(e.id)) return false;
+            if (tableFilters.notStylecomStatus === 'excluded' && !notStylecomIds.has(e.id)) return false;
+            
+            return true;
+        });
+    }, [stylecomExpenses, stylecomRepayments, quarterlyData, selectedQuarter, viewMode, tableFilters, paidIds, notStylecomIds]);
     
     // Mark all in quarter as paid
     const markQuarterPaid = (quarterKey) => {
@@ -4423,6 +4482,24 @@ const StylecomReimbursement = ({ expenses, merchantRules, paidIds, onTogglePaid 
             });
         }
     };
+    
+    // Clear all filters
+    const clearFilters = () => {
+        setTableFilters({
+            dateYear: 'all',
+            dateMonth: 'all',
+            description: '',
+            account: [],
+            amountMin: '',
+            amountMax: '',
+            paidStatus: 'all',
+            notStylecomStatus: 'all'
+        });
+    };
+    
+    const hasActiveFilters = tableFilters.dateYear !== 'all' || tableFilters.dateMonth !== 'all' || 
+        tableFilters.description || tableFilters.account.length > 0 || tableFilters.amountMin || 
+        tableFilters.amountMax || tableFilters.paidStatus !== 'all' || tableFilters.notStylecomStatus !== 'all';
     
     return (
         <div className="space-y-6">
@@ -5158,13 +5235,105 @@ const StylecomReimbursement = ({ expenses, merchantRules, paidIds, onTogglePaid 
                                 Show All
                             </button>
                         )}
+                        {hasActiveFilters && (
+                            <button onClick={clearFilters} className="px-3 py-1 bg-red-100 text-red-600 rounded-lg text-xs font-bold hover:bg-red-200">
+                                ✕ Clear Filters
+                            </button>
+                        )}
                     </div>
                 </div>
+                
+                {/* Filter Row */}
+                <div className="p-4 bg-slate-50 border-b border-slate-100 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2">
+                    {/* Year Filter */}
+                    <select 
+                        value={tableFilters.dateYear}
+                        onChange={e => setTableFilters(f => ({...f, dateYear: e.target.value}))}
+                        className="px-2 py-1.5 text-xs border rounded-lg bg-white">
+                        <option value="all">All Years</option>
+                        {filterOptions.years.map(y => <option key={y} value={y}>{y}</option>)}
+                    </select>
+                    
+                    {/* Month Filter */}
+                    <select 
+                        value={tableFilters.dateMonth}
+                        onChange={e => setTableFilters(f => ({...f, dateMonth: e.target.value}))}
+                        className="px-2 py-1.5 text-xs border rounded-lg bg-white">
+                        <option value="all">All Months</option>
+                        {[...Array(12)].map((_, i) => <option key={i} value={i}>{['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][i]}</option>)}
+                    </select>
+                    
+                    {/* Description Search */}
+                    <input 
+                        type="text"
+                        placeholder="Search description..."
+                        value={tableFilters.description}
+                        onChange={e => setTableFilters(f => ({...f, description: e.target.value}))}
+                        className="px-2 py-1.5 text-xs border rounded-lg"
+                    />
+                    
+                    {/* Account Filter - Multi-select */}
+                    <div className="relative">
+                        <select 
+                            multiple
+                            value={tableFilters.account}
+                            onChange={e => setTableFilters(f => ({...f, account: [...e.target.selectedOptions].map(o => o.value)}))}
+                            className="px-2 py-1.5 text-xs border rounded-lg bg-white w-full h-7"
+                            title="Hold Ctrl/Cmd to select multiple">
+                            {filterOptions.accounts.map(a => <option key={a} value={a}>{a}</option>)}
+                        </select>
+                        {tableFilters.account.length === 0 && <span className="absolute left-2 top-1.5 text-xs text-slate-400 pointer-events-none">All Accounts</span>}
+                    </div>
+                    
+                    {/* Amount Range */}
+                    <div className="flex gap-1">
+                        <input 
+                            type="number"
+                            placeholder="Min $"
+                            value={tableFilters.amountMin}
+                            onChange={e => setTableFilters(f => ({...f, amountMin: e.target.value}))}
+                            className="px-2 py-1.5 text-xs border rounded-lg w-16"
+                        />
+                        <input 
+                            type="number"
+                            placeholder="Max $"
+                            value={tableFilters.amountMax}
+                            onChange={e => setTableFilters(f => ({...f, amountMax: e.target.value}))}
+                            className="px-2 py-1.5 text-xs border rounded-lg w-16"
+                        />
+                    </div>
+                    
+                    {/* Paid Status Filter */}
+                    {viewMode === 'expenses' && (
+                        <select 
+                            value={tableFilters.paidStatus}
+                            onChange={e => setTableFilters(f => ({...f, paidStatus: e.target.value}))}
+                            className="px-2 py-1.5 text-xs border rounded-lg bg-white">
+                            <option value="all">All Status</option>
+                            <option value="paid">✓ Paid</option>
+                            <option value="unpaid">⏳ Unpaid</option>
+                        </select>
+                    )}
+                    
+                    {/* Not Stylecom Filter */}
+                    {viewMode === 'expenses' && (
+                        <select 
+                            value={tableFilters.notStylecomStatus}
+                            onChange={e => setTableFilters(f => ({...f, notStylecomStatus: e.target.value}))}
+                            className="px-2 py-1.5 text-xs border rounded-lg bg-white">
+                            <option value="all">All Items</option>
+                            <option value="included">✓ Stylecom</option>
+                            <option value="excluded">✕ Not Stylecom</option>
+                        </select>
+                    )}
+                </div>
+                
                 <div className="overflow-x-auto max-h-[50vh]">
                     <table className="w-full text-sm">
                         <thead className="bg-slate-50 text-slate-400 uppercase text-[10px] font-bold sticky top-0">
                             <tr>
                                 {viewMode === 'expenses' && <th className="p-3 text-center w-16">Paid</th>}
+                                {viewMode === 'expenses' && <th className="p-3 text-center w-20">Not Stylecom</th>}
                                 <th className="p-3 text-left">Date</th>
                                 <th className="p-3 text-left">Description</th>
                                 <th className="p-3 text-left">Account</th>
@@ -5173,25 +5342,27 @@ const StylecomReimbursement = ({ expenses, merchantRules, paidIds, onTogglePaid 
                         </thead>
                         <tbody className="divide-y divide-slate-50">
                             {filteredTransactions.length === 0 ? (
-                                <tr><td colSpan={viewMode === 'expenses' ? 5 : 4} className="p-12 text-center text-slate-400">No {viewMode} found</td></tr>
+                                <tr><td colSpan={viewMode === 'expenses' ? 6 : 4} className="p-12 text-center text-slate-400">No {viewMode} found</td></tr>
                             ) : filteredTransactions.map(e => {
                                 const amount = safe(e.amount);
                                 const isRefund = amount < 0 && viewMode === 'expenses';
                                 const isRepayment = viewMode === 'repayments';
                                 const isPaid = paidIds.has(e.id);
+                                const isNotStylecom = notStylecomIds.has(e.id);
                                 const showCheckbox = viewMode === 'expenses' && amount > 0;
                                 return (
-                                    <tr key={e.id} className={`group hover:bg-slate-50 ${isPaid && showCheckbox ? 'bg-green-50/50' : ''} ${isRefund ? 'bg-orange-50/50' : ''} ${isRepayment ? 'bg-emerald-50/50' : ''}`}>
+                                    <tr key={e.id} className={`group hover:bg-slate-50 ${isNotStylecom ? 'bg-red-50/50 opacity-60' : ''} ${isPaid && showCheckbox && !isNotStylecom ? 'bg-green-50/50' : ''} ${isRefund ? 'bg-orange-50/50' : ''} ${isRepayment ? 'bg-emerald-50/50' : ''}`}>
                                         {viewMode === 'expenses' && (
                                             <td className="p-3 text-center">
                                                 {showCheckbox ? (
                                                     <button 
                                                         onClick={() => onTogglePaid(e.id)}
+                                                        disabled={isNotStylecom}
                                                         className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${
                                                             isPaid 
                                                                 ? 'bg-green-500 border-green-500 text-white' 
                                                                 : 'border-slate-300 hover:border-green-400 text-transparent hover:text-green-400'
-                                                        }`}>
+                                                        } ${isNotStylecom ? 'opacity-30 cursor-not-allowed' : ''}`}>
                                                         ✓
                                                     </button>
                                                 ) : (
@@ -5199,14 +5370,29 @@ const StylecomReimbursement = ({ expenses, merchantRules, paidIds, onTogglePaid 
                                                 )}
                                             </td>
                                         )}
-                                        <td className={`p-3 text-slate-500 text-xs whitespace-nowrap ${isPaid && showCheckbox ? 'line-through' : ''}`}>{e.date}</td>
-                                        <td className={`p-3 ${isPaid && showCheckbox ? 'text-slate-400 line-through' : isRefund ? 'text-orange-700' : isRepayment ? 'text-emerald-700' : 'text-slate-700'}`}>
+                                        {viewMode === 'expenses' && (
+                                            <td className="p-3 text-center">
+                                                {showCheckbox && (
+                                                    <button 
+                                                        onClick={() => onToggleNotStylecom && onToggleNotStylecom(e.id)}
+                                                        className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${
+                                                            isNotStylecom 
+                                                                ? 'bg-red-500 border-red-500 text-white' 
+                                                                : 'border-slate-300 hover:border-red-400 text-transparent hover:text-red-400'
+                                                        }`}>
+                                                        ✕
+                                                    </button>
+                                                )}
+                                            </td>
+                                        )}
+                                        <td className={`p-3 text-slate-500 text-xs whitespace-nowrap ${(isPaid && showCheckbox) || isNotStylecom ? 'line-through' : ''}`}>{e.date}</td>
+                                        <td className={`p-3 ${(isPaid && showCheckbox) || isNotStylecom ? 'text-slate-400 line-through' : isRefund ? 'text-orange-700' : isRepayment ? 'text-emerald-700' : 'text-slate-700'}`}>
                                             <div className="font-semibold text-xs truncate max-w-[250px]" title={e.description}>
                                                 {isRepayment && '💰 '}{e.description}
                                             </div>
                                         </td>
                                         <td className="p-3 text-slate-500 text-xs">{e.account}</td>
-                                        <td className={`p-3 text-right font-bold ${isRefund ? 'text-orange-600' : isRepayment ? 'text-green-600' : isPaid ? 'text-blue-600' : 'text-slate-900'}`}>
+                                        <td className={`p-3 text-right font-bold ${isNotStylecom ? 'text-slate-400' : isRefund ? 'text-orange-600' : isRepayment ? 'text-green-600' : isPaid ? 'text-blue-600' : 'text-slate-900'}`}>
                                             {amount < 0 ? '-' : ''}${Math.abs(amount).toFixed(2)}
                                         </td>
                                     </tr>
@@ -5215,217 +5401,303 @@ const StylecomReimbursement = ({ expenses, merchantRules, paidIds, onTogglePaid 
                         </tbody>
                     </table>
                 </div>
+                <div className="p-3 bg-slate-50 border-t text-xs text-slate-500 flex justify-between">
+                    <span>Showing {filteredTransactions.length} of {viewMode === 'expenses' ? stylecomExpenses.length : stylecomRepayments.length} transactions</span>
+                    {viewMode === 'expenses' && <span>{notStylecomIds.size} marked as not Stylecom</span>}
+                </div>
             </div>
             
             {/* Analytics Section */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Top Merchants */}
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-lg overflow-hidden">
-                    <div className="p-5 border-b border-slate-100 bg-gradient-to-r from-pink-50 to-rose-50">
-                        <h3 className="text-sm font-black text-slate-800">🏪 Top Stylecom Merchants</h3>
+            <div className="space-y-6">
+                {/* Year Toggle */}
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-lg p-4">
+                    <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-black text-slate-800">📊 Analytics Year</h3>
+                        <div className="flex gap-2 bg-slate-100 p-1 rounded-lg">
+                            <button 
+                                onClick={() => setAnalyticsYear(2024)}
+                                className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${analyticsYear === 2024 ? 'bg-white text-indigo-600 shadow' : 'text-slate-500 hover:text-slate-700'}`}>
+                                2024
+                            </button>
+                            <button 
+                                onClick={() => setAnalyticsYear(2025)}
+                                className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${analyticsYear === 2025 ? 'bg-white text-indigo-600 shadow' : 'text-slate-500 hover:text-slate-700'}`}>
+                                2025
+                            </button>
+                        </div>
                     </div>
-                    <div className="p-4">
-                        {(() => {
-                            const positiveExpenses = stylecomExpenses.filter(e => safe(e.amount) > 0);
-                            const byMerchant = {};
-                            positiveExpenses.forEach(e => {
-                                const name = cleanMerchant(e.description);
-                                if (!byMerchant[name]) byMerchant[name] = { total: 0, count: 0 };
-                                byMerchant[name].total += safe(e.amount);
-                                byMerchant[name].count += 1;
-                            });
-                            const sorted = Object.entries(byMerchant)
-                                .map(([name, data]) => ({ name, ...data }))
-                                .sort((a, b) => b.total - a.total)
-                                .slice(0, 10);
-                            const maxTotal = sorted[0]?.total || 1;
-                            
-                            return (
-                                <div className="space-y-2">
-                                    {sorted.map((m, i) => (
-                                        <div key={m.name} className="flex items-center gap-3">
-                                            <span className="text-xs font-bold text-slate-400 w-5">{i + 1}</span>
-                                            <div className="flex-1 min-w-0">
+                </div>
+                
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Top Merchants */}
+                    <div className="bg-white rounded-2xl border border-slate-100 shadow-lg overflow-hidden">
+                        <div className="p-5 border-b border-slate-100 bg-gradient-to-r from-pink-50 to-rose-50">
+                            <h3 className="text-sm font-black text-slate-800">🏪 Top Merchants ({analyticsYear})</h3>
+                        </div>
+                        <div className="p-4">
+                            {(() => {
+                                const yearExpenses = stylecomExpenses.filter(e => safe(e.amount) > 0 && getY(e.date) === analyticsYear && !notStylecomIds.has(e.id));
+                                const byMerchant = {};
+                                yearExpenses.forEach(e => {
+                                    const name = cleanMerchant(e.description);
+                                    if (!byMerchant[name]) byMerchant[name] = { total: 0, count: 0 };
+                                    byMerchant[name].total += safe(e.amount);
+                                    byMerchant[name].count += 1;
+                                });
+                                const sorted = Object.entries(byMerchant)
+                                    .map(([name, data]) => ({ name, ...data }))
+                                    .sort((a, b) => b.total - a.total)
+                                    .slice(0, 10);
+                                const maxTotal = sorted[0]?.total || 1;
+                                
+                                if (sorted.length === 0) return <p className="text-sm text-slate-400 text-center py-4">No data for {analyticsYear}</p>;
+                                
+                                return (
+                                    <div className="space-y-2">
+                                        {sorted.map((m, i) => (
+                                            <div key={m.name} className="flex items-center gap-3">
+                                                <span className="text-xs font-bold text-slate-400 w-5">{i + 1}</span>
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex justify-between items-center mb-1">
+                                                        <span className="text-xs font-semibold text-slate-700 truncate" title={m.name}>{m.name}</span>
+                                                        <span className="text-xs font-bold text-pink-600">${m.total.toLocaleString(undefined, {maximumFractionDigits: 0})}</span>
+                                                    </div>
+                                                    <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                                        <div className="h-full bg-gradient-to-r from-pink-400 to-rose-500 rounded-full" style={{ width: `${(m.total / maxTotal) * 100}%` }}/>
+                                                    </div>
+                                                    <span className="text-[10px] text-slate-400">{m.count} transactions</span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                );
+                            })()}
+                        </div>
+                    </div>
+                    
+                    {/* Spending Magnitude */}
+                    <div className="bg-white rounded-2xl border border-slate-100 shadow-lg overflow-hidden">
+                        <div className="p-5 border-b border-slate-100 bg-gradient-to-r from-violet-50 to-purple-50">
+                            <h3 className="text-sm font-black text-slate-800">📊 Spending Magnitude ({analyticsYear})</h3>
+                        </div>
+                        <div className="p-4">
+                            {(() => {
+                                const yearExpenses = stylecomExpenses.filter(e => safe(e.amount) > 0 && getY(e.date) === analyticsYear && !notStylecomIds.has(e.id));
+                                const totalSpend = yearExpenses.reduce((s, e) => s + safe(e.amount), 0);
+                                const buckets = [
+                                    { name: 'Under $20', min: 0, max: 20, color: 'bg-emerald-500' },
+                                    { name: '$20-$50', min: 20, max: 50, color: 'bg-teal-500' },
+                                    { name: '$50-$100', min: 50, max: 100, color: 'bg-cyan-500' },
+                                    { name: '$100-$500', min: 100, max: 500, color: 'bg-blue-500' },
+                                    { name: '$500-$1k', min: 500, max: 1000, color: 'bg-indigo-500' },
+                                    { name: 'Over $1k', min: 1000, max: Infinity, color: 'bg-violet-500' }
+                                ].map(b => {
+                                    const txns = yearExpenses.filter(e => safe(e.amount) >= b.min && safe(e.amount) < b.max);
+                                    const sum = txns.reduce((s, e) => s + safe(e.amount), 0);
+                                    return { ...b, count: txns.length, sum, pct: totalSpend > 0 ? (sum / totalSpend) * 100 : 0 };
+                                });
+                                
+                                return (
+                                    <div className="space-y-3">
+                                        {buckets.map(b => (
+                                            <div key={b.name}>
                                                 <div className="flex justify-between items-center mb-1">
-                                                    <span className="text-xs font-semibold text-slate-700 truncate" title={m.name}>{m.name}</span>
-                                                    <span className="text-xs font-bold text-pink-600">${m.total.toLocaleString(undefined, {maximumFractionDigits: 0})}</span>
+                                                    <span className="text-xs font-semibold text-slate-700">{b.name}</span>
+                                                    <span className="text-xs text-slate-500">{b.count} txns • ${b.sum.toLocaleString(undefined, {maximumFractionDigits: 0})}</span>
                                                 </div>
-                                                <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                                                    <div className="h-full bg-gradient-to-r from-pink-400 to-rose-500 rounded-full" style={{ width: `${(m.total / maxTotal) * 100}%` }}/>
+                                                <div className="h-4 bg-slate-100 rounded-full overflow-hidden flex items-center">
+                                                    <div className={`h-full ${b.color} rounded-full transition-all`} style={{ width: `${b.pct}%` }}/>
+                                                    <span className="text-[10px] font-bold text-slate-500 ml-2">{b.pct.toFixed(1)}%</span>
                                                 </div>
-                                                <span className="text-[10px] text-slate-400">{m.count} transactions</span>
                                             </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            );
-                        })()}
+                                        ))}
+                                    </div>
+                                );
+                            })()}
+                        </div>
                     </div>
                 </div>
                 
-                {/* Spending Magnitude */}
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-lg overflow-hidden">
-                    <div className="p-5 border-b border-slate-100 bg-gradient-to-r from-violet-50 to-purple-50">
-                        <h3 className="text-sm font-black text-slate-800">📊 Spending Magnitude</h3>
-                    </div>
-                    <div className="p-4">
-                        {(() => {
-                            const positiveExpenses = stylecomExpenses.filter(e => safe(e.amount) > 0);
-                            const totalSpend = positiveExpenses.reduce((s, e) => s + safe(e.amount), 0);
-                            const buckets = [
-                                { name: 'Under $20', min: 0, max: 20, color: 'bg-emerald-500' },
-                                { name: '$20-$50', min: 20, max: 50, color: 'bg-teal-500' },
-                                { name: '$50-$100', min: 50, max: 100, color: 'bg-cyan-500' },
-                                { name: '$100-$500', min: 100, max: 500, color: 'bg-blue-500' },
-                                { name: '$500-$1k', min: 500, max: 1000, color: 'bg-indigo-500' },
-                                { name: 'Over $1k', min: 1000, max: Infinity, color: 'bg-violet-500' }
-                            ].map(b => {
-                                const txns = positiveExpenses.filter(e => safe(e.amount) >= b.min && safe(e.amount) < b.max);
-                                const sum = txns.reduce((s, e) => s + safe(e.amount), 0);
-                                return { ...b, count: txns.length, sum, pct: totalSpend > 0 ? (sum / totalSpend) * 100 : 0 };
-                            });
-                            
-                            return (
-                                <div className="space-y-3">
-                                    {buckets.map(b => (
-                                        <div key={b.name}>
-                                            <div className="flex justify-between items-center mb-1">
-                                                <span className="text-xs font-semibold text-slate-700">{b.name}</span>
-                                                <span className="text-xs text-slate-500">{b.count} txns • ${b.sum.toLocaleString(undefined, {maximumFractionDigits: 0})}</span>
-                                            </div>
-                                            <div className="h-4 bg-slate-100 rounded-full overflow-hidden flex items-center">
-                                                <div className={`h-full ${b.color} rounded-full transition-all`} style={{ width: `${b.pct}%` }}/>
-                                                <span className="text-[10px] font-bold text-slate-500 ml-2">{b.pct.toFixed(1)}%</span>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            );
-                        })()}
-                    </div>
-                </div>
-                
-                {/* Subscriptions */}
+                {/* Subscriptions Table */}
                 <div className="bg-white rounded-2xl border border-slate-100 shadow-lg overflow-hidden">
                     <div className="p-5 border-b border-slate-100 bg-gradient-to-r from-amber-50 to-orange-50">
-                        <h3 className="text-sm font-black text-slate-800">🔄 Stylecom Subscriptions</h3>
+                        <h3 className="text-sm font-black text-slate-800">🔄 Subscriptions ({analyticsYear})</h3>
+                        <p className="text-[10px] text-slate-500 mt-1">Only transactions tagged as subscription</p>
                     </div>
-                    <div className="p-4">
+                    <div className="overflow-x-auto">
                         {(() => {
-                            // Get subscription-tagged Stylecom expenses
-                            const subscriptions = stylecomExpenses.filter(e => e.isSubscription && safe(e.amount) > 0);
+                            const yearSubs = stylecomExpenses.filter(e => 
+                                e.isSubscription && safe(e.amount) > 0 && getY(e.date) === analyticsYear && !notStylecomIds.has(e.id)
+                            );
                             
-                            if (subscriptions.length === 0) {
-                                return <p className="text-sm text-slate-400 text-center py-4">No subscriptions tagged in Stylecom expenses</p>;
+                            if (yearSubs.length === 0) {
+                                return <p className="text-sm text-slate-400 text-center py-8">No subscriptions tagged for {analyticsYear}</p>;
                             }
                             
                             // Group by merchant
                             const byMerchant = {};
-                            subscriptions.forEach(e => {
+                            yearSubs.forEach(e => {
                                 const name = cleanMerchant(e.description);
-                                if (!byMerchant[name]) byMerchant[name] = { total: 0, count: 0, amounts: [] };
+                                const month = `${getY(e.date)}-${String(getM(e.date)).padStart(2, '0')}`;
+                                if (!byMerchant[name]) byMerchant[name] = { total: 0, count: 0, months: new Set() };
                                 byMerchant[name].total += safe(e.amount);
                                 byMerchant[name].count += 1;
-                                byMerchant[name].amounts.push(safe(e.amount));
+                                byMerchant[name].months.add(month);
                             });
                             
-                            const sorted = Object.entries(byMerchant)
+                            let sorted = Object.entries(byMerchant)
                                 .map(([name, data]) => ({ 
                                     name, 
-                                    ...data, 
-                                    avg: data.total / data.count,
-                                    estMonthly: data.total / Math.max(data.count, 1)
-                                }))
-                                .sort((a, b) => b.total - a.total)
-                                .slice(0, 8);
+                                    total: data.total,
+                                    count: data.count,
+                                    monthCount: data.months.size,
+                                    avgCost: data.total / data.count
+                                }));
                             
-                            const totalAnnual = sorted.reduce((s, m) => s + m.total, 0);
+                            // Apply sorting
+                            sorted.sort((a, b) => {
+                                const mult = subSort.dir === 'asc' ? 1 : -1;
+                                return mult * (a[subSort.field] - b[subSort.field]);
+                            });
+                            
+                            const grandTotal = sorted.reduce((s, m) => s + m.total, 0);
+                            
+                            const SortHeader = ({ field, label }) => (
+                                <th 
+                                    className="p-3 text-right cursor-pointer hover:bg-slate-100"
+                                    onClick={() => setSubSort(s => ({ field, dir: s.field === field && s.dir === 'desc' ? 'asc' : 'desc' }))}>
+                                    {label} {subSort.field === field && (subSort.dir === 'desc' ? '↓' : '↑')}
+                                </th>
+                            );
                             
                             return (
-                                <div className="space-y-2">
-                                    {sorted.map(m => (
-                                        <div key={m.name} className="flex items-center justify-between py-1 border-b border-slate-50 last:border-0">
-                                            <div className="flex-1 min-w-0">
-                                                <span className="text-xs font-semibold text-slate-700 truncate block" title={m.name}>{m.name}</span>
-                                                <span className="text-[10px] text-slate-400">{m.count}× payments</span>
-                                            </div>
-                                            <div className="text-right">
-                                                <span className="text-xs font-bold text-amber-600">${m.total.toLocaleString(undefined, {maximumFractionDigits: 0})}</span>
-                                                <span className="text-[10px] text-slate-400 block">~${m.avg.toFixed(0)}/ea</span>
-                                            </div>
-                                        </div>
-                                    ))}
-                                    <div className="pt-2 mt-2 border-t border-slate-200 flex justify-between">
-                                        <span className="text-xs font-bold text-slate-600">Total Subscriptions</span>
-                                        <span className="text-sm font-black text-amber-600">${totalAnnual.toLocaleString(undefined, {maximumFractionDigits: 0})}</span>
-                                    </div>
-                                </div>
+                                <table className="w-full text-sm">
+                                    <thead className="bg-slate-50 text-slate-500 uppercase text-[10px] font-bold">
+                                        <tr>
+                                            <th className="p-3 text-left">Merchant</th>
+                                            <SortHeader field="avgCost" label="Avg Cost" />
+                                            <SortHeader field="monthCount" label="# Months" />
+                                            <SortHeader field="total" label="Total Cost" />
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-50">
+                                        {sorted.map(m => (
+                                            <tr key={m.name} className="hover:bg-slate-50">
+                                                <td className="p-3 text-slate-700 font-semibold text-xs">{m.name}</td>
+                                                <td className="p-3 text-right text-slate-600">${m.avgCost.toFixed(2)}</td>
+                                                <td className="p-3 text-right text-slate-600">{m.monthCount}</td>
+                                                <td className="p-3 text-right font-bold text-amber-600">${m.total.toFixed(2)}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                    <tfoot className="bg-amber-50 border-t-2 border-amber-200">
+                                        <tr>
+                                            <td className="p-3 text-slate-800 font-black">TOTAL SUBSCRIPTIONS</td>
+                                            <td className="p-3"></td>
+                                            <td className="p-3"></td>
+                                            <td className="p-3 text-right font-black text-amber-700 text-base">${grandTotal.toLocaleString(undefined, {maximumFractionDigits: 2})}</td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
                             );
                         })()}
                     </div>
                 </div>
                 
-                {/* Recurring Expenses (Detected) */}
+                {/* Recurring Expenses Table (Detected - excludes subscriptions) */}
                 <div className="bg-white rounded-2xl border border-slate-100 shadow-lg overflow-hidden">
                     <div className="p-5 border-b border-slate-100 bg-gradient-to-r from-emerald-50 to-teal-50">
-                        <h3 className="text-sm font-black text-slate-800">📅 Recurring Expenses (Detected)</h3>
-                        <p className="text-[10px] text-slate-500 mt-1">Merchants appearing 3+ months</p>
+                        <h3 className="text-sm font-black text-slate-800">📅 Recurring Expenses ({analyticsYear})</h3>
+                        <p className="text-[10px] text-slate-500 mt-1">Merchants appearing 3+ months (excludes tagged subscriptions)</p>
                     </div>
-                    <div className="p-4">
+                    <div className="overflow-x-auto">
                         {(() => {
-                            const positiveExpenses = stylecomExpenses.filter(e => safe(e.amount) > 0);
+                            // Exclude subscriptions
+                            const yearExpenses = stylecomExpenses.filter(e => 
+                                !e.isSubscription && safe(e.amount) > 0 && getY(e.date) === analyticsYear && !notStylecomIds.has(e.id)
+                            );
                             
                             // Group by merchant and track months
                             const merchantMonths = {};
-                            positiveExpenses.forEach(e => {
+                            yearExpenses.forEach(e => {
                                 const name = cleanMerchant(e.description);
                                 const month = `${getY(e.date)}-${String(getM(e.date)).padStart(2, '0')}`;
-                                if (!merchantMonths[name]) merchantMonths[name] = { months: new Set(), total: 0, count: 0 };
+                                if (!merchantMonths[name]) merchantMonths[name] = { months: new Set(), total: 0, count: 0, monthlyTxns: {} };
                                 merchantMonths[name].months.add(month);
                                 merchantMonths[name].total += safe(e.amount);
                                 merchantMonths[name].count += 1;
+                                if (!merchantMonths[name].monthlyTxns[month]) merchantMonths[name].monthlyTxns[month] = 0;
+                                merchantMonths[name].monthlyTxns[month] += 1;
                             });
                             
                             // Filter to merchants with 3+ months
-                            const recurring = Object.entries(merchantMonths)
+                            let recurring = Object.entries(merchantMonths)
                                 .filter(([_, data]) => data.months.size >= 3)
-                                .map(([name, data]) => ({
-                                    name,
-                                    monthCount: data.months.size,
-                                    total: data.total,
-                                    count: data.count,
-                                    monthly: data.total / data.months.size,
-                                    estAnnual: (data.total / data.months.size) * 12
-                                }))
-                                .filter(r => r.monthly >= 5) // Minimum $5/month
-                                .sort((a, b) => b.estAnnual - a.estAnnual)
-                                .slice(0, 8);
+                                .map(([name, data]) => {
+                                    const avgTxnsPerMonth = data.count / data.months.size;
+                                    return {
+                                        name,
+                                        monthCount: data.months.size,
+                                        total: data.total,
+                                        count: data.count,
+                                        avgCost: data.total / data.count,
+                                        avgTxnsPerMonth
+                                    };
+                                })
+                                .filter(r => r.avgCost >= 1); // Minimum $1 avg
                             
                             if (recurring.length === 0) {
-                                return <p className="text-sm text-slate-400 text-center py-4">No recurring patterns detected</p>;
+                                return <p className="text-sm text-slate-400 text-center py-8">No recurring patterns detected for {analyticsYear}</p>;
                             }
                             
-                            const totalRecurring = recurring.reduce((s, r) => s + r.estAnnual, 0);
+                            // Apply sorting
+                            recurring.sort((a, b) => {
+                                const mult = recSort.dir === 'asc' ? 1 : -1;
+                                return mult * (a[recSort.field] - b[recSort.field]);
+                            });
+                            
+                            const grandTotal = recurring.reduce((s, r) => s + r.total, 0);
+                            
+                            const SortHeader = ({ field, label }) => (
+                                <th 
+                                    className="p-3 text-right cursor-pointer hover:bg-slate-100"
+                                    onClick={() => setRecSort(s => ({ field, dir: s.field === field && s.dir === 'desc' ? 'asc' : 'desc' }))}>
+                                    {label} {recSort.field === field && (recSort.dir === 'desc' ? '↓' : '↑')}
+                                </th>
+                            );
                             
                             return (
-                                <div className="space-y-2">
-                                    {recurring.map(r => (
-                                        <div key={r.name} className="flex items-center justify-between py-1 border-b border-slate-50 last:border-0">
-                                            <div className="flex-1 min-w-0">
-                                                <span className="text-xs font-semibold text-slate-700 truncate block" title={r.name}>{r.name}</span>
-                                                <span className="text-[10px] text-slate-400">{r.monthCount} months • {r.count} txns</span>
-                                            </div>
-                                            <div className="text-right">
-                                                <span className="text-xs font-bold text-emerald-600">${r.monthly.toFixed(0)}/mo</span>
-                                                <span className="text-[10px] text-slate-400 block">~${r.estAnnual.toFixed(0)}/yr</span>
-                                            </div>
-                                        </div>
-                                    ))}
-                                    <div className="pt-2 mt-2 border-t border-slate-200 flex justify-between">
-                                        <span className="text-xs font-bold text-slate-600">Est. Annual Recurring</span>
-                                        <span className="text-sm font-black text-emerald-600">${totalRecurring.toLocaleString(undefined, {maximumFractionDigits: 0})}</span>
-                                    </div>
-                                </div>
+                                <table className="w-full text-sm">
+                                    <thead className="bg-slate-50 text-slate-500 uppercase text-[10px] font-bold">
+                                        <tr>
+                                            <th className="p-3 text-left">Merchant</th>
+                                            <SortHeader field="avgCost" label="Avg Cost" />
+                                            <SortHeader field="avgTxnsPerMonth" label="Avg Txns/Mo" />
+                                            <SortHeader field="monthCount" label="# Months" />
+                                            <SortHeader field="total" label="Total Cost" />
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-50">
+                                        {recurring.map(r => (
+                                            <tr key={r.name} className="hover:bg-slate-50">
+                                                <td className="p-3 text-slate-700 font-semibold text-xs">{r.name}</td>
+                                                <td className="p-3 text-right text-slate-600">${r.avgCost.toFixed(2)}</td>
+                                                <td className="p-3 text-right text-slate-600">{r.avgTxnsPerMonth.toFixed(1)}</td>
+                                                <td className="p-3 text-right text-slate-600">{r.monthCount}</td>
+                                                <td className="p-3 text-right font-bold text-emerald-600">${r.total.toFixed(2)}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                    <tfoot className="bg-emerald-50 border-t-2 border-emerald-200">
+                                        <tr>
+                                            <td className="p-3 text-slate-800 font-black">TOTAL RECURRING</td>
+                                            <td className="p-3"></td>
+                                            <td className="p-3"></td>
+                                            <td className="p-3"></td>
+                                            <td className="p-3 text-right font-black text-emerald-700 text-base">${grandTotal.toLocaleString(undefined, {maximumFractionDigits: 2})}</td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
                             );
                         })()}
                     </div>
@@ -7614,6 +7886,7 @@ const App = () => {
     const [expenses, setExpenses] = useState([]);
     const [merchantRules, setMerchantRules] = useState({});
     const [paidStylecomIds, setPaidStylecomIds] = useState(new Set());
+    const [notStylecomIds, setNotStylecomIds] = useState(new Set());
     const [costTypeOverrides, setCostTypeOverrides] = useState({});
     const [pendingFiles, setPendingFiles] = useState([]); // Array of {name, data, headers}
     const [importHistory, setImportHistory] = useState([]); // Track imports for deletion
@@ -7630,6 +7903,11 @@ const App = () => {
             const saved = localStorage.getItem('stylecom_paid_ids');
             if (saved) setPaidStylecomIds(new Set(JSON.parse(saved)));
         } catch {}
+        // Load not-Stylecom IDs
+        try {
+            const saved = localStorage.getItem('not_stylecom_ids');
+            if (saved) setNotStylecomIds(new Set(JSON.parse(saved)));
+        } catch {}
         // Load import history
         try {
             const savedHistory = localStorage.getItem('import_history');
@@ -7641,10 +7919,23 @@ const App = () => {
     useEffect(() => { localStorage.setItem('merchant_rules_v2', JSON.stringify(merchantRules)); }, [merchantRules]);
     useEffect(() => { localStorage.setItem('cost_type_overrides', JSON.stringify(costTypeOverrides)); }, [costTypeOverrides]);
     useEffect(() => { localStorage.setItem('stylecom_paid_ids', JSON.stringify([...paidStylecomIds])); }, [paidStylecomIds]);
+    useEffect(() => { localStorage.setItem('not_stylecom_ids', JSON.stringify([...notStylecomIds])); }, [notStylecomIds]);
     useEffect(() => { localStorage.setItem('import_history', JSON.stringify(importHistory)); }, [importHistory]);
 
     const toggleStylecomPaid = (id) => {
         setPaidStylecomIds(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) {
+                next.delete(id);
+            } else {
+                next.add(id);
+            }
+            return next;
+        });
+    };
+    
+    const toggleNotStylecom = (id) => {
+        setNotStylecomIds(prev => {
             const next = new Set(prev);
             if (next.has(id)) {
                 next.delete(id);
@@ -8132,6 +8423,8 @@ const App = () => {
                     merchantRules={merchantRules}
                     paidIds={paidStylecomIds}
                     onTogglePaid={toggleStylecomPaid}
+                    notStylecomIds={notStylecomIds}
+                    onToggleNotStylecom={toggleNotStylecom}
                 />
             )}
 
