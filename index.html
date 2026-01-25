@@ -7889,49 +7889,63 @@ const AllRulesPage = ({ merchantRules, expenses }) => {
     const allRules = useMemo(() => {
         const rules = [];
         
-        // 1. Global merchant rules (from merchantRules with no account-specific)
-        Object.entries(merchantRules).forEach(([pattern, rule]) => {
-            // Check if this is a default/global rule
-            if (rule.category) {
-                rules.push({
-                    id: `global-${pattern}`,
-                    type: 'global',
-                    typeLabel: '🌐 Global',
-                    merchant: pattern,
-                    account: '—',
-                    category: rule.category,
-                    isSubscription: rule.isSubscription || false,
-                    source: 'merchantRules'
-                });
-            }
-            
-            // Account-specific rules
-            if (rule.accountCategories) {
-                Object.entries(rule.accountCategories).forEach(([account, category]) => {
+        // 1. Parse merchantRules - same logic as ExportRules
+        Object.entries(merchantRules).forEach(([key, value]) => {
+            if (key.includes('|||')) {
+                // Account-specific rule
+                const merchant = key.split('|||')[0];
+                if (value.scope === 'accounts' && value.accounts) {
+                    // Multi-account rule
+                    value.accounts.forEach(account => {
+                        rules.push({
+                            id: `account-${key}-${account}`,
+                            type: 'account',
+                            typeLabel: '🏦 Account',
+                            merchant: merchant,
+                            account: account,
+                            category: value.category,
+                            isSubscription: value.isSubscription || false,
+                            source: 'merchantRules'
+                        });
+                    });
+                } else if (value.account) {
+                    // Legacy single account
                     rules.push({
-                        id: `account-${pattern}-${account}`,
+                        id: `account-${key}`,
                         type: 'account',
                         typeLabel: '🏦 Account',
-                        merchant: pattern,
-                        account: account,
-                        category: category,
-                        isSubscription: false,
+                        merchant: merchant,
+                        account: value.account,
+                        category: value.category,
+                        isSubscription: value.isSubscription || false,
                         source: 'merchantRules'
                     });
+                }
+            } else if (value.scope === 'global' || value.category) {
+                // Global rule
+                rules.push({
+                    id: `global-${key}`,
+                    type: 'global',
+                    typeLabel: '🌐 Global',
+                    merchant: key,
+                    account: '—',
+                    category: value.category,
+                    isSubscription: value.isSubscription || false,
+                    source: 'merchantRules'
                 });
             }
         });
         
-        // 2. One-off category assignments (from expenses with oneOffCategory)
+        // 2. One-off category assignments (from expenses with manualCategory)
         expenses.forEach(e => {
-            if (e.oneOffCategory) {
+            if (e.manualCategory && isValidYear(e.date)) {
                 rules.push({
                     id: `oneoff-${e.id}`,
                     type: 'oneoff',
                     typeLabel: '📌 One-off',
                     merchant: cleanMerchant(e.description),
                     account: e.account || '—',
-                    category: e.oneOffCategory,
+                    category: e.manualCategory,
                     isSubscription: false,
                     date: e.date,
                     txnId: e.id,
@@ -7940,24 +7954,28 @@ const AllRulesPage = ({ merchantRules, expenses }) => {
             }
         });
         
-        // 3. Subscription tags (from expenses with isSubscription but no rule)
-        const subTaggedTxns = new Set();
+        // 3. Subscription tags (from expenses with isSubscription)
+        const subTaggedMerchants = new Set();
         expenses.forEach(e => {
-            if (e.isSubscription) {
+            if (e.isSubscription && isValidYear(e.date)) {
                 const merchant = cleanMerchant(e.description);
-                const key = `${merchant}`;
-                if (!subTaggedTxns.has(key)) {
-                    // Check if there's already a global rule with subscription
-                    const hasGlobalSub = rules.some(r => r.type === 'global' && r.merchant === merchant && r.isSubscription);
+                if (!subTaggedMerchants.has(merchant)) {
+                    subTaggedMerchants.add(merchant);
+                    // Check if there's already a global rule with subscription flag for this merchant
+                    const hasGlobalSub = rules.some(r => 
+                        r.type === 'global' && 
+                        r.merchant.toLowerCase() === merchant.toLowerCase() && 
+                        r.isSubscription
+                    );
                     if (!hasGlobalSub) {
-                        subTaggedTxns.add(key);
+                        const effectiveCat = getEffectiveCategory(e, merchantRules);
                         rules.push({
                             id: `subtag-${merchant}`,
                             type: 'subscription',
                             typeLabel: '🔄 Subscription',
                             merchant: merchant,
                             account: '—',
-                            category: '—',
+                            category: effectiveCat.category || '—',
                             isSubscription: true,
                             source: 'transaction'
                         });
