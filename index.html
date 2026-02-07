@@ -7850,29 +7850,22 @@ const AllRulesPage = ({ merchantRules, expenses, onImportRules, onApplyTransacti
                 let oneOffRules = [];
                 let subscriptionTags = [];
                 
-                // Try to parse as JSON first
+                // Parse as JSON
                 try {
                     const data = JSON.parse(content);
                     if (data.merchantRules) {
-                        // New format with metadata (v2 or v3)
+                        // New format with metadata (v3)
                         importedRules = data.merchantRules;
                         oneOffRules = data.oneOffRules || [];
                         subscriptionTags = data.subscriptionTags || [];
                     } else if (typeof data === 'object' && !Array.isArray(data)) {
-                        // Direct rules object (legacy)
+                        // Direct rules object (legacy JSON)
                         importedRules = data;
                     } else {
-                        throw new Error('Invalid format');
+                        throw new Error('Invalid JSON format - expected rules object');
                     }
-                } catch (jsonError) {
-                    // Try to parse as JS file (const SAVED_MERCHANT_RULES = {...})
-                    const match = content.match(/(?:const\s+\w+\s*=\s*)(\{[\s\S]*\});?/);
-                    if (match) {
-                        // Use eval carefully - only for trusted rule files
-                        importedRules = eval('(' + match[1] + ')');
-                    } else {
-                        throw new Error('Could not parse file');
-                    }
+                } catch (parseError) {
+                    throw new Error('Could not parse file. Please use a JSON file exported from the "Export Rules" button. Error: ' + parseError.message);
                 }
                 
                 // Validate rules structure
@@ -7951,7 +7944,7 @@ const AllRulesPage = ({ merchantRules, expenses, onImportRules, onApplyTransacti
                             type="file"
                             ref={fileInputRef}
                             onChange={handleImport}
-                            accept=".json,.js"
+                            accept=".json"
                             className="hidden"
                         />
                         <button
@@ -8182,26 +8175,43 @@ const App = () => {
     const applyTransactionRules = (oneOffRules, subscriptionTags) => {
         if (!oneOffRules.length && !subscriptionTags.length) return;
         
+        let oneOffMatches = 0;
+        let subMatches = 0;
+        
         setExpenses(prevExpenses => {
             return prevExpenses.map(expense => {
                 let updated = { ...expense };
                 
-                // Apply one-off rules - match by date, description pattern, and approximate amount
+                // Apply one-off rules - match by date AND (description OR amount)
                 for (const rule of oneOffRules) {
                     if (expense.date === rule.date) {
+                        // Try multiple matching strategies
+                        const expDesc = expense.description.toLowerCase().trim();
+                        const ruleDesc = rule.description.toLowerCase().trim();
                         const expMerchant = cleanMerchant(expense.description).toLowerCase();
                         const ruleMerchant = cleanMerchant(rule.description).toLowerCase();
-                        // Match if merchants are similar (one contains the other or they're equal)
-                        if (expMerchant.includes(ruleMerchant) || ruleMerchant.includes(expMerchant) || 
-                            expMerchant === ruleMerchant) {
-                            // Also check amount is close (within 10% or $1)
-                            const expAmt = Math.abs(safe(expense.amount));
-                            const ruleAmt = Math.abs(safe(rule.amount));
-                            const amtDiff = Math.abs(expAmt - ruleAmt);
-                            if (amtDiff < 1 || amtDiff / Math.max(expAmt, ruleAmt, 1) < 0.1) {
-                                updated.manualCategory = rule.category;
-                                break;
-                            }
+                        
+                        // Strategy 1: Exact description match
+                        const exactMatch = expDesc === ruleDesc;
+                        
+                        // Strategy 2: Description contains (either way)
+                        const descContains = expDesc.includes(ruleDesc) || ruleDesc.includes(expDesc);
+                        
+                        // Strategy 3: Cleaned merchant match
+                        const merchantMatch = expMerchant === ruleMerchant || 
+                            expMerchant.includes(ruleMerchant) || 
+                            ruleMerchant.includes(expMerchant);
+                        
+                        // Strategy 4: Amount match (within $0.01)
+                        const expAmt = Math.abs(safe(expense.amount));
+                        const ruleAmt = Math.abs(safe(rule.amount));
+                        const exactAmtMatch = Math.abs(expAmt - ruleAmt) < 0.02;
+                        
+                        // Match if: exact description OR (date match + merchant match + amount match)
+                        if (exactMatch || (merchantMatch && exactAmtMatch) || (descContains && exactAmtMatch)) {
+                            updated.manualCategory = rule.category;
+                            oneOffMatches++;
+                            break;
                         }
                     }
                 }
@@ -8210,9 +8220,13 @@ const App = () => {
                 for (const tag of subscriptionTags) {
                     const expMerchant = cleanMerchant(expense.description).toLowerCase();
                     const tagMerchant = tag.merchant.toLowerCase();
-                    if (expMerchant.includes(tagMerchant) || tagMerchant.includes(expMerchant) ||
-                        expMerchant === tagMerchant) {
-                        updated.isSubscription = true;
+                    if (expMerchant === tagMerchant || 
+                        expMerchant.includes(tagMerchant) || 
+                        tagMerchant.includes(expMerchant)) {
+                        if (!updated.isSubscription) {
+                            updated.isSubscription = true;
+                            subMatches++;
+                        }
                         break;
                     }
                 }
@@ -8221,8 +8235,8 @@ const App = () => {
             });
         });
         
-        setMsg(`✅ Applied transaction rules to matching expenses`);
-        setTimeout(() => setMsg(''), 3000);
+        setMsg(`✅ Applied rules: ${oneOffMatches} one-off matches, ${subMatches} subscription matches`);
+        setTimeout(() => setMsg(''), 5000);
     };
     
     const updateCostType = (category, costType) => {
