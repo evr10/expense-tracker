@@ -8173,18 +8173,44 @@ const App = () => {
     
     // Apply imported one-off and subscription rules to matching transactions
     const applyTransactionRules = (oneOffRules, subscriptionTags) => {
+        console.log('Applying transaction rules:', { oneOffRules: oneOffRules.length, subscriptionTags: subscriptionTags.length });
+        console.log('Sample one-off rules:', oneOffRules.slice(0, 3));
+        
         if (!oneOffRules.length && !subscriptionTags.length) return;
         
         let oneOffMatches = 0;
         let subMatches = 0;
         
+        // Helper to normalize date to YYYY-MM-DD format for comparison
+        const normalizeDate = (dateStr) => {
+            if (!dateStr) return '';
+            // If already YYYY-MM-DD
+            if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+            // If MM/DD/YYYY
+            if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(dateStr)) {
+                const [m, d, y] = dateStr.split('/');
+                return `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+            }
+            // If DD/MM/YYYY (less common)
+            if (/^\d{1,2}-\d{1,2}-\d{4}$/.test(dateStr)) {
+                const [d, m, y] = dateStr.split('-');
+                return `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+            }
+            return dateStr;
+        };
+        
         setExpenses(prevExpenses => {
+            console.log('Total expenses to check:', prevExpenses.length);
+            
             return prevExpenses.map(expense => {
                 let updated = { ...expense };
+                const expDateNorm = normalizeDate(expense.date);
                 
                 // Apply one-off rules - match by date AND (description OR amount)
                 for (const rule of oneOffRules) {
-                    if (expense.date === rule.date) {
+                    const ruleDateNorm = normalizeDate(rule.date);
+                    
+                    if (expDateNorm === ruleDateNorm) {
                         // Try multiple matching strategies
                         const expDesc = expense.description.toLowerCase().trim();
                         const ruleDesc = rule.description.toLowerCase().trim();
@@ -8207,10 +8233,27 @@ const App = () => {
                         const ruleAmt = Math.abs(safe(rule.amount));
                         const exactAmtMatch = Math.abs(expAmt - ruleAmt) < 0.02;
                         
-                        // Match if: exact description OR (date match + merchant match + amount match)
+                        // Debug log for date matches
+                        console.log('Date match found:', {
+                            expDate: expense.date,
+                            ruleDate: rule.date,
+                            expDateNorm,
+                            ruleDateNorm,
+                            expDesc: expDesc.substring(0, 30),
+                            ruleDesc: ruleDesc.substring(0, 30),
+                            expAmt,
+                            ruleAmt,
+                            exactMatch,
+                            descContains,
+                            merchantMatch,
+                            exactAmtMatch
+                        });
+                        
+                        // Match if: exact description OR (merchant match + amount match) OR (description contains + amount match)
                         if (exactMatch || (merchantMatch && exactAmtMatch) || (descContains && exactAmtMatch)) {
                             updated.manualCategory = rule.category;
                             oneOffMatches++;
+                            console.log('✓ ONE-OFF MATCHED:', rule.category);
                             break;
                         }
                     }
@@ -8235,6 +8278,7 @@ const App = () => {
             });
         });
         
+        console.log('Final match counts:', { oneOffMatches, subMatches });
         setMsg(`✅ Applied rules: ${oneOffMatches} one-off matches, ${subMatches} subscription matches`);
         setTimeout(() => setMsg(''), 5000);
     };
