@@ -474,302 +474,9 @@ const autoRuleMatch = (desc, transactionType = 'expense') => {
 // to allow it to apply those defaults on load
 
 // Default merchant rules from categorization export
-const DEFAULT_MERCHANT_RULES = {
-    '900 8TH AVE GAR WEB': { category: 'Stylecom', scope: 'global' },
-    '900 8TH AVENUE GAR': { category: 'Transportation', scope: 'global' },
-    '99231 LAUNDRY CARD': { category: 'Household', scope: 'global' },
-    'A-STAD': { category: 'Stylecom', scope: 'global' },
-    'ACH AUTOMATIC TRANSFER TO CREDIT ACCOUNT': { category: 'Transfer', scope: 'global' },
-    'AIRTABLE.COM/BILL': { category: 'Stylecom', scope: 'global' },
-    'ALL BOROUGH PARTY RENTAL': { category: 'Entertainment', scope: 'global' },
-    'AMAZON GO': { category: 'Amazon', scope: 'global' },
-    'AMAZON GROCE': { category: 'Amazon', scope: 'global' },
-    'AMAZON MARKEPLACE NA PA': { category: 'Amazon', scope: 'global' },
-    'AMAZON MARKETPLACE NAMZN.COM/BILL': { category: 'Amazon', scope: 'global' },
-    'AMAZON MKTPL': { category: 'Amazon', scope: 'global' },
-    'AMAZON MKTPLACE PMTS': { category: 'Amazon', scope: 'global' },
-    'AMAZON MX MARKETPLACMEXICO CITY': { category: 'Amazon', scope: 'global' },
-    'AMAZON PRIME': { category: 'Amazon', scope: 'global' },
-    'AMAZON RETA': { category: 'Amazon', scope: 'global' },
-    'AMAZON TIPS': { category: 'Amazon', scope: 'global' },
-    'AMAZON.COM': { category: 'Amazon', scope: 'global' },
-    'AMAZON.COM HU5BT7II3': { category: 'Amazon', scope: 'global' },
-    'AMAZON.COM RC9BT6HU0': { category: 'Amazon', scope: 'global' },
-    'AMAZON.COM SZ9EC5BT3': { category: 'Amazon', scope: 'global' },
-    'AMAZONPRIMEBE': { category: 'Amazon', scope: 'global' },
-    'ANNUAL FEE 02/26 THROUGH 01/27 01/12/202': { category: 'Household', scope: 'global' },
-    'ANNUAL MEMBERSHIP FEE': { category: 'Household', scope: 'global' },
-    'APPLE.COM/BILL': { category: 'Stylecom', scope: 'global' },
-    'APPLE.COM/US': { category: 'Stylecom', scope: 'global' },
-    'APPLECARD GSBANK PAYMENT': { category: 'Stylecom', scope: 'global' },
-    'ART OF MONDAYS': { category: 'Stylecom', scope: 'global' },
-    'ASCENT LOUNGE': { category: 'Entertainment', scope: 'global' },
-    'AVIS RENT-A-CAR': { category: 'Travel', scope: 'global' },
-    'BALLS &AMP; GLORY': { category: 'Dining', scope: 'global' },
-    'BAMBINO TECHNOLOGIES': { category: 'Stylecom', scope: 'global' },
-    'BH BACKUP': { category: 'Daycare', scope: 'global' },
-    'BIRD PENDING.BIRD.CO': { category: 'Stylecom', scope: 'global' },
-    'BLUESTONE LANE - 166': { category: 'Coffee', scope: 'global' },
-    'BLUESTONE LANNEW YORK': { category: 'Coffee', scope: 'global' },
-    'BLUESTONELANE': { category: 'Coffee', scope: 'global' },
-    'BLUESTONELANENEW YORK': { category: 'Coffee', scope: 'global' },
-    'BLUESTONELANENEW YORK CITY': { category: 'Coffee', scope: 'global' },
-    'BLVD': { category: 'Health & Wellness', scope: 'global' },
-    'BM ATTITUDE': { category: 'Travel', scope: 'global' },
-    'BOAT TESTS 101': { category: 'Dining', scope: 'global' },
-    'BOUQS.COM': { category: 'Household', scope: 'global' },
-    'BRASSERIE DEN ARTIST': { category: 'Dining', scope: 'global' },
-    'BT': { category: 'Household', scope: 'global' },
-    'CAFE BRAVO INC': { category: 'Coffee', scope: 'global' },
-    'CAFE VITRIN': { category: 'Stylecom', scope: 'global' },
-    'CANADIAN RIVERS WILDCANMORE': { category: 'Transfer', scope: 'global' },
-    'CASH WITHDRAWAL AT BRANCH': { category: 'Other', scope: 'global' },
-    'CATHEDRALE/ALPHABET BA': { category: 'Dining', scope: 'global' },
-    'CHATGPT SUBSCRIPTION': { category: 'Household', scope: 'global' },
-    'CHATGPT SUBSCRIPTIONSAN FRANCISCO': { category: 'Household', scope: 'global' },
-    'CITIBIK': { category: 'Transportation', scope: 'global' },
-    'CITIBIK 1 RIDE': { category: 'Transportation', scope: 'global' },
-    'CITIBIK 2 RIDES': { category: 'Transportation', scope: 'global' },
-    'CITIBIK 3 RIDES': { category: 'Transportation', scope: 'global' },
-    'CITIBIK 4 RIDES': { category: 'Transportation', scope: 'global' },
-    'CITIBIK 5 RIDES': { category: 'Transportation', scope: 'global' },
-    'CITY STAR HAIR SALON INC': { category: 'Health & Wellness', scope: 'global' },
-    'CLASSIC MAN BARBERSHOP': { category: 'Health & Wellness', scope: 'global' },
-    'CLAUDE.AI SUBSCRIPTION': { category: 'Stylecom', scope: 'global' },
-    'CONTINENTAL EXC': { category: 'Stylecom', scope: 'global' },
-    'CONX TAKEOFF SOFTWARE': { category: 'Stylecom', scope: 'global' },
-    'COSTA DEL KAPSALON': { category: 'Health & Wellness', scope: 'global' },
-    'CREDIT BALANCE REFUND': { category: 'Income', scope: 'global' },
-    'CROWNE PLAZA AMSTERDAM': { category: 'Stylecom', scope: 'global' },
-    'DE VOGELENZANG': { category: 'Dining', scope: 'global' },
-    'DEPOSIT FROM 360 CHECKING XXXXXXX1275': { category: 'Transfer', scope: 'global' },
-    'DEPOSIT FROM AYES INC FIRST MONT': { category: 'Rent', scope: 'global' },
-    'DEPOSIT FROM AYES INC LAST RENT': { category: 'Rent', scope: 'global' },
-    'DEPOSIT FROM AYES INC RENT': { category: 'Rent', scope: 'global' },
-    'DEPOSIT FROM CONTINENTAL EXC P2P 174001 ': { category: 'Stylecom', scope: 'global' },
-    'DEPOSIT FROM DAYCARE XXXXXXX1048': { category: 'Transfer', scope: 'global' },
-    'DEPOSIT FROM JPMORGAN CHASE EXT TRNSFR': { category: 'Transfer', scope: 'global' },
-    'DEPOSIT FROM NY STATE NYSTTAXRFD': { category: 'TaxIncome', scope: 'global' },
-    'DEPOSIT FROM RENT XXXXXXX0906': { category: 'Transfer', scope: 'global' },
-    'DEX PERSONAL CRM': { category: 'Stylecom', scope: 'global' },
-    'DIA ART FOUNDATION': { category: 'Shopping', scope: 'global' },
-    'DIRK DE WITTE - WIJNEG': { category: 'Dining', scope: 'global' },
-    'DISNEY PLUS': { category: 'Entertainment', scope: 'global' },
-    'DUANE READE': { category: 'Household', scope: 'global' },
-    'E-Z': { category: 'Transportation', scope: 'global' },
-    'EVAVERCOUTEREN.COM': { category: 'Health & Wellness', scope: 'global' },
-    'EVERY MOTHER': { category: 'Health & Wellness', scope: 'global' },
-    'FAT BLACK PUSSYCAT': { category: 'Entertainment', scope: 'global' },
-    'FEDEX OFFIC': { category: 'Household', scope: 'global' },
-    'FERRIER-30': { category: 'Shopping', scope: 'global' },
-    'FIVERREU': { category: 'Stylecom', scope: 'global' },
-    'FNAC DIRECT BELGIUM': { category: 'Entertainment', scope: 'global' },
-    'GANSEVOORT HOTEL - COF': { category: 'Dining', scope: 'global' },
-    'GASTRO MARKETNEW YORK': { category: 'Groceries', scope: 'global' },
-    'GEMEENTELIJK AUTONOOM PAR': { category: 'Stylecom', scope: 'global' },
-    'GSUITE MRTNS.IO': { category: 'Stylecom', scope: 'global' },
-    'GSUITE_NICOLASMERT': { category: 'Stylecom', scope: 'global' },
-    'HAMBURGER AMERICA': { category: 'Dining', scope: 'global' },
-    'HANNAGO': { category: 'Stylecom', scope: 'global' },
-    'HDSHT.PRO': { category: 'Shopping', scope: 'global' },
-    'HILDRETHS DEPT. STORE': { category: 'Household', scope: 'global' },
-    'HMSHOST SCHIPSCHIPHOL': { category: 'Dining', scope: 'global' },
-    'HOEKJES EN BOEKJES': { category: 'Shopping', scope: 'global' },
-    'HONEYBRAINS - 55TH': { category: 'Dining', scope: 'global' },
-    'HOSTINGER': { category: 'Stylecom', scope: 'global' },
-    'IN': { category: 'Stylecom', scope: 'global' },
-    'IN AUTOMATION HELPERS': { category: 'Stylecom', scope: 'global' },
-    'IN RYDERS ALLEY INC': { category: 'Stylecom', scope: 'global' },
-    'INSTANT FUNDS RECEIVED FROM NICOLAS MERT': { category: 'Income', scope: 'global' },
-    'INTEREST PAID FROM 10/30/25 THRU 11/30/2': { category: 'Income', scope: 'global' },
-    'INTEREST PAID FROM 12/01/25 THRU 12/29/2': { category: 'Income', scope: 'global' },
-    'IPHONE CITIZ': { category: 'Stylecom', scope: 'global' },
-    'ITONIM BV': { category: 'Household', scope: 'global' },
-    'JANOVIC PAINT AND DECORA': { category: 'Household', scope: 'global' },
-    'JETBLUE': { category: 'Stylecom', scope: 'global' },
-    'JETTY INSURANCE': { category: 'Transportation', scope: 'global' },
-    'JFK INTERNATIONAL AIJAMAICA': { category: 'Travel', scope: 'global' },
-    'JONGRO GOPCHANG (5TH F': { category: 'Dining', scope: 'global' },
-    'KLEINE MATTHIAS': { category: 'Stylecom', scope: 'global' },
-    'KLM': { category: 'Travel', scope: 'global' },
-    'KOBO SOFTWARE IRELAND': { category: 'Stylecom', scope: 'global' },
-    'L\'ACCOLADE': { category: 'Dining', scope: 'global' },
-    'LEMONADE INSURANCE': { category: 'Household', scope: 'global' },
-    'LEVEL FRAMES ORDER': { category: 'Household', scope: 'global' },
-    'LINDY': { category: 'Stylecom', scope: 'global' },
-    'LINKEDIN PRE P106735526': { category: 'Stylecom', scope: 'global' },
-    'LINKEDIN PRE P138997796': { category: 'Stylecom', scope: 'global' },
-    'LINKEDIN PRE P176254376': { category: 'Stylecom', scope: 'global' },
-    'LINKEDINPRE': { category: 'Stylecom', scope: 'global' },
-    'LINKEDINPREC': { category: 'Stylecom', scope: 'global' },
-    'LITTLE SPOON': { category: 'Groceries', scope: 'global' },
-    'LOVABLE': { category: 'Stylecom', scope: 'global' },
-    'M & N FRENCH CLEANERS': { category: 'Household', scope: 'global' },
-    'MARC VALET': { category: 'Household', scope: 'global' },
-    'MEAT&AMP;EAT': { category: 'Stylecom', scope: 'global' },
-    'MERCADO - SPANISH DI': { category: 'Groceries', scope: 'global' },
-    'MEYERS OLD DUTCH': { category: 'Shopping', scope: 'global' },
-    'MICROSOFT CORREDMOND': { category: 'Shopping', scope: 'global' },
-    'MONITR.BE': { category: 'Stylecom', scope: 'global' },
-    'MONTHLY SERVICE FEE': { category: 'Household', scope: 'global' },
-    'MOTORCYCLE MALL INC.': { category: 'Transportation', scope: 'global' },
-    'MP HUDSON': { category: 'Stylecom', scope: 'global' },
-    'MP HUDSON LLC MONTHLY': { category: 'Stylecom', scope: 'global' },
-    'MS JUST POKE REDMOND': { category: 'Dining', scope: 'global' },
-    'MSG CONCESSIONS': { category: 'Entertainment', scope: 'global' },
-    'MTA': { category: 'Transportation', scope: 'global' },
-    'MTA LIRR ETIX TICKET': { category: 'Transportation', scope: 'global' },
-    'MTA LIRR STATION TIX': { category: 'Transportation', scope: 'global' },
-    'MTA NYCT PAYGO': { category: 'Transportation', scope: 'global' },
-    'NEW YORK STATE DMV': { category: 'Transportation', scope: 'global' },
-    'NEWARK AP CART RENTAL': { category: 'Travel', scope: 'global' },
-    'NIAGARA / LOVERS': { category: 'Dining', scope: 'global' },
-    'NY PENN STA': { category: 'Dining', scope: 'global' },
-    'NYC FERRY PIER 79': { category: 'Transportation', scope: 'global' },
-    'NYC YELLOW CAB': { category: 'Transportation', scope: 'global' },
-    'NYTIMES': { category: 'Household', scope: 'global' },
-    'ODOO': { category: 'Stylecom', scope: 'global' },
-    'ONE': { category: 'Household', scope: 'global' },
-    'ONLINE REALTIME TRANSFER TO HSBC PREMIER': { category: 'Transfer', scope: 'global' },
-    'OPENAI CHATGPT SUBSCR': { category: 'Household', scope: 'global' },
-    'OPS': { category: 'Dining', scope: 'global' },
-    'PADDLE.NET': { category: 'Stylecom', scope: 'global' },
-    'PARTZILLA.COM': { category: 'Shopping', scope: 'global' },
-    'PAYMENT THANK YOU-MOBILE': { category: 'Transfer', scope: 'global' },
-    'PAYYOURSELFBACK CREDIT': { category: 'Income', scope: 'global' },
-    'PERRUCHE': { category: 'Stylecom', scope: 'global' },
-    'PHD TERRACE AT DREAM H': { category: 'Dining', scope: 'global' },
-    'POPEYES 13526': { category: 'Dining', scope: 'global' },
-    'PRIME BARBERSNEW YORK': { category: 'Health & Wellness', scope: 'global' },
-    'PRINTWITHME': { category: 'Household', scope: 'global' },
-    'PURCHASE INTEREST CHARGE': { category: 'Other', scope: 'global' },
-    'PURCHASE ON 0208 AT SPOT IFY': { category: 'Entertainment', scope: 'global' },
-    'PURCHASE ON 1008 AT SPOT IFY': { category: 'Household', scope: 'global' },
-    'REAL TIME TRANSFER RECD FROM ABA/CONTR B': { category: 'Other', scope: 'global' },
-    'RENEWAL MEMBERSHIP FEE': { category: 'Household', scope: 'global' },
-    'RETURNED PAYMENT': { category: 'Income', scope: 'global' },
-    'REVISTA': { category: 'Stylecom', scope: 'global' },
-    'RITUAL (RITUAL.COM)': { category: 'Health & Wellness', scope: 'global' },
-    'RUBIROSA - MULBERRY': { category: 'Dining', scope: 'global' },
-    'RUSS &AMP; DAUGHTERS - 1': { category: 'Dining', scope: 'global' },
-    'SEA GRDY COW SEATTLE': { category: 'Dining', scope: 'global' },
-    'SEATGEEK TICKETS': { category: 'Entertainment', scope: 'global' },
-    'SEED CLEANERS 145000NEW YORK': { category: 'Household', scope: 'global' },
-    'SHAIR NYC 000NEW YORK': { category: 'Health & Wellness', scope: 'global' },
-    'SHINN WEST': { category: 'Dining', scope: 'global' },
-    'SMARTSUITE': { category: 'Stylecom', scope: 'global' },
-    'SNCB-NMBS MOBILE PAYMENT': { category: 'Stylecom', scope: 'global' },
-    'SOFTR.IO': { category: 'Stylecom', scope: 'global' },
-    'SOHO HOUSE NEW YORK LLC': { category: 'Dining', scope: 'global' },
-    'SOLIDSTARTS': { category: 'Health & Wellness', scope: 'global' },
-    'SP ALO-YOGA': { category: 'Shopping', scope: 'global' },
-    'SP BUDGETNERD': { category: 'TaxIncome', scope: 'global' },
-    'SP DORE ROSE': { category: 'Shopping', scope: 'global' },
-    'SP MYSALIGHTS': { category: 'Household', scope: 'global' },
-    'SP NUUN HYDRATION': { category: 'Health & Wellness', scope: 'global' },
-    'SP SWITCHBOT US': { category: 'Household', scope: 'global' },
-    'SPANISH SHOES': { category: 'Shopping', scope: 'global' },
-    'SRD SERVICES': { category: 'Stylecom', scope: 'global' },
-    'STARBUCKS': { category: 'Coffee', scope: 'global' },
-    'STARBUCKS 844JAMAICA': { category: 'Coffee', scope: 'global' },
-    'STARBUCKS BELCIUDAD AUTONOMA BUEN': { category: 'Coffee', scope: 'global' },
-    'STARBUCKS COFEZEIZA': { category: 'Coffee', scope: 'global' },
-    'STARBUCKS STONEW YORK': { category: 'Coffee', scope: 'global' },
-    'STARBUCKS STOREDMOND': { category: 'Coffee', scope: 'global' },
-    'STORAGE': { category: 'Household', scope: 'global' },
-    'SUMMIT ONE VANDERBILT': { category: 'Entertainment', scope: 'global' },
-    'SUNDAYS STUDINEW YORK': { category: 'Health & Wellness', scope: 'global' },
-    'SWAN\'S CLEANERS': { category: 'Household', scope: 'global' },
-    'TANNER SMITH\'S': { category: 'Dining', scope: 'global' },
-    'TAQUERIA RAMIREZ LLC': { category: 'Dining', scope: 'global' },
-    'TASKER ON TASKRABBITSAN FRANCISCO': { category: 'Household', scope: 'global' },
-    'TERNESSE GOLF &AMP; COUNTR': { category: 'Stylecom', scope: 'global' },
-    'THE GARRETT - WEST': { category: 'Dining', scope: 'global' },
-    'THE HEMING WAY': { category: 'Stylecom', scope: 'global' },
-    'THE SPANIARD': { category: 'Dining', scope: 'global' },
-    'THE UPS STORE 6387': { category: 'Household', scope: 'global' },
-    'THE WHITBY HOTEL-2': { category: 'Dining', scope: 'global' },
-    'THINK HUDSON NEW YORK': { category: 'Coffee', scope: 'global' },
-    'TRANSIP B.V.': { category: 'Stylecom', scope: 'global' },
-    'TRAVEL CREDIT $300/YEAR': { category: 'Income', scope: 'global' },
-    'TULU, INC.': { category: 'Household', scope: 'global' },
-    'UBER EATS': { category: 'Dining', scope: 'global' },
-    'US MOBILE': { category: 'Household', scope: 'global' },
-    'US MOBILE US MOBILE': { category: 'Household', scope: 'global' },
-    'US MOBILE US MOBILENEW YORK': { category: 'Household', scope: 'global' },
-    'VCN': { category: 'Stylecom', scope: 'global' },
-    'VOI BE': { category: 'Transportation', scope: 'global' },
-    'VRC BVBA': { category: 'Other', scope: 'global' },
-    'VULTR BY CONSTANT': { category: 'Stylecom', scope: 'global' },
-    'WCS ZOOS AND AQUARIUM': { category: 'Entertainment', scope: 'global' },
-    'WHISKEY TAVERN': { category: 'Dining', scope: 'global' },
-    'WILLIAMS-SONOMA.COM': { category: 'Household', scope: 'global' },
-    'WINRED': { category: 'Stylecom', scope: 'global' },
-    'WIRE CONVENIENCE CHARGE': { category: 'Other', scope: 'global' },
-    'WIRE WITHDRAWAL': { category: 'Other', scope: 'global' },
-    'WITHDRAWAL FROM APPLECARD GSBANK PAYMENT': { category: 'Stylecom', scope: 'global' },
-    'WITHDRAWAL FROM CON ED OF NY CECONY': { category: 'Household', scope: 'global' },
-    'WITHDRAWAL FROM IRS USATAXPYMT': { category: 'TaxIncome', scope: 'global' },
-    'WORKSPACE_MRTNS.IO': { category: 'Stylecom', scope: 'global' },
-    'WUZIPAY': { category: 'Travel', scope: 'global' },
-    'WWW.AMAZON.': { category: 'Amazon', scope: 'global' },
-    'WWW.PINGEN.COM': { category: 'Stylecom', scope: 'global' },
-    'WWW.THESTRABON.COM': { category: 'Travel', scope: 'global' },
-    'YSI': { category: 'Household', scope: 'global' },
-    'YWW': { category: 'Stylecom', scope: 'global' },
-    'ZELLE PAYMENT FROM EMILIA FRIDA FIERS': { category: 'Other', scope: 'global' },
-    'ZELLE PAYMENT FROM WILLEM VAN DE MIEROP': { category: 'Other', scope: 'global' },
-    'ZELLE PAYMENT TO ANNE ELISABETH': { category: 'Dining', scope: 'global' },
-    'ZELLE PAYMENT TO ARGATHE MICHAUD JPM99BX': { category: 'Other', scope: 'global' },
-    'ZELLE PAYMENT TO ARGATHE MICHAUD JPM99BY': { category: 'Other', scope: 'global' },
-    'ZELLE PAYMENT TO BRAULIO HERNANDEZ JPM99': { category: 'Other', scope: 'global' },
-    'ZELLE PAYMENT TO MICHAEL MISHOE JPM99AQQ': { category: 'Other', scope: 'global' },
-    'ZELLE PAYMENT TO NICOLAS MERTENS BOFA JP': { category: 'Other', scope: 'global' },
-    'ACCOR|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 1 - Credit"] },
-    'AIR EUROPA|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 4","Chase 0700 - 1","Chase 0700 - 2","Chase 0700 - 3","Chase 2251","Chase 5448"] },
-    'AIR FRANCE|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 5448 - Credit","Chase 2251 - Credit","Chase 0700 - 3- Credit","Chase 0700 - 2 - Credit","Chase 0700 - 4 - Credit","Chase 0700 - 1 - Credit"] },
-    'BANGKOK AIRWAYS-5G7NK3|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 3","Chase 0700 - 1","Chase 0700 - 2","Chase 0700 - 4","Chase 2251"] },
-    'BARNINI|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 1 - Credit","Chase 0700 - 2 - Credit","Chase 0700 - 3- Credit","Chase 0700 - 4 - Credit","Chase 2251 - Credit"] },
-    'BELGIUM VENDING|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 1 - Credit"] },
-    'BIRD TEMP HOLD|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 3- Credit","Chase 0700 - 1 - Credit","Chase 0700 - 2 - Credit","Chase 0700 - 4 - Credit","Chase 2251 - Credit"] },
-    'BKG|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 1 - Credit"] },
-    'BM ATTITUDE|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 1 - Credit","Chase 0700 - 2 - Credit","Chase 0700 - 3- Credit","Chase 0700 - 4 - Credit","Chase 2251 - Credit"] },
-    'BOTANIC|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 1 - Credit","Chase 0700 - 2 - Credit","Chase 0700 - 3- Credit","Chase 0700 - 4 - Credit","Chase 2251 - Credit","Chase 5448 - Credit"] },
-    'CATHAY PACIFIC AIRWAYS LI|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 1 - Credit"] },
-    'CONTINENTAL EXC|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Debit Chase9532 Nicoline"] },
-    'COURTYARD NEW YORK|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 3- Credit"] },
-    'DELIJN XFVZJBEP 08NOV|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 1 - Credit"] },
-    'DELTA AIR|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 1 - Credit","Chase 0700 - 2 - Credit","Chase 0700 - 3- Credit","Chase 0700 - 4 - Credit","Chase 2251 - Credit","Chase 5448 - Credit"] },
-    'ETIHAD AIRW|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 3"] },
-    'HOTEL SOFITEL GPRS|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 4 - Credit"] },
-    'INSIGHT DESIGN STUDIO|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 1 - Credit","Chase 0700 - 2 - Credit","Chase 0700 - 3- Credit","Chase 0700 - 4 - Credit","Chase 2251 - Credit"] },
-    'JETBLUE|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 4"] },
-    'KIMPTON KITALAY SAMUI|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 3- Credit"] },
-    'KLM AIRLINE|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 1 - Credit","Chase 0700 - 2 - Credit","Chase 0700 - 3- Credit","Chase 0700 - 4 - Credit","Chase 2251 - Credit","Chase 5448 - Credit"] },
-    'KLM NETHERLA|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 4 - Credit"] },
-    'KLM ROYAL DUXAUC8Y|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 1 - Credit"] },
-    'KLM ROYAL DUYCUN5D|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 1 - Credit"] },
-    'KLM ROYAL DUYIAONX|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 1 - Credit","Chase 0700 - 2 - Credit","Chase 0700 - 3- Credit","Chase 0700 - 4 - Credit","Chase 2251 - Credit","Chase 5448 - Credit"] },
-    'KORSAKOV|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 1 - Credit","Chase 0700 - 2 - Credit","Chase 0700 - 3- Credit","Chase 0700 - 4 - Credit","Chase 2251 - Credit"] },
-    'LS THEATER HOTEL BY HA|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 1 - Credit"] },
-    'MERCURE ANTWERP CITY CENT|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 1 - Credit"] },
-    'MOL|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 2 - Credit"] },
-    'NH COLLECTION ANTWERP CEN|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 5448 - Credit"] },
-    'NS INTERNATIONAAL B.V.|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 1 - Credit"] },
-    'NS REIZIGERS B.V.|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 1 - Credit"] },
-    'POPPY MOBILITY NV|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 5448 - Credit"] },
-    'QATAR AIR|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 3","Chase 0700 - 1","Chase 0700 - 2","Chase 0700 - 4","Chase 2251","Chase 5448"] },
-    'SAPPHIRE HOUSE ANTWERP AU|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 1 - Credit"] },
-    'SNBRU AIR|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 2 - Credit"] },
-    'SNCB - NMBS EU|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 5448 - Credit"] },
-    'SNCB NMBS TAP ON PHONE|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 1 - Credit"] },
-    'SWISS AIR|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 5448 - Credit"] },
-    'TECHS|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 2 - Credit"] },
-    'THEATER HOTEL CV|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 1 - Credit"] },
-    'TUI NEDERLAND APEXX|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 5448 - Credit"] },
-    'UNITED|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 5448 - Credit","Chase 0700 - 1 - Credit","Chase 0700 - 2 - Credit","Chase 0700 - 3- Credit","Chase 0700 - 4 - Credit","Chase 2251 - Credit"] },
-    'VOI BE|||accounts': { category: 'Stylecom', scope: 'accounts', accounts: ["Chase 0700 - 1 - Credit","Chase 0700 - 2 - Credit","Chase 0700 - 3- Credit","Chase 0700 - 4 - Credit","Chase 2251 - Credit"] },
-};
+// Default merchant rules - now loaded from localStorage via import
+// Use the "All Rules" page to import/export your rules
+const DEFAULT_MERCHANT_RULES = {};
 
 // One-off category assignments (manual overrides for specific transactions)
 // These are applied when loading expenses to set manualCategory
@@ -922,9 +629,7 @@ const loadMerchantRules = () => {
     try {
         const s = localStorage.getItem('merchant_rules_v2');
         if (s) {
-            const saved = JSON.parse(s);
-            // Merge with defaults (saved rules take precedence)
-            return { ...DEFAULT_MERCHANT_RULES, ...saved };
+            return JSON.parse(s);
         }
         
         // Migrate from old format (merchant_rules)
@@ -940,10 +645,10 @@ const loadMerchantRules = () => {
                     migrated[merchant] = value; // Already in new format
                 }
             });
-            return { ...DEFAULT_MERCHANT_RULES, ...migrated };
+            return migrated;
         }
-        return { ...DEFAULT_MERCHANT_RULES };
-    } catch { return { ...DEFAULT_MERCHANT_RULES }; }
+        return {};
+    } catch { return {}; }
 };
 
 // Get the rule key for account-specific rules (now uses merchant only, accounts stored in rule)
@@ -7894,12 +7599,14 @@ const ImportHistoryPanel = ({ importHistory, onDeleteImport, onClose }) => {
 };
 
 // ============== ALL RULES PAGE ==============
-const AllRulesPage = ({ merchantRules, expenses }) => {
+const AllRulesPage = ({ merchantRules, expenses, onImportRules, onApplyTransactionRules }) => {
     const [search, setSearch] = useState('');
     const [typeFilter, setTypeFilter] = useState('all');
     const [categoryFilter, setCategoryFilter] = useState('all');
     const [sortField, setSortField] = useState('merchant');
     const [sortDir, setSortDir] = useState('asc');
+    const [importStatus, setImportStatus] = useState('');
+    const fileInputRef = React.useRef(null);
     
     // Build unified rules list from all sources
     const allRules = useMemo(() => {
@@ -8077,6 +7784,142 @@ const AllRulesPage = ({ merchantRules, expenses }) => {
         URL.revokeObjectURL(url);
     };
     
+    // Export rules to JSON (for import in next session)
+    const exportJSON = () => {
+        // Collect one-off category assignments from expenses
+        const oneOffRules = expenses
+            .filter(e => e.manualCategory && isValidYear(e.date))
+            .map(e => ({
+                date: e.date,
+                description: e.description,
+                account: e.account || '',
+                category: e.manualCategory,
+                amount: safe(e.amount)
+            }));
+        
+        // Collect subscription tags from expenses (unique by description pattern)
+        const subscriptionPatterns = new Map();
+        expenses.filter(e => e.isSubscription && isValidYear(e.date)).forEach(e => {
+            const merchant = cleanMerchant(e.description);
+            if (!subscriptionPatterns.has(merchant)) {
+                subscriptionPatterns.set(merchant, {
+                    merchant: merchant,
+                    description: e.description,
+                    account: e.account || ''
+                });
+            }
+        });
+        const subscriptionTags = [...subscriptionPatterns.values()];
+        
+        const exportData = {
+            version: 3,
+            exportDate: new Date().toISOString(),
+            merchantRules: merchantRules,
+            oneOffRules: oneOffRules,
+            subscriptionTags: subscriptionTags,
+            stats: {
+                globalRules: Object.keys(merchantRules).filter(k => !k.includes('|||')).length,
+                accountRules: Object.keys(merchantRules).filter(k => k.includes('|||')).length,
+                oneOffRules: oneOffRules.length,
+                subscriptionTags: subscriptionTags.length
+            }
+        };
+        
+        const json = JSON.stringify(exportData, null, 2);
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `expense-rules-${new Date().toISOString().split('T')[0]}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        setImportStatus(`✅ Exported: ${Object.keys(merchantRules).length} merchant rules, ${oneOffRules.length} one-offs, ${subscriptionTags.length} subscriptions`);
+        setTimeout(() => setImportStatus(''), 5000);
+    };
+    
+    // Import rules from JSON file
+    const handleImport = (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            try {
+                const content = event.target.result;
+                let importedRules = null;
+                let oneOffRules = [];
+                let subscriptionTags = [];
+                
+                // Try to parse as JSON first
+                try {
+                    const data = JSON.parse(content);
+                    if (data.merchantRules) {
+                        // New format with metadata (v2 or v3)
+                        importedRules = data.merchantRules;
+                        oneOffRules = data.oneOffRules || [];
+                        subscriptionTags = data.subscriptionTags || [];
+                    } else if (typeof data === 'object' && !Array.isArray(data)) {
+                        // Direct rules object (legacy)
+                        importedRules = data;
+                    } else {
+                        throw new Error('Invalid format');
+                    }
+                } catch (jsonError) {
+                    // Try to parse as JS file (const SAVED_MERCHANT_RULES = {...})
+                    const match = content.match(/(?:const\s+\w+\s*=\s*)(\{[\s\S]*\});?/);
+                    if (match) {
+                        // Use eval carefully - only for trusted rule files
+                        importedRules = eval('(' + match[1] + ')');
+                    } else {
+                        throw new Error('Could not parse file');
+                    }
+                }
+                
+                // Validate rules structure
+                const ruleCount = Object.keys(importedRules).length;
+                if (ruleCount === 0 && oneOffRules.length === 0 && subscriptionTags.length === 0) {
+                    setImportStatus('⚠️ No rules found in file');
+                    return;
+                }
+                
+                // Build confirmation message
+                const globalCount = Object.keys(importedRules).filter(k => !k.includes('|||')).length;
+                const accountCount = Object.keys(importedRules).filter(k => k.includes('|||')).length;
+                
+                let confirmMsg = `Import the following?\n\n`;
+                confirmMsg += `• ${globalCount} global merchant rules\n`;
+                confirmMsg += `• ${accountCount} account-specific rules\n`;
+                if (oneOffRules.length > 0) confirmMsg += `• ${oneOffRules.length} one-off category assignments\n`;
+                if (subscriptionTags.length > 0) confirmMsg += `• ${subscriptionTags.length} subscription tags\n`;
+                confirmMsg += `\nThis will REPLACE your current merchant rules.`;
+                if (oneOffRules.length > 0 || subscriptionTags.length > 0) {
+                    confirmMsg += `\nOne-off and subscription tags will be applied to matching transactions.`;
+                }
+                
+                if (confirm(confirmMsg)) {
+                    // Import merchant rules
+                    onImportRules(importedRules);
+                    
+                    // Apply one-off and subscription rules to transactions
+                    if ((oneOffRules.length > 0 || subscriptionTags.length > 0) && onApplyTransactionRules) {
+                        onApplyTransactionRules(oneOffRules, subscriptionTags);
+                    }
+                    
+                    let statusMsg = `✅ Imported ${ruleCount} merchant rules`;
+                    if (oneOffRules.length > 0) statusMsg += `, ${oneOffRules.length} one-offs`;
+                    if (subscriptionTags.length > 0) statusMsg += `, ${subscriptionTags.length} subscriptions`;
+                    setImportStatus(statusMsg);
+                    setTimeout(() => setImportStatus(''), 5000);
+                }
+            } catch (err) {
+                console.error('Import error:', err);
+                setImportStatus('❌ Failed to parse file: ' + err.message);
+            }
+        };
+        reader.readAsText(file);
+        e.target.value = ''; // Reset input
+    };
+    
     // Sort header component
     const SortHeader = ({ field, label, className = '' }) => (
         <th 
@@ -8097,8 +7940,38 @@ const AllRulesPage = ({ merchantRules, expenses }) => {
         <div className="space-y-6">
             {/* Header */}
             <div className="bg-gradient-to-r from-slate-700 to-slate-800 text-white p-6 rounded-2xl">
-                <h2 className="text-xl font-black">📋 All Rules</h2>
-                <p className="text-slate-300 text-sm mt-1">Single source of truth for all categorization rules</p>
+                <div className="flex justify-between items-start">
+                    <div>
+                        <h2 className="text-xl font-black">📋 All Rules</h2>
+                        <p className="text-slate-300 text-sm mt-1">Single source of truth for all categorization rules</p>
+                    </div>
+                    <div className="flex gap-2">
+                        {/* Import Button */}
+                        <input
+                            type="file"
+                            ref={fileInputRef}
+                            onChange={handleImport}
+                            accept=".json,.js"
+                            className="hidden"
+                        />
+                        <button
+                            onClick={() => fileInputRef.current?.click()}
+                            className="px-4 py-2 bg-blue-500 text-white rounded-lg text-sm font-bold hover:bg-blue-600 flex items-center gap-2">
+                            📤 Import Rules
+                        </button>
+                        {/* Export JSON Button */}
+                        <button
+                            onClick={exportJSON}
+                            className="px-4 py-2 bg-emerald-500 text-white rounded-lg text-sm font-bold hover:bg-emerald-600 flex items-center gap-2">
+                            📥 Export Rules
+                        </button>
+                    </div>
+                </div>
+                {importStatus && (
+                    <div className={`mt-3 p-2 rounded-lg text-sm font-medium ${importStatus.includes('✅') ? 'bg-green-500/20 text-green-200' : importStatus.includes('❌') ? 'bg-red-500/20 text-red-200' : 'bg-yellow-500/20 text-yellow-200'}`}>
+                        {importStatus}
+                    </div>
+                )}
             </div>
             
             {/* Stats Cards */}
@@ -8303,6 +8176,53 @@ const App = () => {
             }
             return next;
         });
+    };
+    
+    // Apply imported one-off and subscription rules to matching transactions
+    const applyTransactionRules = (oneOffRules, subscriptionTags) => {
+        if (!oneOffRules.length && !subscriptionTags.length) return;
+        
+        setExpenses(prevExpenses => {
+            return prevExpenses.map(expense => {
+                let updated = { ...expense };
+                
+                // Apply one-off rules - match by date, description pattern, and approximate amount
+                for (const rule of oneOffRules) {
+                    if (expense.date === rule.date) {
+                        const expMerchant = cleanMerchant(expense.description).toLowerCase();
+                        const ruleMerchant = cleanMerchant(rule.description).toLowerCase();
+                        // Match if merchants are similar (one contains the other or they're equal)
+                        if (expMerchant.includes(ruleMerchant) || ruleMerchant.includes(expMerchant) || 
+                            expMerchant === ruleMerchant) {
+                            // Also check amount is close (within 10% or $1)
+                            const expAmt = Math.abs(safe(expense.amount));
+                            const ruleAmt = Math.abs(safe(rule.amount));
+                            const amtDiff = Math.abs(expAmt - ruleAmt);
+                            if (amtDiff < 1 || amtDiff / Math.max(expAmt, ruleAmt, 1) < 0.1) {
+                                updated.manualCategory = rule.category;
+                                break;
+                            }
+                        }
+                    }
+                }
+                
+                // Apply subscription tags - match by merchant name pattern
+                for (const tag of subscriptionTags) {
+                    const expMerchant = cleanMerchant(expense.description).toLowerCase();
+                    const tagMerchant = tag.merchant.toLowerCase();
+                    if (expMerchant.includes(tagMerchant) || tagMerchant.includes(expMerchant) ||
+                        expMerchant === tagMerchant) {
+                        updated.isSubscription = true;
+                        break;
+                    }
+                }
+                
+                return updated;
+            });
+        });
+        
+        setMsg(`✅ Applied transaction rules to matching expenses`);
+        setTimeout(() => setMsg(''), 3000);
     };
     
     const updateCostType = (category, costType) => {
@@ -8805,7 +8725,12 @@ const App = () => {
             )}
 
             {tab === 'rules' && (
-                <AllRulesPage merchantRules={merchantRules} expenses={expenses} />
+                <AllRulesPage 
+                    merchantRules={merchantRules} 
+                    expenses={expenses} 
+                    onImportRules={(rules) => setMerchantRules(rules)}
+                    onApplyTransactionRules={applyTransactionRules}
+                />
             )}
 
             {tab === 'export' && (
