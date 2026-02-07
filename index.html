@@ -728,7 +728,7 @@ const SeasonalityChart = ({ expenses, merchantRules }) => {
     const { data, years } = useMemo(() => {
         const sp = expenses.filter(e => {
             const year = getY(e.date);
-            return !DASHBOARD_EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category) && (year === 2024 || year === 2025);
+            return !DASHBOARD_EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category) && (year === 2024 || year === 2025 || year === 2026);
         });
         const yrs = [...new Set(sp.map(e => getY(e.date)))].sort();
         const data = yrs.map(y => {
@@ -749,7 +749,7 @@ const PaceChart = ({ expenses, merchantRules }) => {
     const { data, years } = useMemo(() => {
         const sp = expenses.filter(e => {
             const year = getY(e.date);
-            return !DASHBOARD_EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category) && (year === 2024 || year === 2025);
+            return !DASHBOARD_EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category) && (year === 2024 || year === 2025 || year === 2026);
         });
         const yrs = [...new Set(sp.map(e => getY(e.date)))].sort();
         const data = yrs.map(y => {
@@ -777,7 +777,7 @@ const CategoryEvolution = ({ expenses, merchantRules }) => {
         const sp = expenses.filter(e => {
             const cat = getEffectiveCategory(e, merchantRules).category;
             const year = getY(e.date);
-            return !DASHBOARD_EXCLUDED_CATEGORIES.includes(cat) && cat !== 'Uncategorized' && (year === 2024 || year === 2025);
+            return !DASHBOARD_EXCLUDED_CATEGORIES.includes(cat) && cat !== 'Uncategorized' && (year === 2024 || year === 2025 || year === 2026);
         });
         const yrs = [...new Set(sp.map(e => getY(e.date)))].sort();
         const cyt = {};
@@ -853,7 +853,7 @@ const Heatmap = ({ expenses, merchantRules }) => {
     const { data, years, min, max } = useMemo(() => {
         const sp = expenses.filter(e => {
             const year = getY(e.date);
-            return !DASHBOARD_EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category) && (year === 2024 || year === 2025);
+            return !DASHBOARD_EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category) && (year === 2024 || year === 2025 || year === 2026);
         });
         const yrs = [...new Set(sp.map(e => getY(e.date)))].sort();
         const data = {};
@@ -872,7 +872,7 @@ const AccountTotalsChart = ({ expenses, merchantRules }) => {
     const { data, years, maxVal } = useMemo(() => {
         const sp = expenses.filter(e => {
             const year = getY(e.date);
-            return !DASHBOARD_EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category) && (year === 2024 || year === 2025);
+            return !DASHBOARD_EXCLUDED_CATEGORIES.includes(getEffectiveCategory(e, merchantRules).category) && (year === 2024 || year === 2025 || year === 2026);
         });
         const byAccount = {};
         sp.forEach(e => { const acc = e.account || 'Unknown', year = getY(e.date); if (!byAccount[acc]) byAccount[acc] = {}; byAccount[acc][year] = (byAccount[acc][year] || 0) + safe(e.amount); });
@@ -1047,7 +1047,7 @@ const CostStructureEvolution = ({ expenses, merchantRules, costTypeOverrides = {
         const sp = expenses.filter(e => {
             const cat = getEffectiveCategory(e, merchantRules).category;
             const year = getY(e.date);
-            return !DASHBOARD_EXCLUDED_CATEGORIES.includes(cat) && (year === 2024 || year === 2025);
+            return !DASHBOARD_EXCLUDED_CATEGORIES.includes(cat) && (year === 2024 || year === 2025 || year === 2026);
         });
         
         // Group by year-month
@@ -5141,6 +5141,11 @@ const StylecomReimbursement = ({ expenses, merchantRules, paidIds, onTogglePaid,
                                 className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${analyticsYear === 2025 ? 'bg-white text-indigo-600 shadow' : 'text-slate-500 hover:text-slate-700'}`}>
                                 2025
                             </button>
+                            <button 
+                                onClick={() => setAnalyticsYear(2026)}
+                                className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${analyticsYear === 2026 ? 'bg-white text-indigo-600 shadow' : 'text-slate-500 hover:text-slate-700'}`}>
+                                2026
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -8763,7 +8768,7 @@ const App = () => {
     const [importHistory, setImportHistory] = useState([]); // Track imports for deletion
     const [showImportHistory, setShowImportHistory] = useState(false);
     const [msg, setMsg] = useState('');
-    const [tab, setTab] = useState('dashboard');
+    const [tab, setTab] = useState('review');
 
     useEffect(() => { 
         setExpenses(loadExpenses()); 
@@ -9298,9 +9303,9 @@ const App = () => {
 
         <div className="max-w-7xl mx-auto px-4 mt-4">
             <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit text-xs overflow-x-auto">
-                {['dashboard','review','evolution','flow','categories','costtype','stylecom','transfers','transactions','rules','ai','export'].map(t => (
+                {['review','dashboard','evolution','flow','categories','costtype','stylecom','transfers','transactions','rules','ai','export'].map(t => (
                     <button key={t} onClick={()=>setTab(t)} className={`px-4 py-2 rounded-lg font-bold capitalize whitespace-nowrap ${tab===t?'bg-white text-indigo-600 shadow':'text-slate-500'}`}>
-                        {t==='dashboard'?'📊 ':t==='review'?'📅 ':t==='evolution'?'📈 ':t==='flow'?'💰 ':t==='categories'?'🏷️ ':t==='costtype'?'📦 ':t==='stylecom'?'👗 ':t==='transfers'?'🔄 ':t==='transactions'?'📋 ':t==='rules'?'📜 ':t==='ai'?'🤖 ':'🛠️ '}{t === 'costtype' ? 'Cost Types' : t === 'rules' ? 'All Rules' : t === 'review' ? 'Monthly Review' : t}
+                        {t==='dashboard'?'📊 ':t==='review'?'📅 ':t==='evolution'?'📈 ':t==='flow'?'💰 ':t==='categories'?'🏷️ ':t==='costtype'?'📦 ':t==='stylecom'?'👗 ':t==='transfers'?'🔄 ':t==='transactions'?'📋 ':t==='rules'?'📜 ':t==='ai'?'🤖 ':'🛠️ '}{t === 'costtype' ? 'Cost Types' : t === 'rules' ? 'All Rules' : t === 'review' ? 'Monthly Review' : t === 'dashboard' ? 'Dashboard 2025' : t}
                     </button>
                 ))}
             </div>
