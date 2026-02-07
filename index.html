@@ -8106,6 +8106,652 @@ const AllRulesPage = ({ merchantRules, expenses, onImportRules, onApplyTransacti
     );
 };
 
+// ============== MONTHLY REVIEW DASHBOARD ==============
+const MonthlyReview = ({ expenses, merchantRules }) => {
+    const currentYear = 2026;
+    const [selectedMonth, setSelectedMonth] = useState(1); // January = 1
+    
+    // 2026 Savings Plan Targets (monthly caps)
+    const MONTHLY_CAPS = {
+        Dining: 2600,
+        'Uber Eats': 350, // Tag within Dining
+        Amazon: 900,
+        Travel: 3400,
+        Coffee: 200
+    };
+    
+    // 2025 monthly averages (for comparison)
+    const AVG_2025 = {
+        Dining: 3238,
+        Amazon: 1164,
+        Travel: 3883,
+        Coffee: 234
+    };
+    
+    // Annual targets
+    const ANNUAL_SAVINGS_GOAL = 15000;
+    const ANNUAL_TRAVEL_BUDGET = 40800;
+    
+    // Helper to get category for expense
+    const getCat = (e) => {
+        if (e.manualCategory) return e.manualCategory;
+        const m = cleanMerchant(e.description);
+        const rule = merchantRules[m];
+        if (rule?.category) return rule.category;
+        // Check account-specific
+        const accKey = `${m}|||accounts`;
+        const accRule = merchantRules[accKey];
+        if (accRule?.accounts?.includes(e.account)) return accRule.category;
+        // Auto rules
+        const lower = m.toLowerCase();
+        for (const [cat, keywords] of Object.entries(AUTO_RULES)) {
+            if (keywords.some(k => lower.includes(k))) return cat;
+        }
+        return 'Other';
+    };
+    
+    // Check if expense is Uber Eats
+    const isUberEats = (e) => {
+        const desc = e.description.toLowerCase();
+        return desc.includes('uber') && desc.includes('eats');
+    };
+    
+    // Filter expenses by year and month
+    const getMonthExpenses = (year, month) => {
+        return expenses.filter(e => {
+            if (!e.date) return false;
+            const d = new Date(e.date);
+            return d.getFullYear() === year && (d.getMonth() + 1) === month;
+        }).filter(e => {
+            const cat = getCat(e);
+            return !['Transfer', 'Income', 'TaxIncome', 'Stylecom', 'Excluded'].includes(cat);
+        }).filter(e => e.amount > 0);
+    };
+    
+    // Get category total for a month
+    const getCategoryTotal = (year, month, category) => {
+        const monthExp = getMonthExpenses(year, month);
+        return monthExp.filter(e => getCat(e) === category).reduce((sum, e) => sum + safe(e.amount), 0);
+    };
+    
+    // Get Uber Eats total (subset of Dining)
+    const getUberEatsTotal = (year, month) => {
+        const monthExp = getMonthExpenses(year, month);
+        return monthExp.filter(e => isUberEats(e)).reduce((sum, e) => sum + safe(e.amount), 0);
+    };
+    
+    // Get transaction count for category
+    const getTxnCount = (year, month, category) => {
+        const monthExp = getMonthExpenses(year, month);
+        return monthExp.filter(e => getCat(e) === category).length;
+    };
+    
+    // Get unique days with transactions for category
+    const getUniqueDays = (year, month, category) => {
+        const monthExp = getMonthExpenses(year, month);
+        const days = new Set(monthExp.filter(e => getCat(e) === category).map(e => e.date));
+        return days.size;
+    };
+    
+    // Calculate 2025 averages
+    const calc2025Avg = useMemo(() => {
+        const monthsWithData = new Set();
+        expenses.forEach(e => {
+            if (e.date) {
+                const d = new Date(e.date);
+                if (d.getFullYear() === 2025) {
+                    monthsWithData.add(d.getMonth() + 1);
+                }
+            }
+        });
+        const numMonths = Math.max(monthsWithData.size, 1);
+        
+        const totals = { Dining: 0, Amazon: 0, Travel: 0, Coffee: 0, txnAmazon: 0, daysDining: 0, txnCoffee: 0 };
+        
+        for (let m = 1; m <= 12; m++) {
+            if (monthsWithData.has(m)) {
+                totals.Dining += getCategoryTotal(2025, m, 'Dining');
+                totals.Amazon += getCategoryTotal(2025, m, 'Amazon');
+                totals.Travel += getCategoryTotal(2025, m, 'Travel');
+                totals.Coffee += getCategoryTotal(2025, m, 'Coffee');
+                totals.txnAmazon += getTxnCount(2025, m, 'Amazon');
+                totals.daysDining += getUniqueDays(2025, m, 'Dining');
+                totals.txnCoffee += getTxnCount(2025, m, 'Coffee');
+            }
+        }
+        
+        return {
+            Dining: totals.Dining / numMonths,
+            Amazon: totals.Amazon / numMonths,
+            Travel: totals.Travel / numMonths,
+            Coffee: totals.Coffee / numMonths,
+            txnAmazon: totals.txnAmazon / numMonths,
+            daysDining: totals.daysDining / numMonths,
+            txnCoffee: totals.txnCoffee / numMonths,
+            numMonths
+        };
+    }, [expenses, merchantRules]);
+    
+    // Current month data
+    const currentMonthData = useMemo(() => {
+        const dining = getCategoryTotal(currentYear, selectedMonth, 'Dining');
+        const uberEats = getUberEatsTotal(currentYear, selectedMonth);
+        const amazon = getCategoryTotal(currentYear, selectedMonth, 'Amazon');
+        const travel = getCategoryTotal(currentYear, selectedMonth, 'Travel');
+        const coffee = getCategoryTotal(currentYear, selectedMonth, 'Coffee');
+        
+        return {
+            dining, uberEats, amazon, travel, coffee,
+            txnAmazon: getTxnCount(currentYear, selectedMonth, 'Amazon'),
+            daysDining: getUniqueDays(currentYear, selectedMonth, 'Dining'),
+            txnCoffee: getTxnCount(currentYear, selectedMonth, 'Coffee'),
+            totalSpend: getMonthExpenses(currentYear, selectedMonth).reduce((sum, e) => sum + safe(e.amount), 0)
+        };
+    }, [expenses, merchantRules, selectedMonth]);
+    
+    // Same month last year data
+    const lastYearData = useMemo(() => {
+        const dining = getCategoryTotal(2025, selectedMonth, 'Dining');
+        const uberEats = getUberEatsTotal(2025, selectedMonth);
+        const amazon = getCategoryTotal(2025, selectedMonth, 'Amazon');
+        const travel = getCategoryTotal(2025, selectedMonth, 'Travel');
+        const coffee = getCategoryTotal(2025, selectedMonth, 'Coffee');
+        
+        return {
+            dining, uberEats, amazon, travel, coffee,
+            txnAmazon: getTxnCount(2025, selectedMonth, 'Amazon'),
+            daysDining: getUniqueDays(2025, selectedMonth, 'Dining'),
+            txnCoffee: getTxnCount(2025, selectedMonth, 'Coffee'),
+            totalSpend: getMonthExpenses(2025, selectedMonth).reduce((sum, e) => sum + safe(e.amount), 0)
+        };
+    }, [expenses, merchantRules, selectedMonth]);
+    
+    // YTD totals for 2026
+    const ytdData = useMemo(() => {
+        let totalSpend2026 = 0;
+        let totalSpend2025 = 0;
+        let travel2026 = 0;
+        
+        for (let m = 1; m <= selectedMonth; m++) {
+            const exp2026 = getMonthExpenses(2026, m);
+            const exp2025 = getMonthExpenses(2025, m);
+            totalSpend2026 += exp2026.reduce((sum, e) => sum + safe(e.amount), 0);
+            totalSpend2025 += exp2025.reduce((sum, e) => sum + safe(e.amount), 0);
+            travel2026 += getCategoryTotal(2026, m, 'Travel');
+        }
+        
+        // Calculate expected spend at this point last year (for savings tracking)
+        const savingsVsLastYear = totalSpend2025 - totalSpend2026;
+        const savingsProgress = (savingsVsLastYear / ANNUAL_SAVINGS_GOAL) * 100;
+        
+        return {
+            totalSpend2026,
+            totalSpend2025,
+            savingsVsLastYear,
+            savingsProgress,
+            travel2026,
+            travelRemaining: ANNUAL_TRAVEL_BUDGET - travel2026,
+            travelPaceTarget: (ANNUAL_TRAVEL_BUDGET / 12) * selectedMonth
+        };
+    }, [expenses, merchantRules, selectedMonth]);
+    
+    // Variance helper (negative = under budget = good)
+    const getVariance = (actual, cap) => actual - cap;
+    const formatVariance = (v) => v <= 0 ? `✅ $${Math.abs(v).toFixed(0)} under` : `❌ $${v.toFixed(0)} over`;
+    const varianceColor = (v) => v <= 0 ? 'text-green-600' : 'text-red-600';
+    
+    // Progress bar component
+    const ProgressBar = ({ value, max, color = 'blue', showOverage = true }) => {
+        const pct = Math.min((value / max) * 100, 100);
+        const isOver = value > max;
+        const overPct = isOver ? Math.min(((value - max) / max) * 100, 50) : 0;
+        
+        return (
+            <div className="relative h-4 bg-slate-100 rounded-full overflow-visible">
+                <div 
+                    className={`h-full rounded-full transition-all ${isOver ? 'bg-red-500' : `bg-${color}-500`}`}
+                    style={{ width: `${pct}%` }}
+                />
+                {isOver && showOverage && (
+                    <div 
+                        className="absolute top-0 h-full bg-red-300 rounded-r-full"
+                        style={{ left: '100%', width: `${overPct}%` }}
+                    />
+                )}
+                <div className="absolute right-2 top-0 h-full flex items-center text-[10px] font-bold text-slate-600">
+                    {Math.round(pct)}%
+                </div>
+            </div>
+        );
+    };
+    
+    // Scorecard row component
+    const ScorecardRow = ({ label, actual, cap, avg2025 }) => {
+        const variance = getVariance(actual, cap);
+        const vsLastYear = actual - (avg2025 || 0);
+        
+        return (
+            <tr className="border-b border-slate-100 hover:bg-slate-50">
+                <td className="py-3 px-4 font-medium text-slate-700">{label}</td>
+                <td className="py-3 px-4 text-right font-bold">${actual.toFixed(0)}</td>
+                <td className="py-3 px-4 text-right text-slate-500">${cap.toFixed(0)}</td>
+                <td className={`py-3 px-4 text-right font-semibold ${varianceColor(variance)}`}>
+                    {formatVariance(variance)}
+                </td>
+                <td className="py-3 px-4 w-32">
+                    <ProgressBar value={actual} max={cap} color={variance <= 0 ? 'green' : 'red'} />
+                </td>
+                {avg2025 !== undefined && (
+                    <td className={`py-3 px-4 text-right text-sm ${vsLastYear < 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {vsLastYear < 0 ? '↓' : '↑'} ${Math.abs(vsLastYear).toFixed(0)}
+                    </td>
+                )}
+            </tr>
+        );
+    };
+    
+    return (
+        <div className="space-y-6">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-violet-600 to-purple-700 text-white p-6 rounded-2xl">
+                <div className="flex justify-between items-center">
+                    <div>
+                        <h2 className="text-2xl font-black">📅 Monthly Review</h2>
+                        <p className="text-violet-200 text-sm mt-1">2026 Savings Challenge: $15,000 Target</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <span className="text-violet-200 text-sm">Reviewing:</span>
+                        <select 
+                            value={selectedMonth}
+                            onChange={e => setSelectedMonth(parseInt(e.target.value))}
+                            className="px-4 py-2 bg-white/20 border border-white/30 rounded-lg text-white font-bold text-lg">
+                            {MONTHS.map((m, i) => (
+                                <option key={i} value={i + 1} className="text-slate-800">{m} 2026</option>
+                            ))}
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            {/* Section 1: Goal Scorecard */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-lg overflow-hidden">
+                <div className="p-4 bg-slate-50 border-b">
+                    <h3 className="font-black text-slate-800">🎯 Goal Scorecard - {MONTHS[selectedMonth - 1]} 2026</h3>
+                    <p className="text-xs text-slate-500 mt-1">Monthly spending vs. caps from your 2026 savings plan</p>
+                </div>
+                <table className="w-full text-sm">
+                    <thead className="bg-slate-50 text-slate-500 uppercase text-[10px]">
+                        <tr>
+                            <th className="py-2 px-4 text-left">Category</th>
+                            <th className="py-2 px-4 text-right">Actual</th>
+                            <th className="py-2 px-4 text-right">Cap</th>
+                            <th className="py-2 px-4 text-right">Variance</th>
+                            <th className="py-2 px-4 text-center">Progress</th>
+                            <th className="py-2 px-4 text-right">vs 2025 Avg</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <ScorecardRow label="🍽️ Dining" actual={currentMonthData.dining} cap={MONTHLY_CAPS.Dining} avg2025={calc2025Avg.Dining} />
+                        <ScorecardRow label="🛵 Uber Eats" actual={currentMonthData.uberEats} cap={MONTHLY_CAPS['Uber Eats']} />
+                        <ScorecardRow label="📦 Amazon" actual={currentMonthData.amazon} cap={MONTHLY_CAPS.Amazon} avg2025={calc2025Avg.Amazon} />
+                        <ScorecardRow label="✈️ Travel" actual={currentMonthData.travel} cap={MONTHLY_CAPS.Travel} avg2025={calc2025Avg.Travel} />
+                        <ScorecardRow label="☕ Coffee" actual={currentMonthData.coffee} cap={MONTHLY_CAPS.Coffee} avg2025={calc2025Avg.Coffee} />
+                    </tbody>
+                    <tfoot className="bg-slate-100 font-bold">
+                        <tr>
+                            <td className="py-3 px-4">Total Tracked</td>
+                            <td className="py-3 px-4 text-right">${(currentMonthData.dining + currentMonthData.amazon + currentMonthData.travel + currentMonthData.coffee).toFixed(0)}</td>
+                            <td className="py-3 px-4 text-right">${(MONTHLY_CAPS.Dining + MONTHLY_CAPS.Amazon + MONTHLY_CAPS.Travel + MONTHLY_CAPS.Coffee).toFixed(0)}</td>
+                            <td colSpan={3}></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            
+            {/* Section 2: Behavioral Audit */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-lg overflow-hidden">
+                <div className="p-4 bg-slate-50 border-b">
+                    <h3 className="font-black text-slate-800">📊 Behavioral Audit - Transaction Frequency</h3>
+                    <p className="text-xs text-slate-500 mt-1">Using transaction counts as a proxy for spending habits</p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-0 divide-y md:divide-y-0 md:divide-x divide-slate-100">
+                    {/* Amazon Consolidation */}
+                    <div className="p-5">
+                        <div className="flex items-center gap-2 mb-3">
+                            <span className="text-2xl">📦</span>
+                            <div>
+                                <h4 className="font-bold text-slate-800">Amazon Orders</h4>
+                                <p className="text-[10px] text-slate-500">Goal: Fewer, larger orders</p>
+                            </div>
+                        </div>
+                        <div className="flex items-end gap-4">
+                            <div>
+                                <div className="text-4xl font-black text-slate-800">{currentMonthData.txnAmazon}</div>
+                                <div className="text-xs text-slate-500">orders this month</div>
+                            </div>
+                            <div className="text-sm">
+                                <div className={currentMonthData.txnAmazon < calc2025Avg.txnAmazon ? 'text-green-600' : 'text-red-600'}>
+                                    {currentMonthData.txnAmazon < calc2025Avg.txnAmazon ? '↓' : '↑'} {Math.abs(currentMonthData.txnAmazon - calc2025Avg.txnAmazon).toFixed(1)} vs 2025 avg
+                                </div>
+                                <div className="text-slate-400">2025 avg: {calc2025Avg.txnAmazon.toFixed(1)}/mo</div>
+                            </div>
+                        </div>
+                        {currentMonthData.txnAmazon > 0 && (
+                            <div className="mt-3 p-2 bg-slate-50 rounded text-xs">
+                                <span className="font-medium">Avg order size:</span> ${(currentMonthData.amazon / currentMonthData.txnAmazon).toFixed(0)}
+                            </div>
+                        )}
+                    </div>
+                    
+                    {/* Dining Frequency */}
+                    <div className="p-5">
+                        <div className="flex items-center gap-2 mb-3">
+                            <span className="text-2xl">🍽️</span>
+                            <div>
+                                <h4 className="font-bold text-slate-800">Restaurant Days</h4>
+                                <p className="text-[10px] text-slate-500">Goal: 4 fewer than 2025 avg</p>
+                            </div>
+                        </div>
+                        <div className="flex items-end gap-4">
+                            <div>
+                                <div className="text-4xl font-black text-slate-800">{currentMonthData.daysDining}</div>
+                                <div className="text-xs text-slate-500">days eating out</div>
+                            </div>
+                            <div className="text-sm">
+                                <div className={currentMonthData.daysDining < calc2025Avg.daysDining - 4 ? 'text-green-600' : currentMonthData.daysDining < calc2025Avg.daysDining ? 'text-amber-600' : 'text-red-600'}>
+                                    {currentMonthData.daysDining < calc2025Avg.daysDining ? '↓' : '↑'} {Math.abs(currentMonthData.daysDining - calc2025Avg.daysDining).toFixed(1)} vs 2025 avg
+                                </div>
+                                <div className="text-slate-400">Target: {(calc2025Avg.daysDining - 4).toFixed(0)} days</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    {/* Coffee Frequency */}
+                    <div className="p-5">
+                        <div className="flex items-center gap-2 mb-3">
+                            <span className="text-2xl">☕</span>
+                            <div>
+                                <h4 className="font-bold text-slate-800">Coffee Runs</h4>
+                                <p className="text-[10px] text-slate-500">Goal: 4 fewer than 2025 avg</p>
+                            </div>
+                        </div>
+                        <div className="flex items-end gap-4">
+                            <div>
+                                <div className="text-4xl font-black text-slate-800">{currentMonthData.txnCoffee}</div>
+                                <div className="text-xs text-slate-500">coffee purchases</div>
+                            </div>
+                            <div className="text-sm">
+                                <div className={currentMonthData.txnCoffee < calc2025Avg.txnCoffee - 4 ? 'text-green-600' : currentMonthData.txnCoffee < calc2025Avg.txnCoffee ? 'text-amber-600' : 'text-red-600'}>
+                                    {currentMonthData.txnCoffee < calc2025Avg.txnCoffee ? '↓' : '↑'} {Math.abs(currentMonthData.txnCoffee - calc2025Avg.txnCoffee).toFixed(1)} vs 2025 avg
+                                </div>
+                                <div className="text-slate-400">Target: {(calc2025Avg.txnCoffee - 4).toFixed(0)} purchases</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            {/* Section 3: The "Big Two" Focus */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Amazon Deep Dive */}
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-lg overflow-hidden">
+                    <div className="p-4 bg-orange-50 border-b border-orange-100">
+                        <h3 className="font-black text-orange-800">📦 Amazon Deep Dive</h3>
+                    </div>
+                    <div className="p-5">
+                        <div className="grid grid-cols-2 gap-4 mb-4">
+                            <div className="bg-slate-50 p-4 rounded-xl">
+                                <div className="text-3xl font-black text-slate-800">${currentMonthData.amazon.toFixed(0)}</div>
+                                <div className="text-xs text-slate-500">This month</div>
+                            </div>
+                            <div className="bg-slate-50 p-4 rounded-xl">
+                                <div className="text-3xl font-black text-slate-800">{currentMonthData.txnAmazon}</div>
+                                <div className="text-xs text-slate-500">Orders</div>
+                            </div>
+                        </div>
+                        <div className="space-y-2">
+                            <div className="flex justify-between text-sm">
+                                <span>vs Cap ($900)</span>
+                                <span className={currentMonthData.amazon <= 900 ? 'text-green-600 font-bold' : 'text-red-600 font-bold'}>
+                                    {currentMonthData.amazon <= 900 ? `$${(900 - currentMonthData.amazon).toFixed(0)} remaining` : `$${(currentMonthData.amazon - 900).toFixed(0)} over`}
+                                </span>
+                            </div>
+                            <ProgressBar value={currentMonthData.amazon} max={900} color="orange" />
+                        </div>
+                        {currentMonthData.txnAmazon > 0 && (
+                            <div className="mt-4 p-3 bg-amber-50 rounded-xl text-sm">
+                                <div className="font-bold text-amber-800 mb-1">💡 Consolidation Tip</div>
+                                <div className="text-amber-700">
+                                    Your avg order is ${(currentMonthData.amazon / currentMonthData.txnAmazon).toFixed(0)}. 
+                                    {currentMonthData.txnAmazon > calc2025Avg.txnAmazon 
+                                        ? ` Try batching orders to reduce from ${currentMonthData.txnAmazon} to ${Math.floor(calc2025Avg.txnAmazon)} orders.`
+                                        : ' Great job consolidating orders!'}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+                
+                {/* Dining & Uber Eats Deep Dive */}
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-lg overflow-hidden">
+                    <div className="p-4 bg-red-50 border-b border-red-100">
+                        <h3 className="font-black text-red-800">🍽️ Dining & Uber Eats Breakdown</h3>
+                    </div>
+                    <div className="p-5">
+                        <div className="grid grid-cols-3 gap-3 mb-4">
+                            <div className="bg-slate-50 p-3 rounded-xl">
+                                <div className="text-2xl font-black text-slate-800">${currentMonthData.dining.toFixed(0)}</div>
+                                <div className="text-[10px] text-slate-500">Total Dining</div>
+                            </div>
+                            <div className="bg-red-50 p-3 rounded-xl">
+                                <div className="text-2xl font-black text-red-600">${currentMonthData.uberEats.toFixed(0)}</div>
+                                <div className="text-[10px] text-red-500">Uber Eats</div>
+                            </div>
+                            <div className="bg-green-50 p-3 rounded-xl">
+                                <div className="text-2xl font-black text-green-600">${(currentMonthData.dining - currentMonthData.uberEats).toFixed(0)}</div>
+                                <div className="text-[10px] text-green-500">Dine-In/Other</div>
+                            </div>
+                        </div>
+                        
+                        {/* Uber Eats Ratio */}
+                        <div className="mb-4">
+                            <div className="flex justify-between text-xs text-slate-500 mb-1">
+                                <span>Uber Eats Ratio</span>
+                                <span>{currentMonthData.dining > 0 ? ((currentMonthData.uberEats / currentMonthData.dining) * 100).toFixed(0) : 0}% of dining</span>
+                            </div>
+                            <div className="h-4 bg-slate-100 rounded-full overflow-hidden flex">
+                                <div 
+                                    className="h-full bg-red-500"
+                                    style={{ width: `${currentMonthData.dining > 0 ? (currentMonthData.uberEats / currentMonthData.dining) * 100 : 0}%` }}
+                                />
+                                <div 
+                                    className="h-full bg-green-500"
+                                    style={{ width: `${currentMonthData.dining > 0 ? ((currentMonthData.dining - currentMonthData.uberEats) / currentMonthData.dining) * 100 : 0}%` }}
+                                />
+                            </div>
+                            <div className="flex justify-between text-[10px] mt-1">
+                                <span className="text-red-500">🛵 Uber Eats</span>
+                                <span className="text-green-500">🍽️ Dine-In</span>
+                            </div>
+                        </div>
+                        
+                        {/* Uber Eats Cap Check */}
+                        <div className="space-y-2">
+                            <div className="flex justify-between text-sm">
+                                <span>Uber Eats vs Cap ($350)</span>
+                                <span className={currentMonthData.uberEats <= 350 ? 'text-green-600 font-bold' : 'text-red-600 font-bold'}>
+                                    {currentMonthData.uberEats <= 350 ? `$${(350 - currentMonthData.uberEats).toFixed(0)} remaining` : `$${(currentMonthData.uberEats - 350).toFixed(0)} over`}
+                                </span>
+                            </div>
+                            <ProgressBar value={currentMonthData.uberEats} max={350} color="red" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            {/* Section 4: Travel Pacing (Annual Burn-Down) */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-lg overflow-hidden">
+                <div className="p-4 bg-cyan-50 border-b border-cyan-100">
+                    <h3 className="font-black text-cyan-800">✈️ Travel Budget Pacing - Annual Burn-Down</h3>
+                    <p className="text-xs text-cyan-600 mt-1">$40,800 annual budget ($3,400/mo target)</p>
+                </div>
+                <div className="p-5">
+                    <div className="grid grid-cols-4 gap-4 mb-6">
+                        <div className="bg-slate-50 p-4 rounded-xl text-center">
+                            <div className="text-3xl font-black text-slate-800">${ytdData.travel2026.toFixed(0)}</div>
+                            <div className="text-xs text-slate-500">Spent YTD</div>
+                        </div>
+                        <div className="bg-cyan-50 p-4 rounded-xl text-center">
+                            <div className="text-3xl font-black text-cyan-600">${ytdData.travelRemaining.toFixed(0)}</div>
+                            <div className="text-xs text-cyan-500">Remaining</div>
+                        </div>
+                        <div className="bg-slate-50 p-4 rounded-xl text-center">
+                            <div className="text-3xl font-black text-slate-800">${ytdData.travelPaceTarget.toFixed(0)}</div>
+                            <div className="text-xs text-slate-500">Pace Target</div>
+                        </div>
+                        <div className={`p-4 rounded-xl text-center ${ytdData.travel2026 <= ytdData.travelPaceTarget ? 'bg-green-50' : 'bg-red-50'}`}>
+                            <div className={`text-3xl font-black ${ytdData.travel2026 <= ytdData.travelPaceTarget ? 'text-green-600' : 'text-red-600'}`}>
+                                {ytdData.travel2026 <= ytdData.travelPaceTarget ? '✅' : '⚠️'}
+                            </div>
+                            <div className={`text-xs ${ytdData.travel2026 <= ytdData.travelPaceTarget ? 'text-green-500' : 'text-red-500'}`}>
+                                {ytdData.travel2026 <= ytdData.travelPaceTarget 
+                                    ? `$${(ytdData.travelPaceTarget - ytdData.travel2026).toFixed(0)} under pace`
+                                    : `$${(ytdData.travel2026 - ytdData.travelPaceTarget).toFixed(0)} over pace`}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    {/* Annual Progress Bar */}
+                    <div className="mb-2 flex justify-between text-xs text-slate-500">
+                        <span>Annual Progress</span>
+                        <span>{((ytdData.travel2026 / ANNUAL_TRAVEL_BUDGET) * 100).toFixed(1)}% of $40,800 used</span>
+                    </div>
+                    <div className="h-6 bg-slate-100 rounded-full overflow-hidden relative">
+                        <div 
+                            className={`h-full ${ytdData.travel2026 <= ytdData.travelPaceTarget ? 'bg-cyan-500' : 'bg-amber-500'}`}
+                            style={{ width: `${Math.min((ytdData.travel2026 / ANNUAL_TRAVEL_BUDGET) * 100, 100)}%` }}
+                        />
+                        {/* Pace marker */}
+                        <div 
+                            className="absolute top-0 h-full w-0.5 bg-slate-800"
+                            style={{ left: `${(selectedMonth / 12) * 100}%` }}
+                            title={`Month ${selectedMonth} pace target`}
+                        />
+                        <div 
+                            className="absolute -top-5 text-[10px] text-slate-600 font-medium"
+                            style={{ left: `${(selectedMonth / 12) * 100}%`, transform: 'translateX(-50%)' }}>
+                            ↓ Pace
+                        </div>
+                    </div>
+                    <div className="flex justify-between text-[10px] text-slate-400 mt-1">
+                        <span>Jan</span>
+                        <span>Jun</span>
+                        <span>Dec</span>
+                    </div>
+                </div>
+            </div>
+            
+            {/* Section 5: Savings Progress */}
+            <div className="bg-gradient-to-r from-emerald-500 to-green-600 rounded-2xl p-6 text-white">
+                <h3 className="font-black text-xl mb-4">💰 2026 Savings Progress</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="bg-white/20 rounded-xl p-4">
+                        <div className="text-emerald-100 text-sm mb-1">YTD Spend 2026</div>
+                        <div className="text-3xl font-black">${ytdData.totalSpend2026.toFixed(0)}</div>
+                    </div>
+                    <div className="bg-white/20 rounded-xl p-4">
+                        <div className="text-emerald-100 text-sm mb-1">Same Period 2025</div>
+                        <div className="text-3xl font-black">${ytdData.totalSpend2025.toFixed(0)}</div>
+                    </div>
+                    <div className={`rounded-xl p-4 ${ytdData.savingsVsLastYear >= 0 ? 'bg-white/30' : 'bg-red-500/30'}`}>
+                        <div className="text-emerald-100 text-sm mb-1">Savings vs 2025</div>
+                        <div className="text-3xl font-black">
+                            {ytdData.savingsVsLastYear >= 0 ? '+' : '-'}${Math.abs(ytdData.savingsVsLastYear).toFixed(0)}
+                        </div>
+                    </div>
+                </div>
+                
+                {/* Savings Goal Progress */}
+                <div className="mt-6">
+                    <div className="flex justify-between text-sm mb-2">
+                        <span>Progress to $15,000 Goal</span>
+                        <span className="font-bold">{Math.max(0, ytdData.savingsProgress).toFixed(1)}%</span>
+                    </div>
+                    <div className="h-4 bg-white/20 rounded-full overflow-hidden">
+                        <div 
+                            className="h-full bg-white rounded-full transition-all"
+                            style={{ width: `${Math.min(Math.max(0, ytdData.savingsProgress), 100)}%` }}
+                        />
+                    </div>
+                    <div className="flex justify-between text-xs text-emerald-200 mt-2">
+                        <span>$0</span>
+                        <span>${(ANNUAL_SAVINGS_GOAL / 2).toLocaleString()}</span>
+                        <span>${ANNUAL_SAVINGS_GOAL.toLocaleString()}</span>
+                    </div>
+                </div>
+                
+                {ytdData.savingsVsLastYear >= 0 ? (
+                    <div className="mt-4 bg-white/10 rounded-lg p-3 text-sm">
+                        🎉 Great job! You're ${ytdData.savingsVsLastYear.toFixed(0)} ahead of last year through {MONTHS[selectedMonth - 1]}.
+                        {ytdData.savingsProgress >= (selectedMonth / 12) * 100 
+                            ? ` You're on track to hit your $15K goal!`
+                            : ` Keep it up to reach your $15K target!`}
+                    </div>
+                ) : (
+                    <div className="mt-4 bg-red-500/20 rounded-lg p-3 text-sm">
+                        ⚠️ Spending is ${Math.abs(ytdData.savingsVsLastYear).toFixed(0)} higher than last year through {MONTHS[selectedMonth - 1]}. 
+                        Review the categories above to find savings opportunities.
+                    </div>
+                )}
+            </div>
+            
+            {/* Section 6: Year-over-Year Comparison */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-lg overflow-hidden">
+                <div className="p-4 bg-slate-50 border-b">
+                    <h3 className="font-black text-slate-800">📊 {MONTHS[selectedMonth - 1]} 2026 vs {MONTHS[selectedMonth - 1]} 2025</h3>
+                    <p className="text-xs text-slate-500 mt-1">Same month comparison</p>
+                </div>
+                <div className="p-5">
+                    <table className="w-full text-sm">
+                        <thead className="bg-slate-50 text-slate-500 uppercase text-[10px]">
+                            <tr>
+                                <th className="py-2 px-4 text-left">Metric</th>
+                                <th className="py-2 px-4 text-right">{MONTHS[selectedMonth - 1]} 2026</th>
+                                <th className="py-2 px-4 text-right">{MONTHS[selectedMonth - 1]} 2025</th>
+                                <th className="py-2 px-4 text-right">Change</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                            {[
+                                { label: '🍽️ Dining', curr: currentMonthData.dining, prev: lastYearData.dining },
+                                { label: '🛵 Uber Eats', curr: currentMonthData.uberEats, prev: lastYearData.uberEats },
+                                { label: '📦 Amazon', curr: currentMonthData.amazon, prev: lastYearData.amazon },
+                                { label: '✈️ Travel', curr: currentMonthData.travel, prev: lastYearData.travel },
+                                { label: '☕ Coffee', curr: currentMonthData.coffee, prev: lastYearData.coffee },
+                                { label: '📊 Total Spend', curr: currentMonthData.totalSpend, prev: lastYearData.totalSpend },
+                            ].map((row, i) => {
+                                const change = row.curr - row.prev;
+                                const pctChange = row.prev > 0 ? (change / row.prev) * 100 : 0;
+                                return (
+                                    <tr key={i} className={i === 5 ? 'bg-slate-50 font-bold' : ''}>
+                                        <td className="py-3 px-4">{row.label}</td>
+                                        <td className="py-3 px-4 text-right">${row.curr.toFixed(0)}</td>
+                                        <td className="py-3 px-4 text-right text-slate-500">${row.prev.toFixed(0)}</td>
+                                        <td className={`py-3 px-4 text-right ${change < 0 ? 'text-green-600' : change > 0 ? 'text-red-600' : 'text-slate-400'}`}>
+                                            {change < 0 ? '↓' : change > 0 ? '↑' : '–'} ${Math.abs(change).toFixed(0)}
+                                            <span className="text-xs ml-1">({pctChange > 0 ? '+' : ''}{pctChange.toFixed(0)}%)</span>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 // ============== MAIN APP ==============
 const App = () => {
     const [expenses, setExpenses] = useState([]);
@@ -8652,9 +9298,9 @@ const App = () => {
 
         <div className="max-w-7xl mx-auto px-4 mt-4">
             <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit text-xs overflow-x-auto">
-                {['dashboard','evolution','flow','categories','costtype','stylecom','transfers','transactions','rules','ai','export'].map(t => (
+                {['dashboard','review','evolution','flow','categories','costtype','stylecom','transfers','transactions','rules','ai','export'].map(t => (
                     <button key={t} onClick={()=>setTab(t)} className={`px-4 py-2 rounded-lg font-bold capitalize whitespace-nowrap ${tab===t?'bg-white text-indigo-600 shadow':'text-slate-500'}`}>
-                        {t==='dashboard'?'📊 ':t==='evolution'?'📈 ':t==='flow'?'💰 ':t==='categories'?'🏷️ ':t==='costtype'?'📦 ':t==='stylecom'?'👗 ':t==='transfers'?'🔄 ':t==='transactions'?'📋 ':t==='rules'?'📜 ':t==='ai'?'🤖 ':'🛠️ '}{t === 'costtype' ? 'Cost Types' : t === 'rules' ? 'All Rules' : t}
+                        {t==='dashboard'?'📊 ':t==='review'?'📅 ':t==='evolution'?'📈 ':t==='flow'?'💰 ':t==='categories'?'🏷️ ':t==='costtype'?'📦 ':t==='stylecom'?'👗 ':t==='transfers'?'🔄 ':t==='transactions'?'📋 ':t==='rules'?'📜 ':t==='ai'?'🤖 ':'🛠️ '}{t === 'costtype' ? 'Cost Types' : t === 'rules' ? 'All Rules' : t === 'review' ? 'Monthly Review' : t}
                     </button>
                 ))}
             </div>
@@ -8715,6 +9361,10 @@ const App = () => {
                 </div>
                 <TravelDeepDive expenses={expenses} merchantRules={merchantRules} />
             </>)}
+
+            {tab === 'review' && (
+                <MonthlyReview expenses={expenses} merchantRules={merchantRules} />
+            )}
 
             {tab === 'evolution' && (<>
                 <div className="bg-gradient-to-r from-indigo-500 to-purple-600 text-white p-6 rounded-2xl"><h2 className="text-xl font-black">📈 Year-over-Year Evolution</h2><p className="text-indigo-100 text-sm mt-1">Compare spending across 2024 and 2025</p></div>
