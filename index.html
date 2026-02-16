@@ -1066,9 +1066,9 @@ const CostStructureEvolution = ({ expenses, merchantRules, costTypeOverrides = {
             byYearMonth[key].total += safe(e.amount);
         });
         
-        // Build STRICTLY chronological array: Jan'24 → Dec'24 → Jan'25 → Dec'25
+        // Build STRICTLY chronological array: Jan'24 → Dec'24 → Jan'25 → Dec'25 → Jan'26 → Dec'26
         const data = [];
-        [2024, 2025].forEach(year => {
+        [2024, 2025, 2026].forEach(year => {
             for (let m = 0; m < 12; m++) {
                 const key = `${year}-${m}`;
                 const monthData = byYearMonth[key] || { year, month: m, Fixed: 0, 'Semi-Fixed': 0, Variable: 0, total: 0 };
@@ -1082,7 +1082,7 @@ const CostStructureEvolution = ({ expenses, merchantRules, costTypeOverrides = {
             }
         });
         
-        // Calculate GLOBAL averages (all months with data across both years)
+        // Calculate GLOBAL averages (all months with data across all years)
         const monthsWithData = data.filter(d => d.total > 0);
         const monthCount = monthsWithData.length || 1;
         const avgFixed = monthsWithData.reduce((s, d) => s + d.Fixed, 0) / monthCount;
@@ -1098,6 +1098,13 @@ const CostStructureEvolution = ({ expenses, merchantRules, costTypeOverrides = {
     const hasData = data.some(d => d.total > 0);
     const chartHeight = 140;
     
+    // High-contrast colors for average lines (completely different from bar colors)
+    const AVG_LINE_COLORS = {
+        Fixed: '#000000',      // Black
+        SemiFixed: '#6b21a8',  // Purple
+        Total: '#059669'       // Emerald/Teal
+    };
+    
     if (!hasData) return <Empty msg="No data for cost structure comparison" />;
     
     // CUMULATIVE average line positions
@@ -1109,29 +1116,29 @@ const CostStructureEvolution = ({ expenses, merchantRules, costTypeOverrides = {
         <div className="h-full flex flex-col">
             {/* Chart area */}
             <div className="relative" style={{ height: chartHeight }}>
-                {/* Average reference lines - CUMULATIVE with labels */}
+                {/* Average reference lines - CUMULATIVE with high-contrast colors */}
                 <div className="absolute inset-0 pointer-events-none z-10">
                     {avgFixed > 0 && (
                         <div className="absolute left-0 right-0" style={{ top: line1Y }}>
-                            <div className="border-t-2 border-dashed w-full" style={{ borderColor: COST_TYPE_COLORS.Fixed }} />
-                            <span className="absolute right-0 -top-3 text-[7px] font-bold px-1 rounded" style={{ color: COST_TYPE_COLORS.Fixed, backgroundColor: 'rgba(255,255,255,0.9)' }}>
-                                F: ${(avgFixed/1000).toFixed(1)}k
+                            <div className="border-t-2 border-dashed w-full" style={{ borderColor: AVG_LINE_COLORS.Fixed }} />
+                            <span className="absolute right-0 -top-3 text-[8px] font-bold px-1 rounded" style={{ color: '#fff', backgroundColor: AVG_LINE_COLORS.Fixed }}>
+                                Fixed Avg: ${(avgFixed/1000).toFixed(1)}k
                             </span>
                         </div>
                     )}
                     {avgSemiFixed > 0 && (
                         <div className="absolute left-0 right-0" style={{ top: line2Y }}>
-                            <div className="border-t-2 border-dashed w-full" style={{ borderColor: COST_TYPE_COLORS['Semi-Fixed'] }} />
-                            <span className="absolute right-0 -top-3 text-[7px] font-bold px-1 rounded" style={{ color: COST_TYPE_COLORS['Semi-Fixed'], backgroundColor: 'rgba(255,255,255,0.9)' }}>
-                                +SF: ${((avgFixed + avgSemiFixed)/1000).toFixed(1)}k
+                            <div className="border-t-2 border-dashed w-full" style={{ borderColor: AVG_LINE_COLORS.SemiFixed }} />
+                            <span className="absolute right-0 -top-3 text-[8px] font-bold px-1 rounded" style={{ color: '#fff', backgroundColor: AVG_LINE_COLORS.SemiFixed }}>
+                                +Semi: ${((avgFixed + avgSemiFixed)/1000).toFixed(1)}k
                             </span>
                         </div>
                     )}
                     {avgVariable > 0 && (
                         <div className="absolute left-0 right-0" style={{ top: line3Y }}>
-                            <div className="border-t-2 border-dashed w-full" style={{ borderColor: COST_TYPE_COLORS.Variable }} />
-                            <span className="absolute right-0 -top-3 text-[7px] font-bold px-1 rounded" style={{ color: COST_TYPE_COLORS.Variable, backgroundColor: 'rgba(255,255,255,0.9)' }}>
-                                Avg: ${(avgTotal/1000).toFixed(1)}k
+                            <div className="border-t-2 w-full" style={{ borderColor: AVG_LINE_COLORS.Total, borderStyle: 'solid' }} />
+                            <span className="absolute right-0 -top-3 text-[8px] font-bold px-1 rounded" style={{ color: '#fff', backgroundColor: AVG_LINE_COLORS.Total }}>
+                                Total Avg: ${(avgTotal/1000).toFixed(1)}k
                             </span>
                         </div>
                     )}
@@ -1145,17 +1152,17 @@ const CostStructureEvolution = ({ expenses, merchantRules, costTypeOverrides = {
                         const semiH = d.total > 0 ? (d['Semi-Fixed'] / d.total) * barHeight : 0;
                         const varH = d.total > 0 ? (d.Variable / d.total) * barHeight : 0;
                         const minHeightForText = 16;
-                        const is2024 = d.year === 2024;
+                        const yearOpacity = d.year === 2024 ? 0.5 : d.year === 2025 ? 0.8 : 1;
                         
                         return (
                             <div 
                                 key={i} 
-                                className={`flex-1 flex flex-col justify-end h-full ${d.isYearStart && i > 0 ? 'ml-1 border-l border-slate-200' : ''}`}
+                                className={`flex-1 flex flex-col justify-end h-full ${d.isYearStart && i > 0 ? 'ml-1 border-l border-slate-300' : ''}`}
                                 style={{ marginLeft: d.isYearStart && i > 0 ? 4 : 0 }}
                             >
                                 <div 
                                     className="w-full cursor-pointer mx-px"
-                                    style={{ opacity: is2024 ? 0.7 : 1 }}
+                                    style={{ opacity: yearOpacity }}
                                     title={`${d.fullLabel}: $${d.total.toLocaleString()}\nFixed: $${d.Fixed.toLocaleString()}\nSemi-Fixed: $${d['Semi-Fixed'].toLocaleString()}\nVariable: $${d.Variable.toLocaleString()}`}
                                 >
                                     {varH > 0 && (
@@ -1211,7 +1218,9 @@ const CostStructureEvolution = ({ expenses, merchantRules, costTypeOverrides = {
                         <span className="text-[8px] text-slate-500">Variable</span>
                     </div>
                     <span className="text-[8px] text-slate-300">|</span>
-                    <span className="text-[8px] text-slate-400 opacity-70">2024 (faded)</span>
+                    <span className="text-[8px] text-slate-400" style={{ opacity: 0.5 }}>2024</span>
+                    <span className="text-[8px] text-slate-400" style={{ opacity: 0.8 }}>2025</span>
+                    <span className="text-[8px] text-slate-600 font-bold">2026</span>
                 </div>
             </div>
         </div>
@@ -9726,7 +9735,7 @@ const App = () => {
                     <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">🗓️ Seasonality (Jan-Dec)</h3><div className="h-64"><SeasonalityChart expenses={expenses} merchantRules={merchantRules}/></div></div>
                     <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">🏃 Pace of Spending</h3><div className="h-64"><PaceChart expenses={expenses} merchantRules={merchantRules}/></div></div>
                 </div>
-                <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">📦 Cost Structure Evolution (2024 vs 2025)</h3><div className="h-64"><CostStructureEvolution expenses={expenses} merchantRules={merchantRules} costTypeOverrides={costTypeOverrides}/></div></div>
+                <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">📦 Cost Structure Evolution (2024-2026)</h3><div className="h-64"><CostStructureEvolution expenses={expenses} merchantRules={merchantRules} costTypeOverrides={costTypeOverrides}/></div></div>
                 <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">📊 Category Evolution (YoY)</h3><div className="h-80"><CategoryEvolution expenses={expenses} merchantRules={merchantRules}/></div></div>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-lg"><h3 className="text-sm font-black text-slate-800 mb-3">🔥 Spending Heatmap</h3><div className="h-64"><Heatmap expenses={expenses} merchantRules={merchantRules}/></div></div>
